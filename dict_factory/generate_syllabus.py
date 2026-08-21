@@ -32,18 +32,62 @@ def load_existing(path: Path) -> list[dict]:
     return rows
 
 
-def next_batch(start_rank: int, batch_size: int, existing_ids: set[str]) -> list[dict]:
-    avoid = ", ".join(sorted(existing_ids)[:80])
+def uniquify_id(concept_id: str, seen_ids: set[str]) -> str:
+    if concept_id not in seen_ids:
+        return concept_id
+    suffix = 2
+    while f"{concept_id}_{suffix}" in seen_ids:
+        suffix += 1
+    return f"{concept_id}_{suffix}"
+
+
+def cefr_for_rank(rank: int) -> str:
+    if rank <= 1500:
+        return "A1"
+    if rank <= 3500:
+        return "A2"
+    if rank <= 7000:
+        return "B1"
+    if rank <= 10000:
+        return "B2"
+    return "C1"
+
+
+def adopt_batch(raw_items: list[dict], start_rank: int, seen_ids: set[str]) -> list[dict]:
+    adopted: list[dict] = []
+    used_this_batch: set[str] = set()
+    for offset, item in enumerate(raw_items):
+        concept_id = uniquify_id(item["id"], seen_ids | used_this_batch)
+        used_this_batch.add(concept_id)
+        adopted.append(
+            {
+                **item,
+                "id": concept_id,
+                "rank": start_rank + offset,
+                "cefr": item["cefr"] if item["cefr"] else cefr_for_rank(start_rank + offset),
+            }
+        )
+    return adopted
+
+
+def next_batch(start_rank: int, batch_size: int, existing_ids: set[str], recent_glosses: list[str]) -> list[dict]:
+    sample_ids = sorted(existing_ids)[-80:]
     user = (
-        f"Generate exactly {batch_size} new concepts.\n"
-        f"Assign ranks {start_rank} through {start_rank + batch_size - 1} in order.\n"
-        f"Do not reuse these ids: {avoid or '(none)'}\n"
-        "Cover everyday learner needs progressing by CEFR as rank grows."
+        f"Generate exactly {batch_size} NEW concepts. You have already created {len(existing_ids)} concepts.\n"
+        f"Use ranks {start_rank} through {start_rank + batch_size - 1}. Target CEFR {cefr_for_rank(start_rank)}.\n"
+        f"Recent ids (do not repeat): {', '.join(sample_ids) or '(none)'}\n"
+        f"Recent glosses (do not repeat ideas): {'; '.join(recent_glosses[-30:]) or '(none)'}\n"
+        "Invent fresh everyday situations, collocations, and verbs. Do not restart from greetings."
     )
     payload = call_chat_json(SYSTEM, user, timeout=180.0)
     if not isinstance(payload, list):
         raise RuntimeError("syllabus batch must be a JSON array")
-    parsed = [parse_concept(item) for item in payload]
+    parsed: list[dict] = []
+    for index, item in enumerate(payload):
+        try:
+            parsed.append(parse_concept({**item, "rank": start_rank + index}))
+        except Exception:
+            continue
     return parsed
 
 
@@ -53,10 +97,15 @@ def generate_syllabus(target: int, batch_size: int = 40, dest: Path | None = Non
     existing = load_existing(path)
     seen_ids = {row["id"] for row in existing}
     seen_ranks = {row["rank"] for row in existing}
+    empty_retries = 0
     while len(existing) < target:
         start_rank = (max(seen_ranks) + 1) if seen_ranks else 1
         take = min(batch_size, target - len(existing))
-        batch = next_batch(start_rank, take, seen_ids)
+        batch = adopt_batch(
+            next_batch(start_rank, take, seen_ids, [row["gloss_en"] for row in existing]),
+            start_rank,
+            seen_ids,
+        )
         added = 0
         with path.open("a", encoding="utf-8") as handle:
             for item in batch:
@@ -70,8 +119,12 @@ def generate_syllabus(target: int, batch_size: int = 40, dest: Path | None = Non
                 if len(existing) >= target:
                     break
         if added == 0:
-            raise RuntimeError("syllabus batch produced no new concepts")
-        print(f"syllabus {len(existing)}/{target}")
+            empty_retries += 1
+            if empty_retries >= 5:
+                raise RuntimeError("syllabus batch produced no new concepts")
+            continue
+        empty_retries = 0
+        print(f"syllabus {len(existing)}/{target}", flush=True)
     return path
 
 
