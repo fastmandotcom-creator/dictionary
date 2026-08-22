@@ -91,7 +91,7 @@ def next_batch(start_rank: int, batch_size: int, existing_ids: set[str], recent_
     return parsed
 
 
-def generate_syllabus(target: int, batch_size: int = 40, dest: Path | None = None) -> Path:
+def generate_syllabus(target: int, batch_size: int = 120, dest: Path | None = None) -> Path:
     path = dest or SYLLABUS_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     existing = load_existing(path)
@@ -131,7 +131,7 @@ def generate_syllabus(target: int, batch_size: int = 40, dest: Path | None = Non
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", type=int, default=12000)
-    parser.add_argument("--batch-size", type=int, default=40)
+    parser.add_argument("--batch-size", type=int, default=120)
     args = parser.parse_args()
     generate_syllabus(target=args.target, batch_size=args.batch_size)
 

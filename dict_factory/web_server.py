@@ -19,6 +19,7 @@ app = FastAPI(title="Dict Explorer", description="Read-only Multilingual Concept
 
 
 @app.get("/", response_class=HTMLResponse)
+@app.head("/", response_class=HTMLResponse)
 async def index(
     request: Request,
     q: str = Query("", description="Search term or meaning"),
@@ -65,6 +66,7 @@ async def index(
 
 
 @app.get("/concept/{concept_id}", response_class=HTMLResponse)
+@app.head("/concept/{concept_id}", response_class=HTMLResponse)
 async def concept_view(request: Request, concept_id: str):
     conn = get_db()
     try:

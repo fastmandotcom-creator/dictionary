@@ -22,6 +22,14 @@ def test_parse_requires_all_languages() -> None:
         parse_expression_bundle({"concept_id": "WATER", "langs": langs})
 
 
+def test_parse_compact_keys() -> None:
+    langs = {lang: {"t": lang, "m": "g"} for lang in LANGUAGES}
+    bundle = parse_expression_bundle({"concept_id": "WATER", **langs})
+    assert bundle["concept_id"] == "WATER"
+    assert bundle["langs"]["en"]["text"] == "en"
+    assert bundle["langs"]["en"]["example"] == ""
+
+
 def test_parse_full_bundle() -> None:
     langs = {lang: _lang_entry(lang) for lang in LANGUAGES}
     langs["en"] = {
