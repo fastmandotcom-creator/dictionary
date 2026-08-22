@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ concept.id }} — Dict Explorer Detail</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    code, pre, .font-mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="min-h-full flex flex-col bg-slate-950 text-slate-100">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/" class="flex items-center gap-2 text-slate-400 hover:text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition">
+          ← Back to Explorer
+        </a>
+        <div class="h-4 w-px bg-slate-800"></div>
+        <span class="font-mono text-sm font-bold text-indigo-400">{{ concept.id }}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 font-medium">Rank #{{ concept.rank }}</span>
+        <span class="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700 font-medium">CEFR {{ concept.cefr }}</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Detail View -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Concept Meta Card (Show all columns of 'concepts' table) -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl">
+      <div class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-3">Concept Metadata (concepts table)</div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+        <div class="bg-slate-950/80 p-3 rounded-lg border border-slate-800">
+          <div class="text-xs text-slate-500 font-mono">id (PRIMARY KEY)</div>
+          <div class="font-mono font-bold text-indigo-300 mt-0.5">{{ concept.id }}</div>
+        </div>
+        <div class="bg-slate-950/80 p-3 rounded-lg border border-slate-800">
+          <div class="text-xs text-slate-500 font-mono">rank (GLOBAL ORDER)</div>
+          <div class="font-mono font-bold text-slate-100 mt-0.5">#{{ concept.rank }}</div>
+        </div>
+        <div class="bg-slate-950/80 p-3 rounded-lg border border-slate-800">
+          <div class="text-xs text-slate-500 font-mono">cefr (LEVEL)</div>
+          <div class="font-bold text-emerald-400 mt-0.5">{{ concept.cefr }}</div>
+        </div>
+        <div class="bg-slate-950/80 p-3 rounded-lg border border-slate-800">
+          <div class="text-xs text-slate-500 font-mono">pos (PART OF SPEECH)</div>
+          <div class="font-semibold text-slate-300 mt-0.5">{{ concept.pos }}</div>
+        </div>
+        <div class="bg-slate-950/80 p-3 rounded-lg border border-slate-800">
+          <div class="text-xs text-slate-500 font-mono">domain (CATEGORY)</div>
+          <div class="font-semibold text-slate-300 mt-0.5">{{ concept.domain }}</div>
+        </div>
+      </div>
+      <div class="mt-3 bg-slate-950/80 p-3 rounded-lg border border-slate-800">
+        <div class="text-xs text-slate-500 font-mono">gloss_en (PEDAGOGICAL DEFINITION)</div>
+        <div class="text-slate-200 mt-0.5 font-medium">{{ concept.gloss_en }}</div>
+      </div>
+    </div>
+
+    <!-- 35 Languages Expression Grid (Show all columns of 'expressions' & 'examples' tables) -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+      <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-white">All 35 Language Expressions</h2>
+          <p class="text-xs text-slate-400">Exact surface forms, expression types, localized meanings, and example sentences</p>
+        </div>
+        <span class="text-xs bg-indigo-500/10 text-indigo-400 px-2.5 py-1 rounded border border-indigo-500/20 font-semibold font-mono">
+          {{ expressions|length }} / 35 Languages
+        </span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm border-collapse">
+          <thead>
+            <tr class="bg-slate-950/80 border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400 font-semibold font-mono">
+              <th class="py-3 px-4 w-40">lang (ISO 639-1)</th>
+              <th class="py-3 px-4 min-w-[180px]">text (SURFACE EXPRESSION)</th>
+              <th class="py-3 px-4 w-32">expression_type</th>
+              <th class="py-3 px-4 min-w-[240px]">meaning (LOCALIZED GLOSS)</th>
+              <th class="py-3 px-4 min-w-[240px]">examples.sentence</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/60 font-sans">
+            {% for expr in expressions %}
+            {% set spec = lang_map.get(expr.lang) %}
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="py-3 px-4 font-mono text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-indigo-400 uppercase bg-indigo-950/50 border border-indigo-800/50 px-1.5 py-0.5 rounded">{{ expr.lang }}</span>
+                  <span class="text-slate-300 font-sans text-xs">{% if spec %}{{ spec[1] }}{% else %}{{ expr.lang }}{% endif %}</span>
+                </div>
+              </td>
+              <td class="py-3 px-4">
+                <span class="font-semibold text-white text-base">{{ expr.text }}</span>
+              </td>
+              <td class="py-3 px-4 font-mono text-xs text-slate-400">
+                <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-[11px]">{{ expr.expression_type }}</span>
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-300">
+                {{ expr.meaning or '—' }}
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-400 italic">
+                {% if expr.example_sentence %}
+                  "{{ expr.example_sentence }}"
+                {% else %}
+                  <span class="text-slate-600">No sentence recorded</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <footer class="border-t border-slate-800 py-4 text-center text-xs text-slate-600">
+    Dict Explorer — 100% LLM Pedagogical Multilingual Engine (Read-Only)
+  </footer>
+</body>
+</html>

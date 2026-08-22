@@ -15,13 +15,15 @@ def main() -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
     syllabus = sub.add_parser("syllabus")
     syllabus.add_argument("--target", type=int, default=12000)
-    syllabus.add_argument("--batch-size", type=int, default=40)
+    syllabus.add_argument("--batch-size", type=int, default=120)
     expr = sub.add_parser("expressions")
-    expr.add_argument("--batch-size", type=int, default=8)
-    expr.add_argument("--workers", type=int, default=6)
+    expr.add_argument("--batch-size", type=int, default=40)
+    expr.add_argument("--workers", type=int, default=8)
     sub.add_parser("warehouse")
     compile_cmd = sub.add_parser("compile")
     compile_cmd.add_argument("--sync-frontend", action="store_true")
+    web_cmd = sub.add_parser("web")
+    web_cmd.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     if args.cmd == "syllabus":
         generate_syllabus(target=args.target, batch_size=args.batch_size)
@@ -35,6 +37,10 @@ def main() -> None:
         compile_runtime(concepts, bundles)
         if args.sync_frontend:
             sync_frontend()
+    elif args.cmd == "web":
+        import uvicorn
+        from dict_factory.web_server import app
+        uvicorn.run(app, host="127.0.0.1", port=args.port)
 
 
 if __name__ == "__main__":
