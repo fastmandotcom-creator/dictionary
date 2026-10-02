@@ -7,7 +7,12 @@ Return ONLY a JSON array of objects, no prose, no markdown:
 
 Rules:
 - id matches ^[A-Z][A-Z0-9_]+$ and is unique within the batch
-- domain is a short lowercase everyday-domain word (social, food, travel, work, home, body, money, time, nature, emotion)
+- domain MUST be exactly one of (closed taxonomy, lowercase, no variants):
+  arts, business, clothing, communication, cooking, culture, daily_life, economy,
+  education, emotions, environment, family, finance, food, general, health, home,
+  law, leisure, media, military, nature, philosophy, politics, psychology,
+  relationships, safety, science, shopping, social, society, sports, technology,
+  time, transport, travel, weather, work
 - pos is one of: noun, verb, adjective, adverb, phrase, other
 - cefr is one of: A1, A2, B1, B2, C1
 - gloss_en is a 3-10 word English gloss of the IDEA, not a definition

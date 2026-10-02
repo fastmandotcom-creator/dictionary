@@ -9,7 +9,7 @@
     "required": ["id", "domain", "cefr", "pos", "gloss_en", "rank"],
     "properties": {
       "id": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]+$"},
-      "domain": {"type": "string", "minLength": 2, "maxLength": 24},
+      "domain": {"type": "string", "enum": ["arts", "business", "clothing", "communication", "cooking", "culture", "daily_life", "economy", "education", "emotions", "environment", "family", "finance", "food", "general", "health", "home", "law", "leisure", "media", "military", "nature", "philosophy", "politics", "psychology", "relationships", "safety", "science", "shopping", "social", "society", "sports", "technology", "time", "transport", "travel", "weather", "work"]},
       "cefr": {"type": "string", "enum": ["A1", "A2", "B1", "B2", "C1"]},
       "pos": {"type": "string", "enum": ["noun", "verb", "adjective", "adverb", "phrase", "other"]},
       "gloss_en": {"type": "string", "minLength": 2, "maxLength": 120},

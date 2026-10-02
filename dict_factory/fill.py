@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from dict_factory.config import EXPRESSIONS_DIR, SYLLABUS_PATH
-from dict_factory.extra_data import parse_bilingual_item, parse_phonetics_item
+from dict_factory.extra_data import parse_bilingual_item, parse_monolingual_item, parse_phonetics_item
 from dict_factory.languages import LANGUAGES
 from dict_factory.llm import call_chat_json, llm_config
 from dict_factory.prompts import SchemaViolation, estimate_tokens, prompt_messages, validate_payload
@@ -188,6 +188,131 @@ def fill_examples_bilingual(*, target: str, base: str, limit: int = 40, dry_run:
     return written
 
 
+def _mono_surfaces(concept: dict) -> dict[str, str] | None:
+    """All 35 surface texts for a concept, or None if the bundle is incomplete.
+
+    No fallback: a monolingual batch must carry every language or the call
+    would produce a short (non-35) item the loader must reject anyway.
+    """
+    bundle_path = EXPRESSIONS_DIR / f"{concept['id']}.json"
+    if not bundle_path.exists():
+        return None
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    langs = bundle.get("langs") or {}
+    surfaces: dict[str, str] = {}
+    for lang in LANGUAGES:
+        entry = langs.get(lang)
+        text = str((entry or {}).get("text") or "").strip() if isinstance(entry, dict) else ""
+        if not text:
+            return None
+        surfaces[lang] = text
+    return surfaces
+
+
+def fill_examples_mono(*, limit: int = 40, dry_run: bool = False, version: str = "v1", batch_size: int = 20, workers: int = 8) -> int:
+    """One call writes 35 independent sentences per concept (A1-A2 strategy).
+
+    Output shape per concept: {"id": ..., "s": {lang: sentence}}.
+    Sentences are independent per language, NOT translations — display them
+    labelled per language, never as translation pairs.
+    """
+    syllabus = load_syllabus_jsonl(SYLLABUS_PATH.read_text(encoding="utf-8"))
+    done_dir = EXPRESSIONS_DIR / "examples_mono"
+    pending = _pending(syllabus, done_dir)[:limit]
+    if not pending:
+        print("examples_mono: nothing pending", flush=True)
+        return 0
+    ready: list[dict] = []
+    skipped: list[str] = []
+    surfaces: dict[str, dict[str, str]] = {}
+    for concept in pending:
+        surf = _mono_surfaces(concept)
+        if surf is None:
+            skipped.append(concept["id"])
+            print(f"examples_mono: skip {concept['id']} (incomplete 35-lang bundle)", flush=True)
+        else:
+            ready.append(concept)
+            surfaces[concept["id"]] = surf
+    if not ready:
+        print(f"examples_mono: 0 ready, {len(skipped)} skipped (incomplete bundles)", flush=True)
+        return 0
+    batches = _chunks(ready, batch_size)
+    if dry_run:
+        for chunk in batches:
+            block = "\n".join(
+                f"- {c['id']} | {c['cefr']} | " + " || ".join(f"{lang}: {surfaces[c['id']][lang]}" for lang in LANGUAGES)
+                for c in chunk
+            )
+            variables = {"concepts_block": block, "count": len(chunk)}
+            messages = prompt_messages("examples_monolingual", version=version, variables=variables)
+            est = estimate_tokens(messages[0]["content"], messages[1]["content"])
+            print(f"examples_mono dry-run: batch of {len(chunk)} x 35 langs, ~{est} tokens in, no LLM invoked", flush=True)
+        return 0
+
+    def run_batch(chunk: list[dict]) -> int:
+        if not chunk:
+            return 0
+        block = "\n".join(
+            f"- {c['id']} | {c['cefr']} | " + " || ".join(f"{lang}: {surfaces[c['id']][lang]}" for lang in LANGUAGES)
+            for c in chunk
+        )
+        variables = {"concepts_block": block, "count": len(chunk)}
+        messages = prompt_messages("examples_monolingual", version=version, variables=variables)
+        try:
+            payload = call_chat_json(messages[0]["content"], messages[1]["content"], timeout=180.0)
+            if not isinstance(payload, list):
+                raise RuntimeError("examples_monolingual batch must be a JSON array")
+            validate_payload("examples_monolingual", payload)
+        except (RuntimeError, SchemaViolation) as exc:
+            if len(chunk) > 1:
+                print(f"examples_mono: batch of {len(chunk)} failed ({exc}); splitting", flush=True)
+                mid = len(chunk) // 2
+                return run_batch(chunk[:mid]) + run_batch(chunk[mid:])
+            print(f"examples_mono: single {chunk[0]['id']} failed ({exc}); kept pending", flush=True)
+            return 0
+        wanted = {c["id"] for c in chunk}
+        written = 0
+        for item in payload:
+            raw_id = str(item.get("id") or item.get("concept_id") or "").strip()
+            if raw_id not in wanted:
+                continue
+            try:
+                parsed = parse_monolingual_item(raw_id, item, version)
+            except ValueError as exc:
+                print(f"examples_mono: reject {raw_id} ({exc}); kept pending", flush=True)
+                continue
+            _write_record(done_dir, raw_id, {"concept_id": raw_id, "prompt_v": version, "data": {"s": parsed["sentences"]}})
+            written += 1
+        return written
+
+    written = 0
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = [pool.submit(run_batch, chunk) for chunk in batches]
+        for future in as_completed(futures):
+            written += future.result()
+    print(f"examples_mono: {written}/{len(ready)} written, {len(skipped)} skipped (incomplete bundles)", flush=True)
+    return written
+
+
+def _unit_surface(concept_id: str, target: str) -> str | None:
+    """Target-language surface text for unit-titling context (None if missing).
+
+    Unlike phonetics/examples, a missing surface here does not poison anything:
+    the title is newly generated from the shared theme, with gloss_en as anchor.
+    """
+    bundle_path = EXPRESSIONS_DIR / f"{concept_id}.json"
+    if not bundle_path.exists():
+        return None
+    try:
+        bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    entry = (bundle.get("langs") or {}).get(target)
+    if not isinstance(entry, dict):
+        return None
+    return str(entry.get("text") or "").strip() or None
+
+
 def fill_units(*, target: str, limit: int = 12, dry_run: bool = False, version: str = "v1") -> int:
     if target not in LANGUAGES:
         raise ValueError(f"unknown target lang {target!r}")
@@ -208,7 +333,22 @@ def fill_units(*, target: str, limit: int = 12, dry_run: bool = False, version: 
             unit_id = f"{cefr}_{unit_no:02d}"
             if unit_id in done_units:
                 continue
-            block = json.dumps({"order_no": unit_no, "cefr": cefr, "ids": [c["id"] for c in chunk]})
+            block = json.dumps(
+                {
+                    "order_no": unit_no,
+                    "cefr": cefr,
+                    "ids": [c["id"] for c in chunk],
+                    "concepts": [
+                        {
+                            "id": c["id"],
+                            "gloss_en": c["gloss_en"],
+                            "text": _unit_surface(c["id"], target),
+                        }
+                        for c in chunk
+                    ],
+                },
+                ensure_ascii=False,
+            )
             variables = {"target_lang": target, "units_block": block, "count": 1}
             messages = prompt_messages("units_title", version=version, variables=variables)
             est = estimate_tokens(messages[0]["content"], messages[1]["content"])
@@ -260,6 +400,8 @@ def main(args=None) -> None:
         if not args.base:
             raise SystemExit("--base is required for examples")
         fill_examples_bilingual(target=args.target, base=args.base, limit=args.limit, dry_run=args.dry_run, version=args.version, batch_size=args.batch_size, workers=args.workers)
+    elif args.what == "examples-mono":
+        fill_examples_mono(limit=args.limit, dry_run=args.dry_run, version=args.version, batch_size=args.batch_size, workers=args.workers)
     elif args.what == "units":
         fill_units(target=args.target, limit=args.limit, dry_run=args.dry_run, version=args.version)
 
@@ -268,8 +410,8 @@ def _build_parser():
     import argparse
 
     parser = argparse.ArgumentParser(prog="dict_factory.fill")
-    parser.add_argument("--what", choices=["phonetics", "examples", "units"], required=True)
-    parser.add_argument("--target", required=True, help="target language ISO code (e.g. ja)")
+    parser.add_argument("--what", choices=["phonetics", "examples", "examples-mono", "units"], required=True)
+    parser.add_argument("--target", default="ja", help="target language ISO code (not needed for examples-mono)")
     parser.add_argument("--base", default="", help="base (learner) language ISO code; required for examples")
     parser.add_argument("--limit", type=int, default=40, help="max items to fill this run (resume continues after)")
     parser.add_argument("--batch-size", type=int, default=20, help="concepts per LLM call (20-40)")

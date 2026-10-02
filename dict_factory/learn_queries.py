@@ -59,7 +59,7 @@ def learn_level_units(conn: sqlite3.Connection, base: str, target: str, cefr: st
                 }
             )
         return result
-    # Fallback: no units filled yet -> synthesize from concepts by cefr/domain, ordered by rank.
+    # Fallback: no units filled yet -> synthesize from concepts by cefr, ordered by rank.
     where_c = ""
     params_c: list[Any] = []
     if cefr:
@@ -131,10 +131,18 @@ def learn_concept_pair(
         ).fetchone()
         if biling:
             biling = dict(biling)
+    mono = None
+    row = conn.execute(
+        "SELECT sentence FROM examples WHERE concept_id = ? AND lang = ?",
+        (concept_id, target),
+    ).fetchone()
+    if row and (row["sentence"] or "").strip():
+        mono = row["sentence"]
     return {
         "concept": dict(concept),
         "target": target_row,
         "base": base_row,
         "phonetics": phon,
         "bilingual": biling,
+        "mono": mono,
     }

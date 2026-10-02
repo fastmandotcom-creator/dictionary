@@ -63,3 +63,18 @@ def test_reject_overlong_text() -> None:
 def test_runtime_pos_promotes_collocation() -> None:
     assert runtime_pos("verb", "collocation") == "phrase"
     assert runtime_pos("noun", "word") == "noun"
+
+
+def test_normalize_legacy_pos_types() -> None:
+    from dict_factory.expressions import parse_lang_entry
+
+    assert parse_lang_entry("en", {"text": "x", "meaning": "y", "type": "noun"})["type"] == "word"
+    assert parse_lang_entry("en", {"text": "x", "meaning": "y", "type": "noun_phrase"})["type"] == "phrase"
+    assert parse_lang_entry("en", {"text": "x", "meaning": "y"})["type"] == "word"
+
+
+def test_reject_garbage_expression_type() -> None:
+    from dict_factory.expressions import ExpressionError, parse_lang_entry
+
+    with pytest.raises(ExpressionError, match="invalid expression type"):
+        parse_lang_entry("fi", {"text": "x", "meaning": "y", "type": "fi"})

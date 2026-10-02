@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from dict_factory.languages import LANGUAGES, MAX_EXPRESSION_CHARS, PHRASE_TYPES
+from dict_factory.languages import (
+    EXPRESSION_TYPES,
+    LANGUAGES,
+    MAX_EXPRESSION_CHARS,
+    PHRASE_TYPES,
+)
 
 
 class ExpressionError(ValueError):
@@ -24,6 +29,22 @@ def parse_lang_entry(lang: str, raw: Any) -> dict[str, str]:
         raise ExpressionError(f"{lang}: missing meaning")
     if not expression_type:
         expression_type = "word"
+    # Normalize legacy POS-like values the model sometimes emits instead of an
+    # expression type (functionally identical: none are in PHRASE_TYPES, so
+    # runtime_pos falls back to the syllabus pos either way).
+    _K_NORM = {
+        "noun": "word",
+        "verb": "word",
+        "adjective": "word",
+        "adverb": "word",
+        "other": "word",
+        "noun_phrase": "phrase",
+    }
+    if expression_type not in EXPRESSION_TYPES:
+        if expression_type in _K_NORM:
+            expression_type = _K_NORM[expression_type]
+        else:
+            raise ExpressionError(f"{lang}: invalid expression type {expression_type!r}")
     return {
         "text": text,
         "meaning": meaning,

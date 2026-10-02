@@ -16,6 +16,7 @@ PROMPT_REGISTRY: dict[str, tuple[str, str, str]] = {
     "expressions": ("expressions.system.md", "expressions.user.md", "expressions.schema.json"),
     "phonetics_text": ("phonetics.system.md", "phonetics.user.md", "phonetics.schema.json"),
     "examples_bilingual": ("examples_bilingual.system.md", "examples_bilingual.user.md", "examples_bilingual.schema.json"),
+    "examples_monolingual": ("examples_monolingual.system.md", "examples_monolingual.user.md", "examples_monolingual.schema.json"),
     "units_title": ("units_title.system.md", "units_title.user.md", "units_title.schema.json"),
 }
 

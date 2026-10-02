@@ -131,3 +131,30 @@ def test_load_phonetics_map_empty_without_table(tmp_path: Path) -> None:
 def test_parse_unit_title_uses_target_key() -> None:
     unit, _items = parse_unit({"cefr": "A1", "title": "Chao hoi", "ids": ["A_B"]}, "ja", 1, "v1")
     assert json.loads(unit["title_json"]) == {"ja": "Chao hoi"}
+
+
+def test_reject_unit_title_that_is_a_concept_id() -> None:
+    with pytest.raises(ValueError, match="just a concept id"):
+        parse_unit({"cefr": "A1", "title": "GREET_HELLO", "ids": ["GREET_HELLO", "BYE_X"]}, "ja", 1, "v1")
+    unit, _items = parse_unit({"cefr": "A1", "title": "Chao hoi", "ids": ["GREET_HELLO"]}, "ja", 1, "v1")
+    assert unit["id"] == "ja-A1-01"
+
+
+def test_unit_surface_reads_bundle_or_none(mini_syllabus: Path, tmp_path: Path) -> None:
+    from dict_factory.fill import _unit_surface
+
+    expr = tmp_path / "out" / "expressions"
+    (expr / "HELLO_X.json").write_text(json.dumps(_bundle("HELLO_X", "hello")))
+    assert _unit_surface("HELLO_X", "ja") == "hello-ja"
+    assert _unit_surface("MISSING_X", "ja") is None
+
+
+def test_phonetics_prompt_specifies_diacritic_stripping() -> None:
+    from dict_factory.prompts import load_prompt
+
+    prompt = load_prompt(
+        "phonetics_text",
+        variables={"target_lang": "vi", "concepts_block": "- X | A1 | a", "count": 1},
+    )
+    assert "diacritics" in prompt.system
+    assert "xin chao" in prompt.system

@@ -4,7 +4,7 @@ import argparse
 
 from dict_factory.compile_runtime import compile_runtime, sync_frontend
 from dict_factory.config import SYLLABUS_PATH
-from dict_factory.extra_data import load_examples_bilingual, load_phonetics, load_units
+from dict_factory.extra_data import load_examples, load_examples_bilingual, load_phonetics, load_units
 from dict_factory.generate_expressions import generate_expressions
 from dict_factory.generate_syllabus import generate_syllabus
 from dict_factory.load_warehouse import load_bundles, load_warehouse
@@ -22,9 +22,11 @@ def main() -> None:
     expr.add_argument("--workers", type=int, default=8)
     sub.add_parser("warehouse")
     sub.add_parser("extra")
+    norm = sub.add_parser("normalize-domains")
+    norm.add_argument("--apply", action="store_true", help="rewrite syllabus.jsonl + warehouse DB (default: dry-run plan only)")
     fill_cmd = sub.add_parser("fill")
-    fill_cmd.add_argument("--what", choices=["phonetics", "examples", "units"], required=True)
-    fill_cmd.add_argument("--target", required=True)
+    fill_cmd.add_argument("--what", choices=["phonetics", "examples", "examples-mono", "units"], required=True)
+    fill_cmd.add_argument("--target", default="ja")
     fill_cmd.add_argument("--base", default="")
     fill_cmd.add_argument("--limit", type=int, default=40)
     fill_cmd.add_argument("--batch-size", type=int, default=20)
@@ -42,6 +44,42 @@ def main() -> None:
         generate_expressions(batch_size=args.batch_size, workers=args.workers)
     elif args.cmd == "warehouse":
         load_warehouse()
+    elif args.cmd == "normalize-domains":
+        import json
+        from collections import Counter
+
+        from dict_factory.db import connect
+        from dict_factory.syllabus import normalize_domain, normalize_syllabus_file
+
+        raw_rows = [
+            json.loads(line)
+            for line in SYLLABUS_PATH.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        plan: Counter[str] = Counter()
+        for row in raw_rows:
+            old = str(row.get("domain") or "").strip().lower()
+            new = normalize_domain(old)
+            if new != old:
+                plan[(old, new)] += 1
+        print(f"normalize-domains: {len(plan)} mappings affecting {sum(plan.values())} concepts")
+        for (old, new), count in sorted(plan.items()):
+            print(f"  {old} -> {new} ({count})")
+        if not args.apply:
+            print("dry-run only; rerun with --apply to rewrite syllabus.jsonl + warehouse DB")
+            return
+        stats = normalize_syllabus_file(SYLLABUS_PATH)
+        print(f"syllabus.jsonl: {stats['changed']}/{stats['total']} rows rewritten")
+        conn = connect()
+        try:
+            updated = 0
+            for (old, new), _ in sorted(plan.items()):
+                cur = conn.execute("UPDATE concepts SET domain = ? WHERE domain = ?", (new, old))
+                updated += cur.rowcount
+            conn.commit()
+        finally:
+            conn.close()
+        print(f"warehouse: {updated} concept rows remapped")
     elif args.cmd == "extra":
         from dict_factory.db import connect
 
@@ -49,10 +87,11 @@ def main() -> None:
         try:
             n1 = load_phonetics(conn=conn)
             n2 = load_examples_bilingual(conn=conn)
+            n2m = load_examples(conn=conn)
             n3 = load_units(conn=conn)
         finally:
             conn.close()
-        print(f"extra warehouse: phonetics={n1} examples_bilingual={n2} units={n3}")
+        print(f"extra warehouse: phonetics={n1} examples_bilingual={n2} examples_mono={n2m} units={n3}")
     elif args.cmd == "fill":
         from dict_factory.fill import main as fill_main
 
