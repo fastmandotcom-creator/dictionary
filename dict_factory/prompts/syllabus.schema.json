@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "syllabus.v1",
+  "type": "array",
+  "minItems": 1,
+  "maxItems": 200,
+  "items": {
+    "type": "object",
+    "required": ["id", "domain", "cefr", "pos", "gloss_en", "rank"],
+    "properties": {
+      "id": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]+$"},
+      "domain": {"type": "string", "minLength": 2, "maxLength": 24},
+      "cefr": {"type": "string", "enum": ["A1", "A2", "B1", "B2", "C1"]},
+      "pos": {"type": "string", "enum": ["noun", "verb", "adjective", "adverb", "phrase", "other"]},
+      "gloss_en": {"type": "string", "minLength": 2, "maxLength": 120},
+      "rank": {"type": "integer", "minimum": 1}
+    }
+  }
+}

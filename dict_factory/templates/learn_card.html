@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ detail.concept.id }} — {{ target_name }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="min-h-full flex flex-col bg-slate-950 text-slate-100">
+  <script>
+    const KEY = 'dict_learn_progress_{{ base }}_{{ target }}';
+    function storeProgress(id, grade) {
+      let map = {};
+      try { map = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+      map[id] = grade;
+      localStorage.setItem(KEY, JSON.stringify(map));
+    }
+    window.addEventListener('DOMContentLoaded', function () {
+      document.querySelectorAll('[data-grade]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          storeProgress(btn.dataset.id, btn.dataset.grade);
+          const bar = document.getElementById('grade-state');
+          if (bar) bar.textContent = 'Đã ghi: ' + btn.dataset.grade;
+        });
+      });
+    });
+  </script>
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-2xl mx-auto px-4 py-3.5 flex items-center justify-between">
+      <a href="/learn?base={{ base }}&target={{ target }}" class="text-xs font-semibold text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition">← Lộ trình</a>
+      <div class="flex items-center gap-2 text-xs">
+        <span class="bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 font-mono">{{ detail.concept.cefr }}</span>
+        <span class="text-slate-500">Rank #{{ detail.concept.rank }}</span>
+      </div>
+    </div>
+  </header>
+  <main class="flex-1 max-w-2xl w-full mx-auto px-4 py-6 space-y-4">
+    <!-- HERO -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl">
+      <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">{{ target_name }} (đang học)</div>
+      <div class="text-3xl font-bold text-white break-words">{{ detail.target.text if detail.target else detail.concept.gloss_en }}</div>
+      {% if detail.phonetics %}
+      <div class="mt-2 text-sm text-slate-400 font-mono">
+        <span class="text-slate-300">{{ detail.phonetics.romaji }}</span>
+        <span class="text-slate-600 ml-3">{{ detail.phonetics.ipa }}</span>
+      </div>
+      {% endif %}
+      {% if detail.base %}
+      <div class="mt-3 pt-3 border-t border-slate-800 flex items-baseline gap-2">
+        <span class="text-xl font-semibold text-emerald-300">{{ detail.base.text }}</span>
+        <span class="text-xs text-slate-500">{{ base_name }} (đã biết)</span>
+      </div>
+      {% endif %}
+    </div>
+    <!-- BILINGUAL EXAMPLE -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-3">Ví dụ song ngữ</div>
+      {% if detail.bilingual %}
+        <p class="text-slate-200 font-medium">{{ detail.bilingual.sent_target }}</p>
+        <p class="text-slate-500 text-sm mt-1">{{ detail.bilingual.sent_base }}</p>
+      {% else %}
+        <p class="text-sm text-slate-500">Chưa có. Chạy <code class="font-mono text-slate-400">dict_factory fill --what examples --target {{ target }} --base {{ base }}</code> để lấp.</p>
+      {% endif %}
+    </div>
+    <!-- GRADING -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Bạn nhớ chưa?</span>
+        <span id="grade-state" class="text-xs text-slate-500"></span>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <button data-grade="hard" data-id="{{ detail.concept.id }}" class="bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-lg py-2.5 text-sm font-semibold hover:bg-rose-500/20 transition">Chưa</button>
+        <button data-grade="ok" data-id="{{ detail.concept.id }}" class="bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg py-2.5 text-sm font-semibold hover:bg-amber-500/20 transition">Tạm</button>
+        <button data-grade="good" data-id="{{ detail.concept.id }}" class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg py-2.5 text-sm font-semibold hover:bg-emerald-500/20 transition">Nhớ rồi</button>
+      </div>
+    </div>
+    <a href="/learn?base={{ base }}&target={{ target }}" class="block text-center text-xs text-slate-500 hover:text-slate-300 py-2">← Tiếp tục lộ trình</a>
+  </main>
+</body>
+</html>

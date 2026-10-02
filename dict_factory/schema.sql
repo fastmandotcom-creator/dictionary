@@ -21,3 +21,40 @@ CREATE TABLE IF NOT EXISTS examples (
   sentence TEXT NOT NULL,
   UNIQUE (concept_id, lang)
 );
+CREATE TABLE IF NOT EXISTS phonetics_text (
+  concept_id TEXT NOT NULL REFERENCES concepts(id),
+  lang TEXT NOT NULL,
+  romaji TEXT NOT NULL,
+  ipa TEXT NOT NULL,
+  prompt_v TEXT NOT NULL DEFAULT 'v1',
+  PRIMARY KEY (concept_id, lang)
+);
+CREATE TABLE IF NOT EXISTS examples_bilingual (
+  concept_id TEXT NOT NULL REFERENCES concepts(id),
+  lang_target TEXT NOT NULL,
+  lang_base TEXT NOT NULL,
+  sent_target TEXT NOT NULL,
+  sent_base TEXT NOT NULL,
+  prompt_v TEXT NOT NULL DEFAULT 'v1',
+  UNIQUE (concept_id, lang_target, lang_base)
+);
+CREATE TABLE IF NOT EXISTS units (
+  id TEXT PRIMARY KEY,
+  target TEXT NOT NULL,
+  cefr TEXT NOT NULL CHECK (cefr IN ('A1','A2','B1','B2','C1')),
+  order_no INTEGER NOT NULL,
+  title_json TEXT NOT NULL,
+  prompt_v TEXT NOT NULL DEFAULT 'v1',
+  UNIQUE (target, cefr, order_no)
+);
+CREATE TABLE IF NOT EXISTS unit_items (
+  unit_id TEXT NOT NULL REFERENCES units(id),
+  concept_id TEXT NOT NULL REFERENCES concepts(id),
+  order_no INTEGER NOT NULL,
+  prompt_v TEXT NOT NULL DEFAULT 'v1',
+  PRIMARY KEY (unit_id, concept_id)
+);
+CREATE INDEX IF NOT EXISTS idx_examples_bilingual_pair ON examples_bilingual(lang_target, lang_base);
+CREATE INDEX IF NOT EXISTS idx_units_lookup ON units(target, cefr, order_no);
+CREATE INDEX IF NOT EXISTS idx_unit_items_unit ON unit_items(unit_id);
+CREATE INDEX IF NOT EXISTS idx_examples_bilingual_concept ON examples_bilingual(concept_id);

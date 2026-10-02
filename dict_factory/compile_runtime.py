@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 
 from dict_factory.config import FRONTEND_SEED_DB, FRONTEND_SEED_GZ, RUNTIME_DB, RUNTIME_DB_GZ
-from dict_factory.expressions import runtime_pos
+from dict_factory.expressions import ExpressionError, parse_expression_bundle, runtime_pos
 from dict_factory.languages import LANGUAGES
 
 CORE_SCHEMA = """
@@ -35,25 +35,40 @@ def compile_runtime(
     concepts: list[dict],
     bundles: dict[str, dict],
     dest: Path | None = None,
+    phonetics: dict[tuple[str, str], str] | None = None,
 ) -> Path:
+    """Compile the runtime extension DB.
+
+    `phonetics` maps (concept_id, lang) -> romaji and fills `terms.readings`;
+    pass None/{} to leave readings NULL (nothing filled yet).
+    """
     dest = dest or RUNTIME_DB
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         dest.unlink()
+    readings = phonetics or {}
     conn = sqlite3.connect(dest)
     try:
         conn.executescript(CORE_SCHEMA)
         concept_rows: list[tuple[str, str, str, str]] = []
-        term_rows: list[tuple[str, str, str, str, int, None]] = []
+        term_rows: list[tuple[str, str, str, str, int, str | None]] = []
         for concept in sorted(concepts, key=lambda item: item["rank"]):
-            bundle = bundles.get(concept["id"])
-            if bundle is None:
+            raw_bundle = bundles.get(concept["id"])
+            if raw_bundle is None:
                 raise ValueError(f"missing expressions for {concept['id']}")
-            en_type = bundle["langs"]["en"]["type"]
-            pos = runtime_pos(concept["pos"], en_type)
+            try:
+                bundle = parse_expression_bundle(raw_bundle)
+            except ExpressionError as exc:
+                raise ValueError(f"invalid expressions for {concept['id']}: {exc}") from exc
+            en_entry = bundle["langs"].get("en")
+            if en_entry is None:
+                raise ValueError(f"missing English expression for {concept['id']}")
+            pos = runtime_pos(concept["pos"], en_entry["type"])
             concept_rows.append((concept["id"], pos, concept["gloss_en"], "en"))
             for lang in LANGUAGES:
-                entry = bundle["langs"][lang]
+                entry = bundle["langs"].get(lang)
+                if entry is None:
+                    raise ValueError(f"missing {lang} expression for {concept['id']}")
                 term_rows.append(
                     (
                         concept["id"],
@@ -61,7 +76,7 @@ def compile_runtime(
                         entry["text"],
                         entry["meaning"],
                         int(concept["rank"]),
-                        None,
+                        readings.get((concept["id"], lang)),
                     )
                 )
         conn.execute("INSERT INTO meta(key, value) VALUES('version', '2')")

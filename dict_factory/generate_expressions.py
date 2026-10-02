@@ -4,21 +4,12 @@ import argparse
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
 from dict_factory.config import EXPRESSIONS_DIR, SYLLABUS_PATH
 from dict_factory.expressions import parse_expression_bundle
 from dict_factory.languages import LANGUAGES, language_prompt_block
 from dict_factory.llm import call_chat_json
+from dict_factory.prompts import prompt_messages
 from dict_factory.syllabus import load_syllabus_jsonl
-
-SYSTEM = """You are a multilingual lexicographer for a language-learning engine.
-For each concept write the natural learner expression in EVERY language listed.
-Use a collocation when natives do (take medicine / uống thuốc / 吃药). Never calque.
-Return ONLY a JSON array. Compact keys. No examples. No markdown.
-{"concept_id":"CONSUME_MEDICINE","en":{"t":"take medicine","m":"ingest prescribed drugs","k":"collocation"},"vi":{"t":"uống thuốc","m":"đưa thuốc vào cơ thể","k":"verb_expression"},"id":{"t":"minum obat","m":"memasukkan obat","k":"verb_expression"}}
-t=expression, m=short gloss IN THAT LANGUAGE, k=word|collocation|verb_expression|phrase|idiom.
-Every language code listed in the user message MUST appear on every object.
-"""
 
 
 def bundle_path(concept_id: str, dest_dir: Path) -> Path:
@@ -39,12 +30,19 @@ def generate_batch(concepts: list[dict]) -> list[dict]:
 
 
 def _generate_one_batch(concepts: list[dict]) -> list[dict]:
-    lines = [language_prompt_block(), "", "Concepts:"]
-    for concept in concepts:
-        lines.append(
-            f"- {concept['id']} | {concept['cefr']} | {concept['pos']} | {concept['domain']} | {concept['gloss_en']}"
-        )
-    payload = call_chat_json(SYSTEM, "\n".join(lines), timeout=180.0)
+    block = "\n".join(
+        f"- {concept['id']} | {concept['cefr']} | {concept['pos']} | {concept['domain']} | {concept['gloss_en']}"
+        for concept in concepts
+    )
+    messages = prompt_messages(
+        "expressions",
+        variables={
+            "target_langs": language_prompt_block(),
+            "concepts_block": block,
+            "count": len(concepts),
+        },
+    )
+    payload = call_chat_json(messages[0]["content"], messages[1]["content"], timeout=180.0)
     if not isinstance(payload, list):
         raise RuntimeError("expression batch must be a JSON array")
     bundles = []

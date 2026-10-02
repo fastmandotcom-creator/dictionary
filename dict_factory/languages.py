@@ -60,6 +60,7 @@ def language_prompt_block() -> str:
 
 
 CEFR_LEVELS = frozenset({"A1", "A2", "B1", "B2", "C1"})
+CEFR_ORDER: dict[str, int] = {"A1": 1, "A2": 2, "B1": 3, "B2": 4, "C1": 5}
 POS_VALUES = frozenset({"noun", "verb", "adjective", "adverb", "phrase", "other"})
 CONCEPT_ID_PATTERN = r"^[A-Z][A-Z0-9_]+$"
 MAX_EXPRESSION_CHARS = 80

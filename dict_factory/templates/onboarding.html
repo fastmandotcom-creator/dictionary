@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chọn ngôn ngữ — Dict Learn</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="min-h-full flex flex-col bg-slate-950 text-slate-100">
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-3xl mx-auto px-4 py-3.5 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center font-bold text-white">L</div>
+        <span class="font-bold text-lg tracking-tight text-white">Dict Learn</span>
+      </div>
+      <a href="/" class="text-xs text-slate-400 hover:text-white">Explorer →</a>
+    </div>
+  </header>
+  <main class="flex-1 max-w-3xl w-full mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold text-white mb-2">Bạn muốn học gì?</h1>
+    <p class="text-sm text-slate-400 mb-6">Chọn ngôn ngữ bạn đã biết và ngôn ngữ bạn muốn học. Lộ trình A1→C1 tự động sinh theo rank.</p>
+    <form method="GET" action="/learn" class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 shadow-xl">
+      <div>
+        <label class="block text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1.5">Tôi đã biết (base)</label>
+        <select name="base" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
+          {% for code, name, native, tag in language_specs %}
+            <option value="{{ code }}" {% if code == 'vi' %}selected{% endif %}>{{ name }} ({{ native }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1.5">Tôi muốn học (target)</label>
+        <select name="target" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
+          {% for code, name, native, tag in language_specs %}
+            <option value="{{ code }}" {% if code == 'ja' %}selected{% endif %}>{{ name }} ({{ native }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center justify-between pt-2 border-t border-slate-800/80">
+        <span class="text-xs text-slate-500">Mức bắt đầu</span>
+        <div class="flex gap-1.5">
+          {% for lvl in cefr_levels %}
+            <button type="submit" name="cefr" value="{{ lvl }}"
+              class="text-xs font-semibold px-3 py-1.5 rounded-lg transition
+              {% if loop.first %}bg-emerald-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">
+              {{ lvl }}
+            </button>
+          {% endfor %}
+        </div>
+      </div>
+    </form>
+  </main>
+</body>
+</html>

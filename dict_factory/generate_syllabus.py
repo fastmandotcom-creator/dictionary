@@ -3,23 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-
 from dict_factory.config import SYLLABUS_PATH
 from dict_factory.llm import call_chat_json
+from dict_factory.prompts import prompt_messages
 from dict_factory.syllabus import parse_concept
-
-SYSTEM = """You are a CEFR syllabus designer for a multilingual language-learning engine.
-Emit pedagogical CONCEPTS (ideas people express), not an English word list and not WordNet synsets.
-Mix roughly: 40% collocations/expressions, 25% verbs, 20% nouns, 10% adjectives/adverbs, 5% function words.
-Return ONLY a JSON array of objects:
-{"id":"SCREAMING_SNAKE","domain":"health","cefr":"A1","pos":"phrase","gloss_en":"...","rank":1}
-Rules:
-- id matches ^[A-Z][A-Z0-9_]+$ and is unique
-- pos is one of noun, verb, adjective, adverb, phrase, other
-- cefr is A1, A2, B1, B2, or C1
-- rank is the global teaching order (1 = most basic)
-- No duplicate ideas. No proper nouns, brands, or slang.
-"""
 
 
 def load_existing(path: Path) -> list[dict]:
@@ -72,14 +59,19 @@ def adopt_batch(raw_items: list[dict], start_rank: int, seen_ids: set[str]) -> l
 
 def next_batch(start_rank: int, batch_size: int, existing_ids: set[str], recent_glosses: list[str]) -> list[dict]:
     sample_ids = sorted(existing_ids)[-80:]
-    user = (
-        f"Generate exactly {batch_size} NEW concepts. You have already created {len(existing_ids)} concepts.\n"
-        f"Use ranks {start_rank} through {start_rank + batch_size - 1}. Target CEFR {cefr_for_rank(start_rank)}.\n"
-        f"Recent ids (do not repeat): {', '.join(sample_ids) or '(none)'}\n"
-        f"Recent glosses (do not repeat ideas): {'; '.join(recent_glosses[-30:]) or '(none)'}\n"
-        "Invent fresh everyday situations, collocations, and verbs. Do not restart from greetings."
+    messages = prompt_messages(
+        "syllabus",
+        variables={
+            "batch_size": batch_size,
+            "created_total": len(existing_ids),
+            "start_rank": start_rank,
+            "end_rank": start_rank + batch_size - 1,
+            "target_cefr": cefr_for_rank(start_rank),
+            "recent_ids": ", ".join(sample_ids) or "(none)",
+            "recent_glosses": "; ".join(recent_glosses[-30:]) or "(none)",
+        },
     )
-    payload = call_chat_json(SYSTEM, user, timeout=180.0)
+    payload = call_chat_json(messages[0]["content"], messages[1]["content"], timeout=180.0)
     if not isinstance(payload, list):
         raise RuntimeError("syllabus batch must be a JSON array")
     parsed: list[dict] = []

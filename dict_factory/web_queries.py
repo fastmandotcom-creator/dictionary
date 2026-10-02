@@ -3,13 +3,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from dict_factory.config import WAREHOUSE_DB
-
-
-def get_db(db_path=WAREHOUSE_DB) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
+from dict_factory.db import get_db  # noqa: F401  (re-exported; single source in db.py)
 
 
 def get_stats(conn: sqlite3.Connection) -> dict[str, Any]:

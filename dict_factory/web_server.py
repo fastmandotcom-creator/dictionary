@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from dict_factory.languages import CEFR_LEVELS, LANGUAGE_SPECS, LANGUAGES, POS_VALUES
+from dict_factory.learn_queries import learn_concept_pair, learn_level_units
 from dict_factory.web_queries import get_concept_detail, get_db, get_stats, search_concepts
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +17,36 @@ TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 app = FastAPI(title="Dict Explorer", description="Read-only Multilingual Concept Explorer", docs_url=None)
+
+
+@app.get("/api/learn/{concept_id}")
+async def api_learn_concept(concept_id: str, base: str = Query("vi"), target: str = Query("ja")):
+    _validate_pair(base, target)
+    conn = get_db()
+    try:
+        detail = learn_concept_pair(conn, concept_id, base, target)
+    finally:
+        conn.close()
+    if not detail:
+        raise HTTPException(status_code=404, detail=f"Concept {concept_id} not found")
+    return detail
+
+
+def _language_name(code: str) -> str:
+    for spec in LANGUAGE_SPECS:
+        if spec[0] == code:
+            return spec[1]
+    return code
+
+
+def _validate_pair(base: str, target: str) -> None:
+    if base not in LANGUAGES or target not in LANGUAGES:
+        raise HTTPException(status_code=400, detail=f"unsupported lang pair base={base!r} target={target!r}")
+
+
+def _validate_cefr(cefr: str) -> None:
+    if cefr and cefr not in CEFR_LEVELS:
+        raise HTTPException(status_code=400, detail=f"unknown CEFR level {cefr!r}")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -30,6 +61,11 @@ async def index(
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=10, le=100),
 ):
+    if lang and lang not in LANGUAGES:
+        raise HTTPException(status_code=400, detail=f"unknown language {lang!r}")
+    _validate_cefr(cefr)
+    if pos and pos not in POS_VALUES:
+        raise HTTPException(status_code=400, detail=f"unknown part of speech {pos!r}")
     conn = get_db()
     try:
         items, total = search_concepts(
@@ -101,3 +137,119 @@ async def api_concept_detail(concept_id: str):
     if not detail:
         raise HTTPException(status_code=404, detail="Concept not found")
     return detail
+
+
+@app.get("/onboarding", response_class=HTMLResponse)
+@app.head("/onboarding", response_class=HTMLResponse)
+async def onboarding(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="onboarding.html",
+        context={
+            "language_specs": LANGUAGE_SPECS,
+            "cefr_levels": sorted(CEFR_LEVELS),
+        },
+    )
+
+
+@app.get("/learn", response_class=HTMLResponse)
+@app.head("/learn", response_class=HTMLResponse)
+async def learn(
+    request: Request,
+    base: str = Query("vi", description="learner's language"),
+    target: str = Query("ja", description="language being learned"),
+    cefr: str = Query("", description="filter CEFR level"),
+):
+    _validate_pair(base, target)
+    _validate_cefr(cefr)
+    conn = get_db()
+    try:
+        units = learn_level_units(conn, base, target, cefr)
+    finally:
+        conn.close()
+
+    units_with_title = []
+    for unit in units:
+        title_map = json.loads(unit["title_json"])
+        title = title_map.get(base) or title_map.get("en") or unit["id"]
+        concept_ids = unit["concept_ids"]
+        units_with_title.append(
+            {
+                "id": unit["id"],
+                "cefr": unit["cefr"],
+                "order_no": unit["order_no"],
+                "title": title,
+                "count": len(concept_ids),
+                "first": concept_ids[0] if concept_ids else "",
+                "concept_ids": concept_ids,
+            }
+        )
+    return templates.TemplateResponse(
+        request=request,
+        name="learn.html",
+        context={
+            "base": base,
+            "target": target,
+            "base_name": _language_name(base),
+            "target_name": _language_name(target),
+            "cefr": cefr,
+            "cefr_levels": sorted(CEFR_LEVELS),
+            "units": units_with_title,
+            "units_available": bool(units_with_title),
+        },
+    )
+
+
+@app.get("/learn/{concept_id}", response_class=HTMLResponse)
+@app.head("/learn/{concept_id}", response_class=HTMLResponse)
+async def learn_concept_view(request: Request, concept_id: str, base: str = Query("vi"), target: str = Query("ja")):
+    _validate_pair(base, target)
+    conn = get_db()
+    try:
+        detail = learn_concept_pair(conn, concept_id, base, target)
+    finally:
+        conn.close()
+
+    if not detail:
+        raise HTTPException(status_code=404, detail=f"Concept {concept_id} not found")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="learn_card.html",
+        context={
+            "detail": detail,
+            "base": base,
+            "target": target,
+            "base_name": _language_name(base),
+            "target_name": _language_name(target),
+        },
+    )
+
+
+@app.get("/review", response_class=HTMLResponse)
+@app.head("/review", response_class=HTMLResponse)
+async def review(request: Request, base: str = Query("vi"), target: str = Query("ja"), cefr: str = Query("A1")):
+    _validate_pair(base, target)
+    _validate_cefr(cefr)
+    conn = get_db()
+    try:
+        units = learn_level_units(conn, base, target, cefr)
+        card_ids: list[str] = []
+        for unit in units:
+            card_ids.extend(unit["concept_ids"][:12])
+    finally:
+        conn.close()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="review.html",
+        context={
+            "base": base,
+            "target": target,
+            "cefr": cefr,
+            "base_name": _language_name(base),
+            "target_name": _language_name(target),
+            "card_ids": card_ids[:120],
+            "cefr_levels": sorted(CEFR_LEVELS),
+        },
+    )
