@@ -46,7 +46,13 @@
       }
       index = 0; flipped = false;
       if (!state.pool.length) {
-        list.innerHTML = '<div class="text-center p-8 text-sm text-slate-400">Không có thẻ nào đến hạn hôm nay.<br>Thẻ "good" quay lại sau 7 ngày. 🎉</div>';
+        list.innerHTML =
+          '<div class="text-center p-8 text-sm text-slate-400">' +
+          '<div style="font-size:1.5rem;margin-bottom:8px">🎉</div>' +
+          'Không có thẻ nào đến hạn hôm nay.<br>' +
+          'Trở lại đây sau khi học — thẻ "Nhớ" quay lại sau 7 ngày, "Tạm" sau 3, "Chưa" ngay mai.' +
+          '<div style="margin-top:14px"><a href="/session?base=' + BASE + '&target=' + TARGET + '" class="text-emerald-400 hover:text-emerald-300 font-semibold text-xs">Vào buổi học hôm nay →</a></div>' +
+          '</div>';
         return;
       }
       document.getElementById('count').textContent = 'Còn ' + state.pool.length + ' thẻ';

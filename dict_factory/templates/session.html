@@ -49,10 +49,13 @@
           if (!isGraded(activeUnit.concept_ids[j])) newIds.push(activeUnit.concept_ids[j]);
         }
       }
-      // DUE: everything in scope whose review date arrived, most-overdue first
+      // DUE: everything in scope whose review date arrived, most-overdue
+      // first, minus the new cards of this session (no card may repeat).
       var all = UNITS.map(function (u) { return u.concept_ids; }).reduce(function (a, b) { return a.concat(b); }, []);
       all = all.filter(function (id, idx, self) { return self.indexOf(id) === idx; }); // dedupe
-      dueIds = all.filter(function (id) { return Srs.isDue(id, BASE, TARGET); });
+      var newSet = {};
+      newIds.forEach(function (id) { newSet[id] = true; });
+      dueIds = all.filter(function (id) { return !newSet[id] && Srs.isDue(id, BASE, TARGET); });
       dueIds.sort(function (a, b) {
         var da = (srs[a] && srs[a].due) || '0000';
         var db2 = (srs[b] && srs[b].due) || '0000';
@@ -83,6 +86,10 @@
         lines.push('<button data-newsize="' + n + '" class="newsize px-3 py-1.5 rounded-lg text-xs font-semibold ' +
           (NEW_SIZE === n ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700') + '">' + n + '</button>');
       });
+      lines.push('<div class="mt-4 text-xs text-slate-500 leading-relaxed border-t border-slate-800 pt-3">' +
+        '<b class="text-slate-400">Cách hoạt động:</b> học xong mỗi thẻ, bạn tự chấm. Thẻ chỉ lặp lại khi đến hẹn — ' +
+        '<span class="text-rose-400">Chưa</span> = mai, <span class="text-amber-400">Tạm</span> = 3 ngày, ' +
+        '<span class="text-emerald-400">Nhớ</span> = 7 ngày. Thẻ chưa từng học không xuất hiện ở mục "cần ôn".</div>');
       lines.push('<div class="mt-5"><button id="start-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl py-3.5 text-base transition">' +
         (mins > 0 ? 'Bắt đầu buổi hôm nay (' + (newIds.length + dueNow.length) + ' thẻ)' : 'Không có gì để làm hôm nay 🎉') + '</button></div>');
       if (newIds.length === 0 && dueNow.length === 0) document.getElementById('start-btn').disabled = true;

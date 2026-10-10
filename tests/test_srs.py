@@ -29,7 +29,13 @@ def test_is_done() -> None:
 
 
 def test_is_due_new_card() -> None:
-    assert srs.is_due(None, "2026-10-10") is True
+    # never learned => "new", NOT due (avoids flooding the review pool)
+    assert srs.is_due(None, "2026-10-10") is False
+
+
+def test_is_due_legacy_card_comes_back_once() -> None:
+    # v1 legacy has no due date: any recorded card comes back for one pass
+    assert srs.is_due(None, "2026-10-10", legacy_value="good") is True
 
 
 def test_is_due_hard_always_resurfaces() -> None:

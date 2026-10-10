@@ -48,13 +48,16 @@ def is_done(entry: dict | None, legacy_value: str | None = None) -> bool:
 def is_due(entry: dict | None, today: str, legacy_value: str | None = None) -> bool:
     """True when a card should appear in today's review pool.
 
-    New cards (no entry, no legacy) are due. Hard cards always resurface.
-    ok/good are due only when entry.due <= today.
+    "Due" means already learned and its review date has arrived: hard always
+    resurfaces, ok/good only when entry.due <= today. A card that was NEVER
+    learned (no entry, no legacy) is "new", not due — otherwise every
+    unlearned word floods the review pool and repeats inside one session.
+    Legacy v1 entries (no due date) come back for one pass.
     """
     if entry:
         grade = entry.get("grade")
         if not grade:
-            return True
+            return False
         if grade == "hard":
             return True
         due = entry.get("due")
@@ -62,7 +65,7 @@ def is_due(entry: dict | None, today: str, legacy_value: str | None = None) -> b
     if legacy_value:
         # v1 had no due date: migrated cards come back for one pass
         return True
-    return True
+    return False
 
 
 def shuffle(seq: list, rng=None) -> list:

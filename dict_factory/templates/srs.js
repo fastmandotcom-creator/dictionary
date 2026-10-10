@@ -63,8 +63,11 @@
     return legacyValue === 'good';
   }
 
-  // A card is due when new, hard (always resurfaces), or its due date has
-  // arrived. Legacy-migrated and never-graded cards are due.
+  // "Due" = already learned and its review date arrived (or graded hard,
+  // which resurfaces tomorrow). A card that was NEVER learned is "new", not
+  // due — otherwise every unlearned word floods the review pool and the same
+  // card repeats inside one session.
+  // Legacy v1 entries (no due date) come back for one pass.
   function isDue(id, base, target, todayIso) {
     var srs = readSrs(base, target);
     var legacy = readLegacy(base, target);
@@ -75,7 +78,7 @@
       return !entry.due || entry.due <= t;
     }
     if (legacy[id]) return true;
-    return true;
+    return false;
   }
 
   // Fisher-Yates; returns a new array.
