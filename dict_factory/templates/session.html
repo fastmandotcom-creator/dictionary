@@ -140,6 +140,7 @@
     function gradeAndAdvance(kind) {
       var item = state.queue[state.idx];
       var entry = Srs.grade(item.id, kind, BASE, TARGET);
+      Srs.sync(BASE, TARGET);  // fire-and-forget device sync
       state.grades[kind] = (state.grades[kind] || 0) + 1;
       srs = Srs.readSrs(BASE, TARGET);
       state.idx += 1;

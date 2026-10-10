@@ -19,6 +19,10 @@
         <span class="text-sky-400 font-semibold">{{ target_name }}</span>
       </div>
       <div class="flex items-center gap-3 text-xs text-slate-400">
+        <span id="sync-badge" class="hidden items-center gap-1 text-slate-500"></span>
+        <button id="export-btn" class="hover:text-white hidden">Xuất</button>
+        <button id="import-btn" class="hover:text-white hidden">Nhập</button>
+        <input type="file" id="import-file" accept="application/json" class="hidden">
         <a href="/onboarding?base={{ base }}&target={{ target }}" class="hover:text-white">Đổi cặp</a>
         {% if exam %}
         <a href="/review?base={{ base }}&target={{ target }}&exam={{ exam }}" class="hover:text-white">Ôn tập</a>
@@ -170,6 +174,48 @@
         document.getElementById('overall-progress-fill').style.width = opct + '%';
         document.getElementById('overall-progress-text').textContent = done + '/' + shown + ' từ đã học (' + opct + '%)';
       }
+
+      // ---- Phase 2: device sync badge + export/import ----
+      var badge = document.getElementById('sync-badge');
+      var exportBtn = document.getElementById('export-btn');
+      var importBtn = document.getElementById('import-btn');
+      var importFile = document.getElementById('import-file');
+      function setBadge(state, n) {
+        if (!badge) return;
+        badge.classList.remove('hidden');
+        badge.classList.add('flex');
+        if (state === 'synced') badge.textContent = '☁ Đã đồng bộ' + (n ? ' (' + n + ')' : '');
+        else if (state === 'pending') badge.textContent = '☁ Chờ đồng bộ ' + n + ' thẻ';
+        else badge.textContent = '☁ Offline — đang lưu trên máy';
+      }
+      if (exportBtn) exportBtn.classList.remove('hidden');
+      if (importBtn) importBtn.classList.remove('hidden');
+      exportBtn.addEventListener('click', function () {
+        var payload = Srs.exportPayload(BASE, TARGET);
+        var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = 'dict-srs-' + BASE + '-' + TARGET + '.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+      });
+      importBtn.addEventListener('click', function () { importFile.click(); });
+      importFile.addEventListener('change', function () {
+        var f = importFile.files[0];
+        if (!f) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          try {
+            var n = Srs.importPayload(BASE, TARGET, JSON.parse(reader.result));
+            setBadge('synced', n);
+          } catch (e) { setBadge('error', 0); badge.textContent = 'Tệp không hợp lệ'; }
+        };
+        reader.readAsText(f);
+      });
+      // register the device, then sync on load (badge reflects the outcome)
+      Srs.ensureDevice().then(function () {
+        return Srs.sync(BASE, TARGET, function (state, n) { setBadge(state, n); });
+      }).catch(function () { setBadge('offline', 0); });
     })();
   </script>
 </body>

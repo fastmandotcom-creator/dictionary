@@ -83,6 +83,7 @@
     }
     function grade(gradeVal) {
       Srs.grade(state.pool[index], gradeVal, BASE, TARGET);
+      Srs.sync(BASE, TARGET);  // fire-and-forget device sync
       const remaining = state.pool.length - index - 1;
       if (remaining > 0) { index++; flipped = false; document.getElementById('count').textContent = 'Còn ' + remaining + ' thẻ'; render(); }
       else {

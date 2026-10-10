@@ -28,6 +28,7 @@
       var entry = Srs.grade(CONCEPT_ID, gradeVal, BASE, TARGET);
       var bar = document.getElementById('grade-state');
       if (bar) bar.textContent = 'Đã ghi: ' + gradeVal + ' · tới hạn ' + entry.due;
+      Srs.sync(BASE, TARGET);  // fire-and-forget device sync
       if (NEIGHBOR_NEXT) setTimeout(function () { location.href = cardUrl(NEIGHBOR_NEXT); }, 350);
     }
     function speakTarget(withNote) {

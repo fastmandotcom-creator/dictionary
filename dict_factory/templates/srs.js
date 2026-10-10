@@ -51,7 +51,7 @@
 
   function grade(id, gradeVal, base, target) {
     var store = readSrs(base, target);
-    store[id] = { grade: gradeVal, due: isoFromOffset(INTERVALS[gradeVal]) };
+    store[id] = { grade: gradeVal, due: isoFromOffset(INTERVALS[gradeVal]), updated_at: nowIso() };
     writeSrs(base, target, store);
     return store[id];
   }
@@ -118,6 +118,112 @@
     }
   }
 
+  // ---- Phase 2: device-token sync + export/import --------------------------
+  var DEVICE_KEY = 'dict_device_token';
+
+  function nowIso() {
+    var d = new Date();
+    return d.toISOString().slice(0, 19) + 'Z';
+  }
+
+  // Stamp + write (same as grade, kept for readability at call sites).
+  function touch(id, gradeVal, base, target) {
+    return grade(id, gradeVal, base, target);
+  }
+
+  function getDeviceToken() {
+    try { return localStorage.getItem(DEVICE_KEY) || ''; } catch (e) { return ''; }
+  }
+  function setDeviceToken(t) {
+    try { localStorage.setItem(DEVICE_KEY, t); } catch (e) {}
+  }
+
+  // Register (or re-register) the device; idempotent. Returns a Promise that
+  // resolves when the token is ready.
+  function ensureDevice() {
+    if (getDeviceToken()) return Promise.resolve(getDeviceToken());
+    return fetch('/api/sync/device')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        // token travels in the httponly cookie; store the device_id for display
+        setDeviceToken(d.device_id || 'device');
+        return d.device_id;
+      });
+  }
+
+  // Push local entries to the server, then pull back the merged state and
+  // re-store it locally. Returns a Promise resolving to the entry count.
+  function sync(base, target, onStatus) {
+    return ensureDevice().then(function () {
+      var local = readSrs(base, target);
+      var entries = Object.keys(local).map(function (id) {
+        var e = local[id] || {};
+        return {
+          concept_id: id,
+          grade: e.grade || '',
+          due: e.due || '',
+          updated_at: e.updated_at || nowIso()
+        };
+      });
+      return fetch('/api/srs/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base: base, target: target, entries: entries })
+      }).then(function (r) {
+        if (!r.ok) throw new Error('sync failed ' + r.status);
+        return r.json();
+      }).then(function (data) {
+        var merged = data.entries || {};
+        // keep the union: local-only entries stay, server entries fill in
+        var out = {};
+        for (var k in local) out[k] = local[k];
+        for (var k2 in merged) {
+          var lts = (local[k2] && local[k2].updated_at) || '';
+          var sts = merged[k2].updated_at || '';
+          if (!(k2 in local) || sts >= lts) out[k2] = merged[k2];
+        }
+        writeSrs(base, target, out);
+        if (onStatus) onStatus('synced', Object.keys(out).length);
+        return Object.keys(out).length;
+      }).catch(function (e) {
+        // offline: keep local state, surface "pending"
+        if (onStatus) onStatus('pending', Object.keys(readSrs(base, target)).length);
+      });
+    });
+  }
+
+  function exportPayload(base, target) {
+    return {
+      version: 2,
+      base: base,
+      target: target,
+      srs: readSrs(base, target),
+      legacy: readLegacy(base, target),
+      exported_at: nowIso()
+    };
+  }
+
+  // Import a previously-exported payload. Per-concept merge: newer updated_at
+  // wins; legacy entries are adopted as-is when absent locally.
+  function importPayload(base, target, payload) {
+    if (!payload || typeof payload !== 'object') return 0;
+    var srs = payload.srs || {};
+    var legacy = payload.legacy || {};
+    var localSrs = readSrs(base, target);
+    var localLegacy = readLegacy(base, target);
+    for (var k in srs) {
+      var lts = (localSrs[k] && localSrs[k].updated_at) || '';
+      var sts = srs[k].updated_at || '';
+      if (!(k in localSrs) || sts >= lts) localSrs[k] = srs[k];
+    }
+    for (var k2 in legacy) {
+      if (!(k2 in localLegacy)) localLegacy[k2] = legacy[k2];
+    }
+    writeSrs(base, target, localSrs);
+    try { localStorage.setItem(legacyKey(base, target), JSON.stringify(localLegacy)); } catch (e) {}
+    return Object.keys(localSrs).length;
+  }
+
   global.Srs = {
     INTERVALS: INTERVALS,
     srsKey: srsKey,
@@ -130,6 +236,14 @@
     isDone: isDone,
     isDue: isDue,
     shuffle: shuffle,
-    speak: speak
+    speak: speak,
+    // Phase 2
+    nowIso: nowIso,
+    touch: touch,
+    getDeviceToken: getDeviceToken,
+    ensureDevice: ensureDevice,
+    sync: sync,
+    exportPayload: exportPayload,
+    importPayload: importPayload
   };
 })(typeof window !== 'undefined' ? window : globalThis);

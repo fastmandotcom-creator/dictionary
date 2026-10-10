@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from dict_factory.languages import CEFR_LEVELS, LANGUAGE_SPECS, LANGUAGES, POS_VALUES
@@ -495,3 +495,100 @@ async def api_placement_submit(payload: dict):
         "correct": correct,
         "total": answered,
     }
+
+
+# ---- Phase 2: device-token progress sync -----------------------------------
+# The learning state (SRS grades/due dates) is per-device. The server issues
+# an HMAC-signed device token (cookie); /api/srs calls validate it and store
+# progress in out/progress.db. Merge rule: latest updated_at wins.
+
+import datetime as _dt
+import hashlib as _hashlib
+import hmac as _hmac
+
+from dict_factory import progress as _progress
+from dict_factory.config import get_device_secret as _get_device_secret
+
+
+def _now_iso() -> str:
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+@app.get("/api/sync/device")
+async def sync_device(request: Request):
+    """Issue (or re-issue) a device token. Idempotent: existing valid cookies
+    are kept; otherwise a new device_id + token are minted and cookie-set."""
+    cookie = request.cookies.get("dict_device")
+    if cookie:
+        device_id, _, token = cookie.partition("=")
+        if _progress.verify_device_token(device_id, token):
+            return {"device_id": device_id}
+    device_id, token = _progress.issue_device_token()
+    r = JSONResponse(content={"device_id": device_id})
+    r.set_cookie(
+        "dict_device",
+        f"{device_id}={token}",
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,  # 30 days
+    )
+    return r
+
+
+def _authenticated_device(request: Request) -> tuple[str, str] | None:
+    """Return (device_id, token) from the cookie, or None when unauthenticated."""
+    cookie = request.cookies.get("dict_device")
+    if not cookie:
+        return None
+    device_id, _, token = cookie.partition("=")
+    if not device_id or not token:
+        return None
+    return device_id, token
+
+
+@app.get("/api/srs")
+async def api_srs_get(
+    request: Request,
+    base: str = Query("vi"),
+    target: str = Query("ja"),
+):
+    """Return this device's SRS entries for the pair (empty when new)."""
+    _validate_pair(base, target)
+    auth = _authenticated_device(request)
+    if auth is None:
+        raise HTTPException(status_code=401, detail="device not registered (call /api/sync/device)")
+    device_id, _ = auth
+    pair = _progress.pair_key(base, target)
+    return {"pair": pair, "entries": _progress.read_entries(device_id, pair)}
+
+
+@app.post("/api/srs/sync")
+async def api_srs_sync(request: Request, payload: dict):
+    """Upsert this device's SRS entries (latest updated_at wins)."""
+    _validate_pair(payload.get("base") or "vi", payload.get("target") or "ja")
+    auth = _authenticated_device(request)
+    if auth is None:
+        raise HTTPException(status_code=401, detail="device not registered (call /api/sync/device)")
+    device_id, _ = auth
+    base = str(payload.get("base") or "")
+    target = str(payload.get("target") or "")
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        raise HTTPException(status_code=400, detail="entries must be a list")
+    pair = _progress.pair_key(base, target)
+    now = _now_iso()
+    norm = [
+        {
+            "concept_id": str(e.get("concept_id") or ""),
+            "grade": str(e.get("grade") or ""),
+            "due": str(e.get("due") or ""),
+            "updated_at": str(e.get("updated_at") or now),
+        }
+        for e in entries
+        if isinstance(e, dict) and str(e.get("concept_id") or "").strip()
+    ]
+    try:
+        _progress.upsert_entries(device_id, pair, norm)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"pair": pair, "synced_at": now, "entries": _progress.read_entries(device_id, pair)}
