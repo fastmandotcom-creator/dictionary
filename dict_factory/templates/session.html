@@ -81,7 +81,9 @@
       lines.push('<div class="text-sm text-slate-300 mb-1">· <span class="text-amber-400 font-semibold">' + dueNow.length + '</span> thẻ cần ôn' +
         (dueIds.length > DUE_CAP ? ' (dư ' + (dueIds.length - DUE_CAP) + ' thẻ dồn sang mai)' : '') + '</div>');
       if (mins > 0) lines.push('<div class="text-sm text-slate-500 mb-4">· Khoảng <span class="text-slate-300 font-semibold">' + mins + ' phút</span> để hoàn thành</div>');
-      lines.push('<div class="flex items-center gap-2 mb-4 text-xs text-slate-400">Số từ mới mỗi buổi:</div>');
+      var customSize = [10, 20, 30].indexOf(NEW_SIZE) === -1;
+      lines.push('<div class="flex items-center gap-2 mb-4 text-xs text-slate-400">Số từ mới mỗi buổi:' +
+        (customSize ? ' <span class="text-slate-500">(hiện ' + NEW_SIZE + ')</span>' : '') + '</div>');
       [10, 20, 30].forEach(function (n) {
         lines.push('<button data-newsize="' + n + '" class="newsize px-3 py-1.5 rounded-lg text-xs font-semibold ' +
           (NEW_SIZE === n ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700') + '">' + n + '</button>');
@@ -133,7 +135,10 @@
         });
       };
       document.getElementById('flip-btn').onclick = function () {
-        document.getElementById('card-base').classList.remove('hidden');
+        var b = document.getElementById('card-base');
+        var btn = document.getElementById('flip-btn');
+        var show = b.classList.toggle('hidden');
+        btn.textContent = show ? 'Hiện đáp án' : 'Ẩn đáp án';
       };
       fetch('/api/learn/' + encodeURIComponent(item.id) + '?base=' + BASE + '&target=' + TARGET)
         .then(function (r) { return r.json(); })

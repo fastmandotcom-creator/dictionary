@@ -13,6 +13,7 @@
   <script>
     var BASE = '{{ base }}';
     var TARGET = '{{ target }}';
+    var TARGET_NAME = '{{ target_name }}';
     var questions = [];
     var idx = 0;
     var answers = [];   // {conceptId, choice}
@@ -45,7 +46,7 @@
       list.innerHTML =
         '<div class="flex items-center justify-between text-xs text-slate-500 mb-2"><span>Câu ' + (idx + 1) + '/' + questions.length + '</span><span>' + bar + '%</span></div>' +
         '<div class="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-4"><div class="h-full bg-emerald-500/70" style="width:' + bar + '%"></div></div>' +
-        '<div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Ở tiếng ' + TARGET + ', “' + q.prompt + '” có nghĩa là?</div>' +
+        '<div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Ở tiếng ' + TARGET_NAME + ', “' + q.prompt + '” có nghĩa là?</div>' +
         '<div class="space-y-2">' + opts + '</div>' +
         '<button id="next-btn" disabled class="mt-4 w-full bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold rounded-xl py-3 transition">Tiếp tục</button>';
       var chosen = -1;
