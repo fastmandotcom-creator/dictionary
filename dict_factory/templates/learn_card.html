@@ -11,22 +11,36 @@
 </head>
 <body class="min-h-full flex flex-col bg-slate-950 text-slate-100">
   <script>
-    const KEY = 'dict_learn_progress_{{ base }}_{{ target }}';
-    function storeProgress(id, grade) {
-      let map = {};
-      try { map = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
-      map[id] = grade;
-      localStorage.setItem(KEY, JSON.stringify(map));
+    const SRS_KEY = 'dict_srs_v2_{{ base }}_{{ target }}';
+    const CONCEPT_ID = {{ detail.concept.id | tojson }};
+    const INTERVAL_DAYS = { hard: 1, ok: 3, good: 7 };
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function isoFromOffset(days) {
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
     }
-    window.addEventListener('DOMContentLoaded', function () {
-      document.querySelectorAll('[data-grade]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          storeProgress(btn.dataset.id, btn.dataset.grade);
-          const bar = document.getElementById('grade-state');
-          if (bar) bar.textContent = 'Đã ghi: ' + btn.dataset.grade;
-        });
-      });
-    });
+    function readSrs() { try { return JSON.parse(localStorage.getItem(SRS_KEY) || '{}'); } catch (e) { return {}; } }
+    function grade(gradeVal) {
+      const srs = readSrs();
+      srs[CONCEPT_ID] = { grade: gradeVal, due: isoFromOffset(INTERVAL_DAYS[gradeVal]) };
+      localStorage.setItem(SRS_KEY, JSON.stringify(srs));
+      const bar = document.getElementById('grade-state');
+      if (bar) bar.textContent = 'Đã ghi: ' + gradeVal + ' · tới hạn ' + isoFromOffset(INTERVAL_DAYS[gradeVal]);
+      const next = {{ neighbor_next | tojson }};
+      if (next) setTimeout(function () { location.href = '/learn/' + encodeURIComponent(next) + '?base={{ base }}&target={{ target }}'; }, 350);
+    }
+    function speakTarget() {
+      const el = document.getElementById('hero-target');
+      if (!el || !('speechSynthesis' in window)) return;
+      const u = new SpeechSynthesisUtterance(el.textContent);
+      u.lang = '{{ target }}';
+      const voices = speechSynthesis.getVoices();
+      const v = voices.find(function (vv) { return vv.lang && vv.lang.toLowerCase().indexOf('{{ target }}'.toLowerCase()) === 0; });
+      if (v) u.voice = v;
+      speechSynthesis.speak(u);
+    }
+    window.addEventListener('DOMContentLoaded', speakTarget);
   </script>
   <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-30">
     <div class="max-w-2xl mx-auto px-4 py-3.5 flex items-center justify-between">
@@ -40,20 +54,25 @@
   <main class="flex-1 max-w-2xl w-full mx-auto px-4 py-6 space-y-4">
     <!-- HERO -->
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl">
-      <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">{{ target_name }} (đang học)</div>
-      <div class="text-3xl font-bold text-white break-words">{{ detail.target.text if detail.target else detail.concept.gloss_en }}</div>
-      {% if detail.phonetics %}
-      <div class="mt-2 text-sm text-slate-400 font-mono">
-        <span class="text-slate-300">{{ detail.phonetics.romaji }}</span>
-        <span class="text-slate-600 ml-3">{{ detail.phonetics.ipa }}</span>
+      <div class="flex items-start justify-between">
+        <div class="flex-1">
+          <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">{{ target_name }} (đang học)</div>
+          <div class="text-3xl font-bold text-white break-words" id="hero-target">{{ detail.target.text if detail.target else detail.concept.gloss_en }}</div>
+          {% if detail.phonetics %}
+          <div class="mt-2 text-sm text-slate-400 font-mono">
+            <span class="text-slate-300">{{ detail.phonetics.romaji }}</span>
+            <span class="text-slate-600 ml-3">{{ detail.phonetics.ipa }}</span>
+          </div>
+          {% endif %}
+          {% if detail.base %}
+          <div class="mt-3 pt-3 border-t border-slate-800 flex items-baseline gap-2">
+            <span class="text-xl font-semibold text-emerald-300">{{ detail.base.text }}</span>
+            <span class="text-xs text-slate-500">{{ base_name }} (đã biết)</span>
+          </div>
+          {% endif %}
+        </div>
+        <button onclick="speakTarget()" class="shrink-0 text-xs text-slate-400 hover:text-emerald-400 border border-slate-700 rounded-lg px-3 py-1.5 ml-3">&#128266; Nghe</button>
       </div>
-      {% endif %}
-      {% if detail.base %}
-      <div class="mt-3 pt-3 border-t border-slate-800 flex items-baseline gap-2">
-        <span class="text-xl font-semibold text-emerald-300">{{ detail.base.text }}</span>
-        <span class="text-xs text-slate-500">{{ base_name }} (đã biết)</span>
-      </div>
-      {% endif %}
     </div>
     <!-- BILINGUAL EXAMPLE -->
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
@@ -75,12 +94,24 @@
         <span id="grade-state" class="text-xs text-slate-500"></span>
       </div>
       <div class="grid grid-cols-3 gap-2">
-        <button data-grade="hard" data-id="{{ detail.concept.id }}" class="bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-lg py-2.5 text-sm font-semibold hover:bg-rose-500/20 transition">Chưa</button>
-        <button data-grade="ok" data-id="{{ detail.concept.id }}" class="bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg py-2.5 text-sm font-semibold hover:bg-amber-500/20 transition">Tạm</button>
-        <button data-grade="good" data-id="{{ detail.concept.id }}" class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg py-2.5 text-sm font-semibold hover:bg-emerald-500/20 transition">Nhớ rồi</button>
+        <button onclick="grade('hard')" class="bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-lg py-2.5 text-sm font-semibold hover:bg-rose-500/20 transition">Chưa (1 ngày)</button>
+        <button onclick="grade('ok')" class="bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg py-2.5 text-sm font-semibold hover:bg-amber-500/20 transition">Tạm (3 ngày)</button>
+        <button onclick="grade('good')" class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg py-2.5 text-sm font-semibold hover:bg-emerald-500/20 transition">Nhớ (7 ngày)</button>
       </div>
     </div>
-    <a href="/learn?base={{ base }}&target={{ target }}" class="block text-center text-xs text-slate-500 hover:text-slate-300 py-2">← Tiếp tục lộ trình</a>
+    <div class="flex items-center justify-between gap-2 text-xs">
+      {% if neighbor_prev %}
+      <a href="/learn/{{ neighbor_prev }}?base={{ base }}&target={{ target }}" class="text-slate-500 hover:text-slate-300 px-3 py-2 border border-slate-800 rounded-lg">← Trước</a>
+      {% else %}
+      <span></span>
+      {% endif %}
+      <a href="/learn?base={{ base }}&target={{ target }}" class="text-slate-500 hover:text-slate-300 px-3 py-2">Lộ trình</a>
+      {% if neighbor_next %}
+      <a href="/learn/{{ neighbor_next }}?base={{ base }}&target={{ target }}" class="text-slate-500 hover:text-slate-300 px-3 py-2 border border-slate-800 rounded-lg">Tiếp →</a>
+      {% else %}
+      <span class="text-slate-600 px-3 py-2">Cuối unit</span>
+      {% endif %}
+    </div>
   </main>
 </body>
 </html>

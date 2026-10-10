@@ -100,22 +100,31 @@ def main() -> None:
         fill_main(args=args)
     elif args.cmd == "compile":
         from dict_factory.config import WAREHOUSE_DB
+        from dict_factory.compile_runtime import load_exam_for_runtime, load_examples_for_runtime
         from dict_factory.extra_data import load_phonetics_map
 
         concepts = load_syllabus_jsonl(SYLLABUS_PATH.read_text(encoding="utf-8"))
         bundles = load_bundles()
         phonetics: dict[tuple[str, str], str] = {}
+        examples: list[tuple[str, str, str]] = []
+        exam: tuple[list[tuple], list[tuple]] | None = None
         if WAREHOUSE_DB.exists():
             from dict_factory.db import connect
 
             conn = connect()
             try:
                 phonetics = load_phonetics_map(conn)
+                examples = load_examples_for_runtime(conn)
+                exam = load_exam_for_runtime(conn)
             finally:
                 conn.close()
-        compile_runtime(concepts, bundles, phonetics=phonetics)
+        compile_runtime(concepts, bundles, phonetics=phonetics, examples=examples, exam=exam)
         if phonetics:
             print(f"compile: {len(phonetics)} readings joined into terms", flush=True)
+        if examples:
+            print(f"compile: {len(examples)} example sentences into examples table", flush=True)
+        if exam:
+            print(f"compile: {len(exam[0])} frameworks / {len(exam[1])} exam levels copied", flush=True)
         if args.sync_frontend:
             sync_frontend()
     elif args.cmd == "web":

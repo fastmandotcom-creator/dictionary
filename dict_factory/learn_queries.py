@@ -98,6 +98,32 @@ def learn_level_units(conn: sqlite3.Connection, base: str, target: str, cefr: st
     return result
 
 
+def learn_neighbors(conn: sqlite3.Connection, concept_id: str, target: str) -> dict[str, Any]:
+    """Prev/next concept ids within the same filled unit (for this target)."""
+    if not _has_extra(conn)["units"]:
+        return {"prev": None, "next": None, "unit_id": None}
+    row = conn.execute(
+        """
+        SELECT ui.unit_id AS unit_id,
+               ui.concept_id AS cur_id,
+               (SELECT ui2.concept_id FROM unit_items ui2
+                 WHERE ui2.unit_id = ui.unit_id AND ui2.order_no < ui.order_no
+                 ORDER BY ui2.order_no DESC LIMIT 1) AS prev_id,
+               (SELECT ui3.concept_id FROM unit_items ui3
+                 WHERE ui3.unit_id = ui.unit_id AND ui3.order_no > ui.order_no
+                 ORDER BY ui3.order_no ASC LIMIT 1) AS next_id
+        FROM unit_items ui
+        JOIN units u ON u.id = ui.unit_id
+        WHERE ui.concept_id = ? AND u.target = ?
+        LIMIT 1
+        """,
+        (concept_id, target),
+    ).fetchone()
+    if row is None:
+        return {"prev": None, "next": None, "unit_id": None}
+    return {"prev": row["prev_id"], "next": row["next_id"], "unit_id": row["unit_id"]}
+
+
 def learn_concept_pair(
     conn: sqlite3.Connection, concept_id: str, base: str, target: str
 ) -> dict[str, Any] | None:

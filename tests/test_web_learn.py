@@ -48,6 +48,44 @@ def test_review_route() -> None:
     assert "flashcard" in res.text.lower() or "card" in res.text.lower()
 
 
+def test_review_exam_context() -> None:
+    from dict_factory.db import connect
+    from dict_factory.exam_levels import resolve_exam_range
+
+    conn = connect()
+    try:
+        if resolve_exam_range(conn, "JLPT_N3") is None:
+            pytest.skip("exam levels not seeded in live DB")
+    finally:
+        conn.close()
+    client = TestClient(app, raise_server_exceptions=False)
+    res = client.get("/review?base=vi&target=ja&exam=JLPT_N3")
+    assert res.status_code == 200
+    assert "JLPT_N3" in res.text
+    assert client.get("/review?base=vi&target=ja&exam=NOPE_X1").status_code == 400
+
+
+def test_learn_card_neighbors_and_api() -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    res = client.get("/api/learn/GREET_HELLO?base=vi&target=ja")
+    assert res.status_code == 200
+    body = res.json()
+    assert "neighbors" in body
+    assert set(body["neighbors"].keys()) == {"prev", "next", "unit_id"}
+    # the learn card page renders prev/next blocks
+    page = client.get("/learn/GREET_HELLO?base=vi&target=ja")
+    assert page.status_code == 200
+    assert ("Cuối unit" in page.text) or ("Tiếp →" in page.text) or ("← Trước" in page.text)
+
+
+def test_learn_list_has_progress_data() -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    res = client.get("/learn?base=vi&target=ja")
+    assert res.status_code == 200
+    assert "data-unit-progress" in res.text
+    assert "dict_srs_v2" in res.text
+
+
 def test_invalid_params_rejected_with_400() -> None:
     client = TestClient(app, raise_server_exceptions=False)
     assert client.get("/learn?base=vi&target=ja&cefr=Z9").status_code == 400

@@ -20,11 +20,26 @@
       </div>
       <div class="flex items-center gap-3 text-xs text-slate-400">
         <a href="/onboarding?base={{ base }}&target={{ target }}" class="hover:text-white">Đổi cặp</a>
+        {% if exam %}
+        <a href="/review?base={{ base }}&target={{ target }}&exam={{ exam }}" class="hover:text-white">Ôn tập</a>
+        {% else %}
         <a href="/review?base={{ base }}&target={{ target }}&cefr={{ cefr or 'A1' }}" class="hover:text-white">Ôn tập</a>
+        {% endif %}
       </div>
     </div>
   </header>
   <main class="flex-1 max-w-3xl w-full mx-auto px-4 py-6 space-y-4">
+    {% if units_available %}
+    <div id="overall-progress" class="hidden bg-slate-900 border border-slate-800 rounded-xl p-4">
+      <div class="flex items-center justify-between text-xs mb-2">
+        <span class="font-semibold text-slate-200">Tiến độ hiển thị</span>
+        <span id="overall-progress-text" class="text-slate-400"></span>
+      </div>
+      <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+        <div id="overall-progress-fill" class="h-full bg-emerald-500/70 rounded-full transition-all" style="width: 0%"></div>
+      </div>
+    </div>
+    {% endif %}
     {% if not units_available %}
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 text-sm text-slate-400">
       Chưa có unit nào cho cặp này. Bạn vẫn học được — lộ trình tự động từ concepts (dưới).
@@ -50,24 +65,63 @@
     {% for unit in units %}
     {% if unit.first %}
     <a href="/learn/{{ unit.first }}?base={{ base }}&target={{ target }}"
-       class="block bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-emerald-500/40 transition group">
+       class="block bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-emerald-500/40 transition group"
+       data-unit-progress data-ids="{{ unit.concept_ids | join(',') }}">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2.5">
           <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">{{ unit.cefr }}</span>
           <span class="font-semibold text-slate-100">{{ unit.title }}</span>
         </div>
-        <span class="text-xs text-slate-500 group-hover:text-emerald-400 transition">{{ unit.count }} từ →</span>
+        <span class="text-xs text-slate-500 group-hover:text-emerald-400 transition">
+          <span class="unit-progress-label">{{ unit.count }} từ</span> →
+        </span>
       </div>
       <div class="mt-2.5 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-        <div class="h-full bg-emerald-500/70 rounded-full" style="width: 0%"></div>
+        <div class="unit-progress-fill h-full bg-emerald-500/70 rounded-full transition-all" style="width: 0%"></div>
       </div>
-    </a>
-    {% endif %}
+    </a>    {% endif %}
     {% else %}
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-sm text-slate-500">
       Chưa có lộ trình cho cặp này. Chạy <code class="font-mono text-slate-400">dict_factory fill --what units --target {{ target }}</code> rồi <code class="font-mono text-slate-400">extra</code> để có unit.
     </div>
     {% endfor %}
   </main>
+  <script>
+    (function () {
+      var SRS_KEY = 'dict_srs_v2_{{ base }}_{{ target }}';
+      var LEGACY_KEY = 'dict_learn_progress_{{ base }}_{{ target }}';
+      function readMap(key) { try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) { return {}; } }
+      var srs = readMap(SRS_KEY);
+      var legacy = readMap(LEGACY_KEY);
+      function isDone(id) {
+        var entry = srs[id];
+        if (entry && entry.grade) {
+          // v2: good/ok are "done" until due again; hard stays pending
+          return entry.grade !== 'hard';
+        }
+        return legacy[id] === 'good';
+      }
+      var cards = document.querySelectorAll('[data-unit-progress]');
+      var shown = 0, done = 0;
+      cards.forEach(function (card) {
+        var ids = card.getAttribute('data-ids').split(',').filter(Boolean);
+        var d = 0;
+        for (var i = 0; i < ids.length; i++) { if (isDone(ids[i])) d++; }
+        var pct = ids.length ? Math.round((d / ids.length) * 100) : 0;
+        var fill = card.querySelector('.unit-progress-fill');
+        if (fill) fill.style.width = pct + '%';
+        var label = card.querySelector('.unit-progress-label');
+        if (label && d > 0) label.textContent = d + '/' + ids.length + ' từ';
+        shown += ids.length; done += d;
+      });
+      var overall = document.getElementById('overall-progress');
+      if (overall && shown > 0) {
+        overall.classList.remove('hidden');
+        var opct = Math.round((done / shown) * 100);
+        document.getElementById('overall-progress-fill').style.width = opct + '%';
+        document.getElementById('overall-progress-text').textContent = done + '/' + shown + ' từ đã học (' + opct + '%)';
+      }
+    })();
+  </script>
 </body>
 </html>

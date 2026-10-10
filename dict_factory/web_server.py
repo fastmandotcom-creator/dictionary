@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 
 from dict_factory.languages import CEFR_LEVELS, LANGUAGE_SPECS, LANGUAGES, POS_VALUES
 from dict_factory.exam_levels import cefr_range_levels, list_exam_levels, resolve_exam_range
-from dict_factory.learn_queries import learn_concept_pair, learn_level_units
+from dict_factory.learn_queries import learn_concept_pair, learn_level_units, learn_neighbors
 from dict_factory.web_queries import get_concept_detail, get_db, get_stats, search_concepts
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +26,8 @@ async def api_learn_concept(concept_id: str, base: str = Query("vi"), target: st
     conn = get_db()
     try:
         detail = learn_concept_pair(conn, concept_id, base, target)
+        if detail:
+            detail["neighbors"] = learn_neighbors(conn, concept_id, target)
     finally:
         conn.close()
     if not detail:
@@ -227,8 +229,11 @@ async def learn(
 async def learn_concept_view(request: Request, concept_id: str, base: str = Query("vi"), target: str = Query("ja")):
     _validate_pair(base, target)
     conn = get_db()
+    neighbors: dict = {"prev": None, "next": None, "unit_id": None}
     try:
         detail = learn_concept_pair(conn, concept_id, base, target)
+        if detail:
+            neighbors = learn_neighbors(conn, concept_id, target)
     finally:
         conn.close()
 
@@ -240,6 +245,8 @@ async def learn_concept_view(request: Request, concept_id: str, base: str = Quer
         name="learn_card.html",
         context={
             "detail": detail,
+            "neighbor_prev": neighbors["prev"],
+            "neighbor_next": neighbors["next"],
             "base": base,
             "target": target,
             "base_name": _language_name(base),
@@ -250,12 +257,25 @@ async def learn_concept_view(request: Request, concept_id: str, base: str = Quer
 
 @app.get("/review", response_class=HTMLResponse)
 @app.head("/review", response_class=HTMLResponse)
-async def review(request: Request, base: str = Query("vi"), target: str = Query("ja"), cefr: str = Query("A1")):
+async def review(
+    request: Request,
+    base: str = Query("vi", description="learner's language"),
+    target: str = Query("ja", description="language being learned"),
+    cefr: str = Query("A1", description="CEFR level filter"),
+    exam: str = Query("", description="exam level filter, e.g. JLPT_N3 (overrides cefr)"),
+):
     _validate_pair(base, target)
     _validate_cefr(cefr)
     conn = get_db()
     try:
-        units = learn_level_units(conn, base, target, cefr)
+        exam_range = _validate_exam(conn, exam)
+        if exam_range is not None:
+            levels = cefr_range_levels(*exam_range)
+        else:
+            levels = [cefr]
+        units: list = []
+        for level in levels:
+            units.extend(learn_level_units(conn, base, target, level))
         card_ids: list[str] = []
         for unit in units:
             card_ids.extend(unit["concept_ids"][:12])
@@ -269,6 +289,7 @@ async def review(request: Request, base: str = Query("vi"), target: str = Query(
             "base": base,
             "target": target,
             "cefr": cefr,
+            "exam": exam,
             "base_name": _language_name(base),
             "target_name": _language_name(target),
             "card_ids": card_ids[:120],

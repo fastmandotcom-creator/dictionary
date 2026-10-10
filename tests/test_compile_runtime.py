@@ -68,3 +68,87 @@ def test_compile_writes_core_schema(tmp_path: Path) -> None:
     assert pair == "uống thuốc"
     assert pos == "phrase"
     assert langs == set(LANGUAGES)
+
+
+def test_compile_v3_cefr_examples_exam(tmp_path: Path) -> None:
+    concepts = [
+        {
+            "id": "WATER",
+            "domain": "nature",
+            "cefr": "A1",
+            "pos": "noun",
+            "gloss_en": "the liquid we drink",
+            "rank": 1,
+        },
+    ]
+    bundles = {"WATER": _bundle("WATER", "water", "nước")}
+    examples = [("WATER", "ja", "水をください")]
+    exam = (
+        [("JLPT", "ja", "JLPT", 1)],
+        [("JLPT", "N5", "JLPT N5", "A1", "A2", 1)],
+    )
+    dest = tmp_path / "lexicon-core.db"
+    compile_runtime(concepts, bundles, dest=dest, examples=examples, exam=exam)
+    conn = sqlite3.connect(dest)
+    try:
+        version = conn.execute("SELECT value FROM meta WHERE key='version'").fetchone()[0]
+        cefr = conn.execute("SELECT cefr FROM concepts WHERE id='WATER'").fetchone()[0]
+        domain = conn.execute("SELECT domain FROM concepts WHERE id='WATER'").fetchone()[0]
+        ex = conn.execute("SELECT sentence FROM examples WHERE concept_id='WATER' AND lang='ja'").fetchone()[0]
+        fw = conn.execute("SELECT COUNT(*) FROM exam_framework").fetchone()[0]
+        lv = conn.execute("SELECT cefr_lo, cefr_hi, sort_no FROM exam_level WHERE framework='JLPT' AND code='N5'").fetchone()
+    finally:
+        conn.close()
+    assert version == "3"
+    assert cefr == "A1"
+    assert domain == "nature"
+    assert ex == "水をください"
+    assert fw == 1
+    assert lv == ("A1", "A2", 1)
+
+
+def test_compile_v3_examples_filtered_to_known_concepts(tmp_path: Path) -> None:
+    concepts = [
+        {
+            "id": "WATER",
+            "domain": "nature",
+            "cefr": "A1",
+            "pos": "noun",
+            "gloss_en": "the liquid we drink",
+            "rank": 1,
+        },
+    ]
+    bundles = {"WATER": _bundle("WATER", "water", "nước")}
+    examples = [("WATER", "ja", "水をください"), ("GHOST_CONCEPT", "ja", "x")]
+    dest = tmp_path / "lexicon-core.db"
+    compile_runtime(concepts, bundles, dest=dest, examples=examples)
+    conn = sqlite3.connect(dest)
+    try:
+        n = conn.execute("SELECT COUNT(*) FROM examples").fetchone()[0]
+    finally:
+        conn.close()
+    assert n == 1
+
+
+def test_compile_v3_optional_tables_absent_when_not_passed(tmp_path: Path) -> None:
+    concepts = [
+        {
+            "id": "WATER",
+            "domain": "nature",
+            "cefr": "A1",
+            "pos": "noun",
+            "gloss_en": "the liquid we drink",
+            "rank": 1,
+        },
+    ]
+    bundles = {"WATER": _bundle("WATER", "water", "nước")}
+    dest = tmp_path / "lexicon-core.db"
+    compile_runtime(concepts, bundles, dest=dest)
+    conn = sqlite3.connect(dest)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM examples").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM exam_level").fetchone()[0] == 0
+        # cefr/domain columns exist with values from concepts
+        assert conn.execute("SELECT cefr FROM concepts WHERE id='WATER'").fetchone()[0] == "A1"
+    finally:
+        conn.close()
