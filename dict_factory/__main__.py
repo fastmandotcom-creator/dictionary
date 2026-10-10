@@ -4,7 +4,7 @@ import argparse
 
 from dict_factory.compile_runtime import compile_runtime, sync_frontend
 from dict_factory.config import SYLLABUS_PATH
-from dict_factory.extra_data import load_examples, load_examples_bilingual, load_phonetics, load_units
+from dict_factory.extra_data import load_exam_levels, load_examples, load_examples_bilingual, load_phonetics, load_units
 from dict_factory.generate_expressions import generate_expressions
 from dict_factory.generate_syllabus import generate_syllabus
 from dict_factory.load_warehouse import load_bundles, load_warehouse
@@ -25,9 +25,10 @@ def main() -> None:
     norm = sub.add_parser("normalize-domains")
     norm.add_argument("--apply", action="store_true", help="rewrite syllabus.jsonl + warehouse DB (default: dry-run plan only)")
     fill_cmd = sub.add_parser("fill")
-    fill_cmd.add_argument("--what", choices=["phonetics", "examples", "examples-mono", "units"], required=True)
+    fill_cmd.add_argument("--what", choices=["phonetics", "examples", "examples-mono", "units", "exam-levels"], required=True)
     fill_cmd.add_argument("--target", default="ja")
     fill_cmd.add_argument("--base", default="")
+    fill_cmd.add_argument("--framework", default="all", help="exam framework code for exam-levels (or 'all')")
     fill_cmd.add_argument("--limit", type=int, default=40)
     fill_cmd.add_argument("--batch-size", type=int, default=20)
     fill_cmd.add_argument("--workers", type=int, default=8)
@@ -89,9 +90,10 @@ def main() -> None:
             n2 = load_examples_bilingual(conn=conn)
             n2m = load_examples(conn=conn)
             n3 = load_units(conn=conn)
+            n4 = load_exam_levels(conn=conn)
         finally:
             conn.close()
-        print(f"extra warehouse: phonetics={n1} examples_bilingual={n2} examples_mono={n2m} units={n3}")
+        print(f"extra warehouse: phonetics={n1} examples_bilingual={n2} examples_mono={n2m} units={n3} exam_levels={n4}")
     elif args.cmd == "fill":
         from dict_factory.fill import main as fill_main
 

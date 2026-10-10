@@ -384,6 +384,74 @@ def fill_units(*, target: str, limit: int = 12, dry_run: bool = False, version: 
     return written
 
 
+def fill_exam_levels(*, frameworks: list[str] | None = None, dry_run: bool = False, version: str = "v1") -> int:
+    """Seed one exam framework per LLM call (tiny payloads: 4-9 level rows).
+
+    Resume: frameworks already present in exam_framework are skipped unless
+    re-requested explicitly. Validators (schema + 4 table gates) run before
+    anything is staged; failures stay pending.
+    """
+    from dict_factory.db import connect
+    from dict_factory.exam_levels import EXAM_FRAMEWORKS, EXAM_SOURCES
+    from dict_factory.extra_data import parse_exam_level, validate_exam_table
+
+    wanted = list(frameworks) if frameworks else sorted(EXAM_FRAMEWORKS)
+    unknown = [f for f in wanted if f not in EXAM_FRAMEWORKS]
+    if unknown:
+        raise SystemExit(f"unknown frameworks: {unknown} (known: {sorted(EXAM_FRAMEWORKS)})")
+    conn = connect()
+    try:
+        done = {r[0] for r in conn.execute("SELECT code FROM exam_framework")}
+    finally:
+        conn.close()
+    done_dir = EXPRESSIONS_DIR / "exam_levels"
+    written = 0
+    for framework in wanted:
+        if framework in done and (done_dir / f"{framework}.json").exists():
+            print(f"exam-levels [{framework}]: already seeded, skipping", flush=True)
+            continue
+        spec = EXAM_FRAMEWORKS[framework]
+        variables = {
+            "framework_code": framework,
+            "framework_lang": spec["lang"],
+            "framework_name": spec["name"],
+            "source_tag": spec["source"],
+            "level_codes": ", ".join(spec["levels"]),
+            "mapping_table": spec["mapping_table"],
+            "count": len(spec["levels"]),
+        }
+        messages = prompt_messages("exam_levels", version=version, variables=variables)
+        if dry_run:
+            est = estimate_tokens(messages[0]["content"], messages[1]["content"])
+            print(f"exam-levels [{framework}] dry-run: {len(spec['levels'])} levels, ~{est} tokens in, no LLM invoked", flush=True)
+            continue
+        try:
+            payload = call_chat_json(messages[0]["content"], messages[1]["content"], timeout=180.0)
+            if not isinstance(payload, list):
+                raise RuntimeError("exam_levels batch must be a JSON array")
+            validate_payload("exam_levels", payload)
+            rows = [parse_exam_level(framework, spec["levels"], EXAM_SOURCES, item, version) for item in payload]
+            if {r["code"] for r in rows} != set(spec["levels"]):
+                raise ValueError(f"{framework}: must emit exactly the closed enum")
+            validate_exam_table(framework, rows)
+        except (RuntimeError, SchemaViolation, ValueError) as exc:
+            print(f"exam-levels [{framework}] failed ({exc}); kept pending", flush=True)
+            continue
+        done_dir.mkdir(parents=True, exist_ok=True)
+        (done_dir / f"{framework}.json").write_text(
+            json.dumps(
+                {"framework": framework, "lang": spec["lang"], "name": spec["name"], "prompt_v": version, "data": payload},
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        written += 1
+    print(f"exam-levels: {written}/{len(wanted)} frameworks staged", flush=True)
+    return written
+
+
 def main(args=None) -> None:
     import argparse
 
@@ -404,13 +472,17 @@ def main(args=None) -> None:
         fill_examples_mono(limit=args.limit, dry_run=args.dry_run, version=args.version, batch_size=args.batch_size, workers=args.workers)
     elif args.what == "units":
         fill_units(target=args.target, limit=args.limit, dry_run=args.dry_run, version=args.version)
+    elif args.what == "exam-levels":
+        wanted = None if args.framework in ("", "all") else [args.framework]
+        fill_exam_levels(frameworks=wanted, dry_run=args.dry_run, version=args.version)
 
 
 def _build_parser():
     import argparse
 
     parser = argparse.ArgumentParser(prog="dict_factory.fill")
-    parser.add_argument("--what", choices=["phonetics", "examples", "examples-mono", "units"], required=True)
+    parser.add_argument("--what", choices=["phonetics", "examples", "examples-mono", "units", "exam-levels"], required=True)
+    parser.add_argument("--framework", default="all", help="exam framework code for exam-levels (or 'all')")
     parser.add_argument("--target", default="ja", help="target language ISO code (not needed for examples-mono)")
     parser.add_argument("--base", default="", help="base (learner) language ISO code; required for examples")
     parser.add_argument("--limit", type=int, default=40, help="max items to fill this run (resume continues after)")

@@ -58,3 +58,21 @@ CREATE INDEX IF NOT EXISTS idx_examples_bilingual_pair ON examples_bilingual(lan
 CREATE INDEX IF NOT EXISTS idx_units_lookup ON units(target, cefr, order_no);
 CREATE INDEX IF NOT EXISTS idx_unit_items_unit ON unit_items(unit_id);
 CREATE INDEX IF NOT EXISTS idx_examples_bilingual_concept ON examples_bilingual(concept_id);
+CREATE TABLE IF NOT EXISTS exam_framework (
+  code TEXT PRIMARY KEY,
+  lang TEXT NOT NULL,
+  name TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS exam_level (
+  framework TEXT NOT NULL REFERENCES exam_framework(code),
+  code TEXT NOT NULL,
+  label TEXT NOT NULL,
+  cefr_lo TEXT NOT NULL CHECK (cefr_lo IN ('A1','A2','B1','B2','C1')),
+  cefr_hi TEXT NOT NULL CHECK (cefr_hi IN ('A1','A2','B1','B2','C1')),
+  sort_no INTEGER NOT NULL,
+  source TEXT NOT NULL DEFAULT 'community-estimate',
+  prompt_v TEXT NOT NULL DEFAULT 'v1',
+  PRIMARY KEY (framework, code)
+);
+CREATE INDEX IF NOT EXISTS idx_exam_level_framework ON exam_level(framework, sort_no);

@@ -32,11 +32,20 @@
     {% endif %}
     <div class="flex items-center gap-2 text-xs">
       <span class="text-slate-500">Mức:</span>
-      <a href="/learn?base={{ base }}&target={{ target }}" class="px-2.5 py-1 rounded-lg {% if not cefr %}bg-emerald-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">Tất cả</a>
+      <a href="/learn?base={{ base }}&target={{ target }}" class="px-2.5 py-1 rounded-lg {% if not cefr and not exam %}bg-emerald-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">Tất cả</a>
       {% for lvl in cefr_levels %}
         <a href="/learn?base={{ base }}&target={{ target }}&cefr={{ lvl }}"
-          class="px-2.5 py-1 rounded-lg {% if cefr == lvl %}bg-emerald-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">{{ lvl }}</a>
+          class="px-2.5 py-1 rounded-lg {% if cefr == lvl and not exam %}bg-emerald-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">{{ lvl }}</a>
       {% endfor %}
+      {% if exam_levels %}
+      <select onchange="if (this.value) location.href='/learn?base={{ base }}&target={{ target }}&exam=' + this.value"
+        class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">
+        <option value="">Kỳ thi…</option>
+        {% for e in exam_levels %}
+          <option value="{{ e.framework }}_{{ e.code }}" {% if exam == e.framework ~ '_' ~ e.code %}selected{% endif %}>{{ e.framework }} {{ e.label }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
     </div>
     {% for unit in units %}
     {% if unit.first %}

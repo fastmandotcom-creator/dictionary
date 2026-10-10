@@ -26,6 +26,12 @@ def test_all_prompts_have_schema_json() -> None:
             "base_lang": "vi",
             "units_block": "{}",
             "count": 1,
+            "framework_code": "JLPT",
+            "framework_lang": "ja",
+            "framework_name": "JLPT",
+            "source_tag": "community-estimate",
+            "level_codes": "N5, N4",
+            "mapping_table": "N5 | N5 | A1-A1",
         })
         assert prompt.schema.get("type") == "array", f"{name} schema must be array"
         assert prompt.system, f"{name} system prompt empty"
@@ -39,6 +45,8 @@ def test_prompts_are_generic_no_hardcoded_pair() -> None:
             "base_lang": "vi", "units_block": "{}", "count": 1,
             "batch_size": 1, "start_rank": 1, "end_rank": 1, "target_cefr": "A1",
             "recent_ids": "", "recent_glosses": "", "created_total": 0,
+            "framework_code": "JLPT", "framework_lang": "ja", "framework_name": "JLPT",
+            "source_tag": "community-estimate", "level_codes": "N5", "mapping_table": "N5 | N5 | A1-A1",
         })
         text = prompt.system
         assert not forbidden.search(text), f"{name} system prompt hardcodes a language pair"

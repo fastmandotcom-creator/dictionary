@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "exam_levels.v1",
+  "type": "array",
+  "minItems": 1,
+  "maxItems": 12,
+  "items": {
+    "type": "object",
+    "required": ["framework", "code", "label", "cefr_lo", "cefr_hi", "sort_no", "source"],
+    "properties": {
+      "framework": {"type": "string", "minLength": 2, "maxLength": 12},
+      "code": {"type": "string", "minLength": 1, "maxLength": 24},
+      "label": {"type": "string", "minLength": 1, "maxLength": 40},
+      "cefr_lo": {"type": "string", "enum": ["A1", "A2", "B1", "B2", "C1"]},
+      "cefr_hi": {"type": "string", "enum": ["A1", "A2", "B1", "B2", "C1"]},
+      "sort_no": {"type": "integer", "minimum": 1},
+      "source": {"type": "string", "minLength": 2, "maxLength": 40}
+    }
+  }
+}

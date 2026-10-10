@@ -4,6 +4,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+import pytest
+
 from dict_factory.db import init_schema
 from dict_factory.web_server import app
 
@@ -56,3 +58,21 @@ def test_invalid_params_rejected_with_400() -> None:
     assert client.get("/api/learn/GREET_HELLO?base=vi&target=xx").status_code == 400
     # valid values still pass
     assert client.get("/?lang=vi&cefr=A1&pos=noun").status_code == 200
+
+
+def test_learn_exam_filter() -> None:
+    from dict_factory.db import connect
+    from dict_factory.exam_levels import resolve_exam_range
+
+    conn = connect()
+    try:
+        if resolve_exam_range(conn, "JLPT_N3") is None:
+            pytest.skip("exam levels not seeded in live DB")
+    finally:
+        conn.close()
+    client = TestClient(app, raise_server_exceptions=False)
+    res = client.get("/learn?base=vi&target=ja&exam=JLPT_N3")
+    assert res.status_code == 200
+    assert "JLPT" in res.text
+    assert client.get("/learn?base=vi&target=ja&exam=NOPE_X1").status_code == 400
+    assert client.get("/learn?base=vi&target=ja&exam=junk").status_code == 400

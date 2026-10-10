@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from dict_factory.config import EXPRESSIONS_DIR
-from dict_factory.languages import CEFR_LEVELS, LANGUAGES
+from dict_factory.languages import CEFR_LEVELS, CEFR_ORDER, LANGUAGES
 
 ROMAJI_RE = re.compile(r"^[A-Za-z'’.\-]+(?:\s+[A-Za-z'’.\-]+){0,30}$")
 
@@ -314,3 +314,112 @@ def load_phonetics_map(conn: sqlite3.Connection) -> dict[tuple[str, str], str]:
         (row[0], row[1]): row[2]
         for row in conn.execute("SELECT concept_id, lang, romaji FROM phonetics_text")
     }
+
+
+def parse_exam_level(framework: str, allowed_codes: list[str], allowed_sources: set[str], raw: Any, prompt_v: str) -> dict:
+    if not isinstance(raw, dict):
+        raise ValueError(f"{framework}: exam level must be an object")
+    if str(raw.get("framework") or "").strip() != framework:
+        raise ValueError(f"{framework}: row framework mismatch {raw.get('framework')!r}")
+    code = str(raw.get("code") or "").strip()
+    if code not in allowed_codes:
+        raise ValueError(f"{framework}: code {code!r} not in closed enum")
+    label = str(raw.get("label") or "").strip()
+    if not label:
+        raise ValueError(f"{framework}/{code}: missing label")
+    lo = str(raw.get("cefr_lo") or "").strip().upper()
+    hi = str(raw.get("cefr_hi") or "").strip().upper()
+    if lo not in CEFR_LEVELS or hi not in CEFR_LEVELS:
+        raise ValueError(f"{framework}/{code}: CEFR range {lo!r}-{hi!r} outside enum")
+    if CEFR_ORDER[lo] > CEFR_ORDER[hi]:
+        raise ValueError(f"{framework}/{code}: inverted range {lo}-{hi}")
+    try:
+        sort_no = int(raw.get("sort_no"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{framework}/{code}: bad sort_no") from exc
+    source = str(raw.get("source") or "").strip()
+    if source not in allowed_sources:
+        raise ValueError(f"{framework}/{code}: source {source!r} not allowlisted")
+    return {
+        "framework": framework,
+        "code": code,
+        "label": label,
+        "cefr_lo": lo,
+        "cefr_hi": hi,
+        "sort_no": sort_no,
+        "source": source,
+        "prompt_v": prompt_v,
+    }
+
+
+def validate_exam_table(framework: str, rows: list[dict]) -> list[dict]:
+    """Table-level gates: monotonic sort, contiguous CEFR coverage, sane overlap.
+
+    Coverage must be ONE unbroken interval (no holes inside), but need not
+    span all of A1-C1: real frameworks bottom out higher (IELTS ≈ B1,
+    TOEIC ≈ A2, CELPE-Bras ≈ B1). Exam filters simply match nothing below
+    the framework floor.
+    """
+    if not rows:
+        raise ValueError(f"{framework}: empty level table")
+    ordered = sorted(rows, key=lambda r: r["sort_no"])
+    if [r["sort_no"] for r in ordered] != list(range(1, len(ordered) + 1)):
+        raise ValueError(f"{framework}: sort_no must run 1..{len(ordered)} with no gaps")
+    covered: set[str] = set()
+    order = sorted(CEFR_ORDER, key=lambda k: CEFR_ORDER[k])
+    for row in ordered:
+        covered.update(order[order.index(row["cefr_lo"]) : order.index(row["cefr_hi"]) + 1])
+    span = order[order.index(min(covered, key=lambda k: CEFR_ORDER[k])) : order.index(max(covered, key=lambda k: CEFR_ORDER[k])) + 1]
+    if set(span) != covered:
+        raise ValueError(f"{framework}: coverage {sorted(covered)} has holes inside")
+    for prev, nxt in zip(ordered, ordered[1:]):
+        if CEFR_ORDER[nxt["cefr_lo"]] < CEFR_ORDER[prev["cefr_lo"]] or CEFR_ORDER[nxt["cefr_hi"]] < CEFR_ORDER[prev["cefr_hi"]]:
+            raise ValueError(f"{framework}: non-monotonic ranges {prev['code']} then {nxt['code']}")
+    return ordered
+
+
+def load_exam_levels(conn: sqlite3.Connection, dest_dir: Path | None = None) -> int:
+    from dict_factory.exam_levels import EXAM_FRAMEWORKS, EXAM_SOURCES
+
+    root = Path(dest_dir) if dest_dir is not None else (EXPRESSIONS_DIR / "exam_levels")
+    written = 0
+    files: list[Path] = []
+    if root.is_dir():
+        files = sorted(root.glob("*.json"))
+    for path in files:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        framework = str(raw.get("framework") or "").strip()
+        spec = EXAM_FRAMEWORKS.get(framework)
+        if spec is None:
+            print(f"exam_levels skip {path.name}: unknown framework {framework!r}", flush=True)
+            continue
+        data = raw.get("data")
+        if not isinstance(data, list):
+            print(f"exam_levels skip {path.name}: data must be a list", flush=True)
+            continue
+        try:
+            rows = [
+                parse_exam_level(framework, spec["levels"], EXAM_SOURCES, item, str(raw.get("prompt_v") or "v1"))
+                for item in data
+            ]
+            if {r["code"] for r in rows} != set(spec["levels"]):
+                raise ValueError(f"{framework}: must emit exactly the closed enum {spec['levels']}")
+            rows = validate_exam_table(framework, rows)
+        except ValueError as exc:
+            print(f"exam_levels skip {path.name}: {exc}", flush=True)
+            continue
+        conn.execute(
+            "INSERT INTO exam_framework(code, lang, name, version) VALUES(?,?,?,?) "
+            "ON CONFLICT(code) DO UPDATE SET lang=excluded.lang, name=excluded.name, version=excluded.version",
+            (framework, spec["lang"], spec["name"], 1),
+        )
+        conn.execute("DELETE FROM exam_level WHERE framework = ?", (framework,))
+        for row in rows:
+            conn.execute(
+                "INSERT INTO exam_level(framework, code, label, cefr_lo, cefr_hi, sort_no, source, prompt_v) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (row["framework"], row["code"], row["label"], row["cefr_lo"], row["cefr_hi"], row["sort_no"], row["source"], row["prompt_v"]),
+            )
+            written += 1
+    conn.commit()
+    return written

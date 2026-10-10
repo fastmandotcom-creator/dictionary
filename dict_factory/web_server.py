@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from dict_factory.languages import CEFR_LEVELS, LANGUAGE_SPECS, LANGUAGES, POS_VALUES
+from dict_factory.exam_levels import cefr_range_levels, list_exam_levels, resolve_exam_range
 from dict_factory.learn_queries import learn_concept_pair, learn_level_units
 from dict_factory.web_queries import get_concept_detail, get_db, get_stats, search_concepts
 
@@ -47,6 +48,16 @@ def _validate_pair(base: str, target: str) -> None:
 def _validate_cefr(cefr: str) -> None:
     if cefr and cefr not in CEFR_LEVELS:
         raise HTTPException(status_code=400, detail=f"unknown CEFR level {cefr!r}")
+
+
+def _validate_exam(conn, exam: str) -> tuple[str, str] | None:
+    """Resolve ?exam=FW_CODE to a CEFR range. Returns None when no exam given."""
+    if not exam:
+        return None
+    resolved = resolve_exam_range(conn, exam)
+    if resolved is None:
+        raise HTTPException(status_code=400, detail=f"unknown exam level {exam!r}")
+    return resolved
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -159,12 +170,21 @@ async def learn(
     base: str = Query("vi", description="learner's language"),
     target: str = Query("ja", description="language being learned"),
     cefr: str = Query("", description="filter CEFR level"),
+    exam: str = Query("", description="filter by exam level, e.g. JLPT_N3 (overrides cefr)"),
 ):
     _validate_pair(base, target)
     _validate_cefr(cefr)
     conn = get_db()
     try:
-        units = learn_level_units(conn, base, target, cefr)
+        exam_levels = list_exam_levels(conn)
+        exam_range = _validate_exam(conn, exam)
+        if exam_range is not None:
+            levels = cefr_range_levels(*exam_range)
+            units: list = []
+            for level in levels:
+                units.extend(learn_level_units(conn, base, target, level))
+        else:
+            units = learn_level_units(conn, base, target, cefr)
     finally:
         conn.close()
 
@@ -194,6 +214,8 @@ async def learn(
             "target_name": _language_name(target),
             "cefr": cefr,
             "cefr_levels": sorted(CEFR_LEVELS),
+            "exam": exam,
+            "exam_levels": exam_levels,
             "units": units_with_title,
             "units_available": bool(units_with_title),
         },
