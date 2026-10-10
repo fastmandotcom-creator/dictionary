@@ -34,11 +34,12 @@
       </div>
       <div>
         <label class="block text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1.5">Tôi muốn học (target)</label>
-        <select name="target" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
+        <select name="target" id="target-select" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
           {% for code, name, native, tag in language_specs %}
             <option value="{{ code }}" {% if code == 'ja' %}selected{% endif %}>{{ name }} ({{ native }})</option>
           {% endfor %}
         </select>
+        <p id="exam-hint" class="text-xs text-slate-500 mt-2"></p>
       </div>
       <div class="flex items-center justify-between pt-2 border-t border-slate-800/80">
         <span class="text-xs text-slate-500">Mức bắt đầu</span>
@@ -53,6 +54,21 @@
         </div>
       </div>
     </form>
+    <script>
+      (function () {
+        var EXAM_BY_LANG = {{ exam_by_lang | tojson }};
+        var sel = document.getElementById('target-select');
+        var hint = document.getElementById('exam-hint');
+        function render() {
+          var codes = EXAM_BY_LANG[sel.value] || [];
+          hint.textContent = codes.length
+            ? 'Kỳ thi có sẵn cho ngôn ngữ này: ' + codes.join(', ')
+            : 'Chưa có kỳ thi chuẩn cho ngôn ngữ này — dùng lộ trình CEFR.';
+        }
+        sel.addEventListener('change', render);
+        render();
+      })();
+    </script>
   </main>
 </body>
 </html>

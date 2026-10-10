@@ -11,6 +11,7 @@ from dict_factory.exam_levels import (
     EXAM_FRAMEWORKS,
     EXAM_SOURCES,
     cefr_range_levels,
+    exam_frameworks_for_lang,
     list_exam_levels,
     parse_exam_ref,
     resolve_exam_range,
@@ -118,6 +119,41 @@ def test_seed_tables_cover_all_frameworks() -> None:
         assert spec["source"] in EXAM_SOURCES, code
         assert len(spec["levels"]) >= 4, code
         assert spec["mapping_table"].strip(), code
+
+
+def test_list_exam_levels_lang_filter_and_display(tmp_path: Path) -> None:
+    db = tmp_path / "t.db"
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    init_schema(conn)
+    # two frameworks for different target languages; labels mix "already prefixed" and "bare"
+    conn.execute("INSERT INTO exam_framework(code,lang,name,version) VALUES('JLPT','ja','JLPT',1)")
+    conn.execute("INSERT INTO exam_framework(code,lang,name,version) VALUES('DELE','es','DELE',1)")
+    conn.execute(
+        "INSERT INTO exam_level(framework,code,label,cefr_lo,cefr_hi,sort_no,source,prompt_v) VALUES"
+        "('JLPT','N5','N5','A1','A1',1,'community-estimate','v1')"
+    )
+    conn.execute(
+        "INSERT INTO exam_level(framework,code,label,cefr_lo,cefr_hi,sort_no,source,prompt_v) VALUES"
+        "('DELE','A1','DELE A1','A1','A1',1,'community-estimate','v1')"
+    )
+    conn.commit()
+    # filter by target language
+    ja = list_exam_levels(conn, "ja")
+    assert [l["framework"] for l in ja] == ["JLPT"]
+    assert [l["code"] for l in ja] == ["N5"]
+    es = list_exam_levels(conn, "es")
+    assert [l["code"] for l in es] == ["A1"]
+    # display dedups: bare "N5" gets prefix, "DELE A1" (already prefixed) stays as-is
+    assert ja[0]["display"] == "JLPT N5"
+    assert es[0]["display"] == "DELE A1"
+    # no lang filter -> everything
+    assert sorted(l["framework"] for l in list_exam_levels(conn)) == ["DELE", "JLPT"]
+    # exam_frameworks_for_lang
+    assert exam_frameworks_for_lang(conn, "ja") == ["JLPT"]
+    assert exam_frameworks_for_lang(conn, "es") == ["DELE"]
+    assert exam_frameworks_for_lang(conn, "vi") == []
+    conn.close()
 
 
 def test_missing_tables_tolerated() -> None:

@@ -114,3 +114,28 @@ def test_learn_exam_filter() -> None:
     assert "JLPT" in res.text
     assert client.get("/learn?base=vi&target=ja&exam=NOPE_X1").status_code == 400
     assert client.get("/learn?base=vi&target=ja&exam=junk").status_code == 400
+
+
+def test_learn_exam_dropdown_scoped_to_target_lang() -> None:
+    """vi->ja must show only JLPT (ja), not DELE/HSK/TOEIC from other languages."""
+    from dict_factory.db import connect
+    from dict_factory.exam_levels import exam_frameworks_for_lang
+
+    conn = connect()
+    try:
+        if "JLPT" not in exam_frameworks_for_lang(conn, "ja"):
+            pytest.skip("JLPT not seeded in live DB")
+    finally:
+        conn.close()
+    client = TestClient(app, raise_server_exceptions=False)
+    res = client.get("/learn?base=vi&target=ja")
+    assert res.status_code == 200
+    # The exam dropdown is scoped to the target language. Check option VALUES
+    # (not bare substrings — concept ids like DELETERIOUS_EFFECT contain "DELE").
+    assert 'value="JLPT_' in res.text, "ja exam framework (JLPT) should be offered"
+    for other in ("DELE", "DELF", "HSK", "TOEIC", "GOETHE", "TOPIK", "CELPE", "CELI"):
+        assert f'value="{other}_' not in res.text, f"exam framework {other} leaked into vi->ja dropdown"
+    # a target language with no exam framework hides the dropdown entirely
+    noexam = client.get("/learn?base=vi&target=th")
+    assert noexam.status_code == 200
+    assert "Kỳ thi" not in noexam.text

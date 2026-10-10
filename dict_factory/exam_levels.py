@@ -172,14 +172,50 @@ def _has_exam_tables(conn: sqlite3.Connection) -> bool:
     return "exam_framework" in names and "exam_level" in names
 
 
-def list_exam_levels(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """All seeded exam levels for UI dropdowns, easiest first per framework."""
+def list_exam_levels(conn: sqlite3.Connection, lang: str | None = None) -> list[dict[str, Any]]:
+    """Seeded exam levels for UI dropdowns, easiest first per framework.
+
+    Pass `lang` to restrict to the target language's frameworks (e.g. `ja`
+    yields only JLPT). Omit to list every framework. Each row carries a
+    `display` field: the label as-is when it already names the framework
+    ("DELE A1"), otherwise prefixed with the framework code ("JLPT N5") —
+    so the UI never renders "DELE DELE A1".
+    """
+    if not _has_exam_tables(conn):
+        return []
+    if lang:
+        rows = conn.execute(
+            """
+            SELECT el.framework, el.code, el.label
+            FROM exam_level el
+            JOIN exam_framework ef ON ef.code = el.framework
+            WHERE ef.lang = ?
+            ORDER BY el.framework, el.sort_no
+            """,
+            (lang,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT framework, code, label FROM exam_level ORDER BY framework, sort_no"
+        ).fetchall()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        item = dict(r)
+        label = item["label"]
+        code = item["framework"]
+        item["display"] = label if label.upper().startswith(code) else f"{code} {label}"
+        out.append(item)
+    return out
+
+
+def exam_frameworks_for_lang(conn: sqlite3.Connection, lang: str) -> list[str]:
+    """Framework codes that have seeded levels for `lang` (e.g. `ja` -> `['JLPT']`)."""
     if not _has_exam_tables(conn):
         return []
     rows = conn.execute(
-        "SELECT framework, code, label FROM exam_level ORDER BY framework, sort_no"
+        "SELECT code FROM exam_framework WHERE lang = ? ORDER BY code", (lang,)
     ).fetchall()
-    return [dict(r) for r in rows]
+    return [r["code"] for r in rows]
 
 
 def resolve_exam_range(conn: sqlite3.Connection, exam: str) -> tuple[str, str] | None:

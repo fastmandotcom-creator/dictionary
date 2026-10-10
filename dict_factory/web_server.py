@@ -155,12 +155,25 @@ async def api_concept_detail(concept_id: str):
 @app.get("/onboarding", response_class=HTMLResponse)
 @app.head("/onboarding", response_class=HTMLResponse)
 async def onboarding(request: Request):
+    from dict_factory.db import get_db as _db
+    from dict_factory.exam_levels import _has_exam_tables
+
+    exam_by_lang: dict[str, list[str]] = {}
+    conn = _db()
+    try:
+        if _has_exam_tables(conn):
+            for row in conn.execute("SELECT lang, code FROM exam_framework ORDER BY lang, code"):
+                exam_by_lang.setdefault(row["lang"], []).append(row["code"])
+    finally:
+        conn.close()
+
     return templates.TemplateResponse(
         request=request,
         name="onboarding.html",
         context={
             "language_specs": LANGUAGE_SPECS,
             "cefr_levels": sorted(CEFR_LEVELS),
+            "exam_by_lang": exam_by_lang,
         },
     )
 
@@ -178,7 +191,7 @@ async def learn(
     _validate_cefr(cefr)
     conn = get_db()
     try:
-        exam_levels = list_exam_levels(conn)
+        exam_levels = list_exam_levels(conn, target)
         exam_range = _validate_exam(conn, exam)
         if exam_range is not None:
             levels = cefr_range_levels(*exam_range)

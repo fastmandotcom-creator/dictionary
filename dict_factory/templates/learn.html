@@ -57,7 +57,7 @@
         class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">
         <option value="">Kỳ thi…</option>
         {% for e in exam_levels %}
-          <option value="{{ e.framework }}_{{ e.code }}" {% if exam == e.framework ~ '_' ~ e.code %}selected{% endif %}>{{ e.framework }} {{ e.label }}</option>
+          <option value="{{ e.framework }}_{{ e.code }}" {% if exam == e.framework ~ '_' ~ e.code %}selected{% endif %}>{{ e.display }}</option>
         {% endfor %}
       </select>
       {% endif %}
