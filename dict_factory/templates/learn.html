@@ -151,14 +151,18 @@
       UNITS.forEach(function (unit) {
         unit.concept_ids.forEach(function (id) { if (Srs.isDue(id, BASE, TARGET)) dueCount++; });
       });
-      var minutes = newCount + dueCount ? Math.max(1, Math.round(((newCount + dueCount) * 20) / 60)) : 0;
+      // a session processes at most 50 due cards; the rest roll to tomorrow
+      var DUE_CAP = 50;
+      var dueShown = Math.min(dueCount, DUE_CAP);
+      var minutes = newCount + dueShown ? Math.max(1, Math.round(((Math.min(newCount, 30) + dueShown) * 20) / 60)) : 0;
       var extra = (location.search.match(/exam=[^&]+/) ? '&exam=' + RegExp.$1
         : (location.search.match(/cefr=[^&]+/) ? '&cefr=' + RegExp.$1 : ''));
       var today = document.getElementById('today-card');
       if (today) {
         var body = document.getElementById('today-body');
         body.innerHTML = '<span class="text-emerald-400 font-semibold">' + Math.min(newCount, 30) + '</span> từ mới · ' +
-          '<span class="text-amber-400 font-semibold">' + dueCount + '</span> thẻ cần ôn' +
+          '<span class="text-amber-400 font-semibold">' + dueShown + '</span> thẻ cần ôn' +
+          (dueCount > DUE_CAP ? ' <span class="text-slate-600">(dư ' + (dueCount - DUE_CAP) + ' thẻ dồn sang mai)</span>' : '') +
           (minutes ? ' · <span class="text-slate-300">~' + minutes + ' phút</span>' : '');
         var start = document.getElementById('today-start');
         start.href = '/session?base=' + BASE + '&target=' + TARGET + extra + '&new=10';

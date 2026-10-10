@@ -372,7 +372,7 @@ async def session_view(
     target: str = Query("ja"),
     cefr: str = Query(""),
     exam: str = Query(""),
-    new: int = Query(10, ge=5, le=30, description="new words per session (10/20/30)"),
+    new: int = Query(10, ge=1, le=30, description="new words per session (1-30; UI offers 10/20/30)"),
 ):
     _validate_pair(base, target)
     _validate_cefr(cefr)
@@ -420,7 +420,7 @@ async def api_session(
     target: str = Query("ja"),
     cefr: str = Query(""),
     exam: str = Query(""),
-    new: int = Query(10, ge=5, le=30),
+    new: int = Query(10, ge=1, le=30),
 ):
     _validate_pair(base, target)
     _validate_cefr(cefr)

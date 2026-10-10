@@ -141,23 +141,30 @@
     try { localStorage.setItem(DEVICE_KEY, t); } catch (e) {}
   }
 
-  // Register (or re-register) the device; idempotent. Returns a Promise that
-  // resolves when the token is ready.
+  // Register (or re-register) the device; idempotent. Resolves to the device
+  // token, or '' when offline (never rejects — callers may rely on that).
   function ensureDevice() {
     if (getDeviceToken()) return Promise.resolve(getDeviceToken());
     return fetch('/api/sync/device')
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        // token travels in the httponly cookie; store the device_id for display
+        // token travels in the httponly cookie; remember the device id locally
         setDeviceToken(d.device_id || 'device');
         return d.device_id;
-      });
+      })
+      .catch(function () { return ''; });
   }
 
   // Push local entries to the server, then pull back the merged state and
-  // re-store it locally. Returns a Promise resolving to the entry count.
+  // re-store it locally. Always resolves (never rejects); reports the
+  // outcome to onStatus: 'synced' | 'pending'.
   function sync(base, target, onStatus) {
-    return ensureDevice().then(function () {
+    var localCount = Object.keys(readSrs(base, target)).length;
+    return ensureDevice().then(function (token) {
+      if (!token) {
+        if (onStatus) onStatus('pending', localCount);
+        return 0;
+      }
       var local = readSrs(base, target);
       var entries = Object.keys(local).map(function (id) {
         var e = local[id] || {};
@@ -188,10 +195,11 @@
         writeSrs(base, target, out);
         if (onStatus) onStatus('synced', Object.keys(out).length);
         return Object.keys(out).length;
-      }).catch(function (e) {
-        // offline: keep local state, surface "pending"
-        if (onStatus) onStatus('pending', Object.keys(readSrs(base, target)).length);
       });
+    }).catch(function () {
+      // offline: keep local state, surface "pending"
+      if (onStatus) onStatus('pending', localCount);
+      return 0;
     });
   }
 
