@@ -22,8 +22,10 @@
         <a href="/onboarding?base={{ base }}&target={{ target }}" class="hover:text-white">Đổi cặp</a>
         {% if exam %}
         <a href="/review?base={{ base }}&target={{ target }}&exam={{ exam }}" class="hover:text-white">Ôn tập</a>
+        {% elif cefr %}
+        <a href="/review?base={{ base }}&target={{ target }}&cefr={{ cefr }}" class="hover:text-white">Ôn tập</a>
         {% else %}
-        <a href="/review?base={{ base }}&target={{ target }}&cefr={{ cefr or 'A1' }}" class="hover:text-white">Ôn tập</a>
+        <a href="/review?base={{ base }}&target={{ target }}" class="hover:text-white">Ôn tập</a>
         {% endif %}
       </div>
     </div>
@@ -42,7 +44,7 @@
     {% endif %}
     {% if not units_available %}
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 text-sm text-slate-400">
-      Chưa có unit nào cho cặp này. Bạn vẫn học được — lộ trình tự động từ concepts (dưới).
+      Chưa có lộ trình biên soạn cho cặp ngôn ngữ này. Bạn vẫn học được ngay — danh sách dưới đây tự động sắp theo thứ tự ưu tiên.
     </div>
     {% endif %}
     <div class="flex items-center gap-2 text-xs">
@@ -64,7 +66,7 @@
     </div>
     {% for unit in units %}
     {% if unit.first %}
-    <a href="/learn/{{ unit.first }}?base={{ base }}&target={{ target }}"
+    <a href="/learn/{{ unit.first }}?base={{ base }}&target={{ target }}{{ extra_qs }}"
        class="block bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-emerald-500/40 transition group"
        data-unit-progress data-ids="{{ unit.concept_ids | join(',') }}">
       <div class="flex items-center justify-between">
@@ -82,24 +84,18 @@
     </a>    {% endif %}
     {% else %}
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-sm text-slate-500">
-      Chưa có lộ trình cho cặp này. Chạy <code class="font-mono text-slate-400">dict_factory fill --what units --target {{ target }}</code> rồi <code class="font-mono text-slate-400">extra</code> để có unit.
+      Đơn vị này chưa có nội dung. Hãy thử một đơn vị khác, hoặc quay lại lộ trình.
     </div>
     {% endfor %}
   </main>
+  <script src="/srs.js"></script>
   <script>
     (function () {
-      var SRS_KEY = 'dict_srs_v2_{{ base }}_{{ target }}';
-      var LEGACY_KEY = 'dict_learn_progress_{{ base }}_{{ target }}';
-      function readMap(key) { try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) { return {}; } }
-      var srs = readMap(SRS_KEY);
-      var legacy = readMap(LEGACY_KEY);
+      var BASE = '{{ base }}', TARGET = '{{ target }}';
+      var srs = Srs.readSrs(BASE, TARGET);
+      var legacy = Srs.readLegacy(BASE, TARGET);
       function isDone(id) {
-        var entry = srs[id];
-        if (entry && entry.grade) {
-          // v2: good/ok are "done" until due again; hard stays pending
-          return entry.grade !== 'hard';
-        }
-        return legacy[id] === 'good';
+        return Srs.isDone(srs[id], legacy[id]);
       }
       var cards = document.querySelectorAll('[data-unit-progress]');
       var shown = 0, done = 0;

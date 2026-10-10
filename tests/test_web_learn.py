@@ -83,7 +83,20 @@ def test_learn_list_has_progress_data() -> None:
     res = client.get("/learn?base=vi&target=ja")
     assert res.status_code == 200
     assert "data-unit-progress" in res.text
-    assert "dict_srs_v2" in res.text
+    # SRS logic is pulled from the shared client module, not inlined
+    assert "/srs.js" in res.text
+
+
+def test_srs_js_served() -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    res = client.get("/srs.js")
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("text/javascript")
+    body = res.text
+    # single source of truth: intervals + storage-key scheme both present
+    assert "hard: 1" in body and "ok: 3" in body and "good: 7" in body
+    assert "dict_srs_v2_" in body
+    assert "dict_learn_progress_" in body
 
 
 def test_invalid_params_rejected_with_400() -> None:
@@ -164,3 +177,91 @@ def test_learn_exam_dropdown_scoped_to_target_lang() -> None:
     noexam = client.get("/learn?base=vi&target=th")
     assert noexam.status_code == 200
     assert "Kỳ thi" not in noexam.text
+
+
+def _hrefs_with(page_text: str, prefix: str) -> list:
+    import re
+    return re.findall(r'href="' + re.escape(prefix) + r'[^"]*"', page_text)
+
+
+def test_card_navigation_preserves_cefr_filter() -> None:
+    """From a cefr-filtered list, the card's back/next links keep the filter."""
+    client = TestClient(app, raise_server_exceptions=False)
+    page = client.get("/learn/GREET_HELLO?base=vi&target=ja&cefr=A1")
+    assert page.status_code == 200
+    # every link that returns to the list or the review page carries the
+    # cefr context (HTML entities may be & or &amp; depending on escaping).
+    for prefix in ("/learn?base=vi", "/review?base=vi"):
+        links = _hrefs_with(page.text, prefix)
+        assert links, f"expected {prefix} links on the card page"
+        assert all("cefr=A1" in link for link in links), "filter must survive navigation"
+    # JS auto-advance reassembles the same query string from the cefr const
+    assert 'const CEFR = "A1"' in page.text
+    assert 'const EXAM = ""' in page.text
+
+
+def test_card_navigation_preserves_exam_filter() -> None:
+    from dict_factory.db import connect
+    from dict_factory.exam_levels import resolve_exam_range
+
+    conn = connect()
+    try:
+        if resolve_exam_range(conn, "JLPT_N3") is None:
+            pytest.skip("exam levels not seeded in live DB")
+    finally:
+        conn.close()
+    client = TestClient(app, raise_server_exceptions=False)
+    page = client.get("/learn/GREET_HELLO?base=vi&target=ja&exam=JLPT_N3")
+    assert page.status_code == 200
+    # exam wins over cefr and is carried on all back-navigation links.
+    assert 'const EXAM = "JLPT_N3"' in page.text
+    for prefix in ("/learn?base=vi", "/review?base=vi"):
+        links = _hrefs_with(page.text, prefix)
+        assert all("exam=JLPT_N3" in link for link in links), "exam filter must survive"
+    # a cross-language exam deep-link is rejected on the card page too
+    assert client.get("/learn/GREET_HELLO?base=vi&target=ja&exam=HSK_HSK-4").status_code == 400
+
+
+def test_learn_list_carries_filter_into_unit_links() -> None:
+    import re
+    client = TestClient(app, raise_server_exceptions=False)
+    res = client.get("/learn?base=vi&target=ja&cefr=A1")
+    assert res.status_code == 200
+    # unit card links point at /learn/<CONCEPT_ID>?... and must carry the filter
+    unit_links = re.findall(r'href="/learn/[A-Z0-9_]+\?[^"]*"', res.text)
+    assert unit_links, "expected unit card links on the filtered list page"
+    assert all("cefr=A1" in link for link in unit_links), "unit links should carry the cefr filter"
+
+
+def test_onboarding_preselects_pair_from_query() -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    res = client.get("/onboarding?base=en&target=es")
+    assert res.status_code == 200
+    # base/target are preselected via the query string, not hardcoded vi/ja
+    import re
+    base_opts = re.findall(r'<option value="([a-z]{2})" selected>', res.text)
+    assert "en" in base_opts and "es" in base_opts
+    # default still works
+    res2 = client.get("/onboarding")
+    assert res2.status_code == 200
+
+
+def test_review_without_cefr_covers_all_levels() -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    res = client.get("/review?base=vi&target=ja")
+    assert res.status_code == 200
+    assert "Tất cả mức" in res.text
+
+
+def test_no_dev_copy_in_rendered_pages() -> None:
+    """Users must never see developer tooling copy (dict_factory CLI hints)."""
+    client = TestClient(app, raise_server_exceptions=False)
+    for url in (
+        "/learn?base=vi&target=ja",
+        "/learn/GREET_HELLO?base=vi&target=ja",
+        "/review?base=vi&target=ja",
+        "/onboarding",
+    ):
+        res = client.get(url)
+        assert res.status_code == 200
+        assert "dict_factory" not in res.text, f"dev copy leaked on {url}"

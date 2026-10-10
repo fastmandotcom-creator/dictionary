@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from dict_factory.languages import CEFR_LEVELS, LANGUAGE_SPECS, LANGUAGES, POS_VALUES
@@ -23,6 +23,12 @@ TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 app = FastAPI(title="Dict Explorer", description="Read-only Multilingual Concept Explorer", docs_url=None)
+
+
+@app.get("/srs.js")
+async def srs_js():
+    """Shared client-side SRS module (intervals, due/done rules, storage keys)."""
+    return FileResponse(TEMPLATES_DIR / "srs.js", media_type="text/javascript")
 
 
 @app.get("/api/learn/{concept_id}")
@@ -169,7 +175,12 @@ async def api_concept_detail(concept_id: str):
 
 @app.get("/onboarding", response_class=HTMLResponse)
 @app.head("/onboarding", response_class=HTMLResponse)
-async def onboarding(request: Request):
+async def onboarding(
+    request: Request,
+    base: str = Query("vi", description="preselect learner's language"),
+    target: str = Query("ja", description="preselect target language"),
+):
+    _validate_pair(base, target)
     from dict_factory.db import get_db as _db
     from dict_factory.exam_levels import _has_exam_tables
 
@@ -189,6 +200,8 @@ async def onboarding(request: Request):
             "language_specs": LANGUAGE_SPECS,
             "cefr_levels": sorted(CEFR_LEVELS),
             "exam_by_lang": exam_by_lang,
+            "sel_base": base,
+            "sel_target": target,
         },
     )
 
@@ -234,6 +247,8 @@ async def learn(
                 "concept_ids": concept_ids,
             }
         )
+    # Carried context for card links: exam wins over cefr (matches /learn/{id}).
+    extra_qs = f"&exam={exam}" if exam else (f"&cefr={cefr}" if cefr else "")
     return templates.TemplateResponse(
         request=request,
         name="learn.html",
@@ -248,17 +263,28 @@ async def learn(
             "exam_levels": exam_levels,
             "units": units_with_title,
             "units_available": bool(units_with_title),
+            "extra_qs": extra_qs,
         },
     )
 
 
 @app.get("/learn/{concept_id}", response_class=HTMLResponse)
 @app.head("/learn/{concept_id}", response_class=HTMLResponse)
-async def learn_concept_view(request: Request, concept_id: str, base: str = Query("vi"), target: str = Query("ja")):
+async def learn_concept_view(
+    request: Request,
+    concept_id: str,
+    base: str = Query("vi"),
+    target: str = Query("ja"),
+    cefr: str = Query("", description="CEFR filter carried from the list page"),
+    exam: str = Query("", description="exam filter carried from the list page, e.g. JLPT_N3"),
+):
     _validate_pair(base, target)
+    _validate_cefr(cefr)
     conn = get_db()
     neighbors: dict = {"prev": None, "next": None, "unit_id": None}
     try:
+        if exam:
+            _validate_exam(conn, exam, target)
         detail = learn_concept_pair(conn, concept_id, base, target)
         if detail:
             neighbors = learn_neighbors(conn, concept_id, target)
@@ -268,6 +294,8 @@ async def learn_concept_view(request: Request, concept_id: str, base: str = Quer
     if not detail:
         raise HTTPException(status_code=404, detail=f"Concept {concept_id} not found")
 
+    # Carried context for back-navigation: exam wins over cefr (matches /learn).
+    extra = f"&exam={exam}" if exam else (f"&cefr={cefr}" if cefr else "")
     return templates.TemplateResponse(
         request=request,
         name="learn_card.html",
@@ -277,6 +305,9 @@ async def learn_concept_view(request: Request, concept_id: str, base: str = Quer
             "neighbor_next": neighbors["next"],
             "base": base,
             "target": target,
+            "cefr": cefr,
+            "exam": exam,
+            "extra_qs": extra,
             "base_name": _language_name(base),
             "target_name": _language_name(target),
         },
@@ -289,7 +320,7 @@ async def review(
     request: Request,
     base: str = Query("vi", description="learner's language"),
     target: str = Query("ja", description="language being learned"),
-    cefr: str = Query("A1", description="CEFR level filter"),
+    cefr: str = Query("", description="CEFR level filter; empty = all levels"),
     exam: str = Query("", description="exam level filter, e.g. JLPT_N3 (overrides cefr)"),
 ):
     _validate_pair(base, target)
@@ -299,8 +330,10 @@ async def review(
         exam_range = _validate_exam(conn, exam, target)
         if exam_range is not None:
             levels = cefr_range_levels(*exam_range)
-        else:
+        elif cefr:
             levels = [cefr]
+        else:
+            levels = list(CEFR_LEVELS)
         units: list = []
         for level in levels:
             units.extend(learn_level_units(conn, base, target, level))

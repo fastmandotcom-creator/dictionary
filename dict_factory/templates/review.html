@@ -10,43 +10,20 @@
   <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
 </head>
 <body class="min-h-full flex flex-col bg-slate-950 text-slate-100">
+  <script src="/srs.js"></script>
   <script>
-    const SRS_KEY = 'dict_srs_v2_{{ base }}_{{ target }}';
-    const LEGACY_KEY = 'dict_learn_progress_{{ base }}_{{ target }}';
+    var BASE = '{{ base }}';
+    var TARGET = '{{ target }}';
     const CARD_IDS = {{ card_ids | tojson }};
-    const INTERVAL_DAYS = { hard: 1, ok: 3, good: 7 };
     let index = 0, flipped = false;
     const state = { pool: [] };
     let curTarget = '';
 
-    function readMap(key) { try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) { return {}; } }
-    function pad(n) { return String(n).padStart(2, '0'); }
-    function isoFromOffset(days) {
-      const d = new Date();
-      d.setDate(d.getDate() + days);
-      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
-    }
-    function shuffle(a) {
-      for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
-      }
-      return a;
-    }
-    function isDue(id, srs) {
-      const e = srs[id];
-      if (e && e.grade) {
-        if (e.grade === 'hard') return true;
-        return !e.due || e.due <= isoFromOffset(0);
-      }
-      return true;
-    }
     function loadCards() {
       const list = document.getElementById('cards');
       if (!CARD_IDS.length) { list.innerHTML = '<div class="text-slate-500 text-sm p-6">Chưa có từ nào cho mức này.</div>'; return; }
-      const srs = readMap(SRS_KEY);
-      const due = CARD_IDS.filter(function (id) { return isDue(id, srs); });
-      state.pool = due.length ? shuffle(due.slice(0, 200)).slice(0, 30) : [];
+      const due = CARD_IDS.filter(function (id) { return Srs.isDue(id, BASE, TARGET); });
+      state.pool = due.length ? Srs.shuffle(due.slice(0, 200)).slice(0, 30) : [];
       index = 0; flipped = false;
       if (!state.pool.length) {
         list.innerHTML = '<div class="text-center p-8 text-sm text-slate-400">Không có thẻ nào đến hạn hôm nay.<br>Thẻ "good" quay lại sau 7 ngày. 🎉</div>';
@@ -63,11 +40,12 @@
         '<div class="text-xs text-slate-500 font-mono">' + id + '</div>' +
         '<div class="text-2xl font-bold text-white my-3" id="card-target">…</div>' +
         '<button class="text-xs text-slate-400 mt-2 hover:text-emerald-400" id="speak-btn">&#128266; Nghe</button>' +
+        '<p id="speak-note" class="hidden text-xs text-amber-400/90 mt-1"></p>' +
         '<div class="text-sm text-emerald-300 mt-2 hidden" id="card-base"></div>' +
         '<button class="text-xs text-slate-400 mt-4" id="flip-btn">Hiện đáp án</button>';
-      document.getElementById('speak-btn').onclick = speakTarget;
+      document.getElementById('speak-btn').onclick = function () { speakTarget(true); };
       document.getElementById('flip-btn').onclick = flip;
-      fetch('/api/learn/' + encodeURIComponent(id) + '?base={{ base }}&target={{ target }}')
+      fetch('/api/learn/' + encodeURIComponent(id) + '?base=' + BASE + '&target=' + TARGET)
         .then(function (r) { return r.json(); })
         .then(function (d) {
           curTarget = (d.target && d.target.text) || (d.concept && d.concept.gloss_en) || '';
@@ -76,19 +54,15 @@
         });
     }
     function flip() { document.getElementById('card-base').classList.remove('hidden'); }
-    function speakTarget() {
-      if (!curTarget || !('speechSynthesis' in window)) return;
-      const u = new SpeechSynthesisUtterance(curTarget);
-      u.lang = '{{ target }}';
-      const voices = speechSynthesis.getVoices();
-      const v = voices.find(function (vv) { return vv.lang && vv.lang.toLowerCase().indexOf('{{ target }}'.toLowerCase()) === 0; });
-      if (v) u.voice = v;
-      speechSynthesis.speak(u);
+    function speakTarget(withNote) {
+      if (!curTarget) return;
+      Srs.speak(curTarget, TARGET, withNote ? function (msg) {
+        var note = document.getElementById('speak-note');
+        if (note) { note.textContent = msg; note.classList.remove('hidden'); }
+      } : null);
     }
     function grade(gradeVal) {
-      const srs = readMap(SRS_KEY);
-      srs[state.pool[index]] = { grade: gradeVal, due: isoFromOffset(INTERVAL_DAYS[gradeVal]) };
-      localStorage.setItem(SRS_KEY, JSON.stringify(srs));
+      Srs.grade(state.pool[index], gradeVal, BASE, TARGET);
       const remaining = state.pool.length - index - 1;
       if (remaining > 0) { index++; flipped = false; document.getElementById('count').textContent = 'Còn ' + remaining + ' thẻ'; render(); }
       else {
@@ -103,14 +77,16 @@
     <div class="max-w-2xl mx-auto px-4 py-3.5 flex items-center justify-between">
       <span class="text-sm font-semibold text-white">
         Ôn tập flashcard
-        {% if exam %}<span class="text-slate-400 font-normal">· {{ exam }}</span>{% else %}<span class="text-slate-400 font-normal">· {{ cefr }}</span>{% endif %}
+        {% if exam %}<span class="text-slate-400 font-normal">· {{ exam }}</span>{% elif cefr %}<span class="text-slate-400 font-normal">· {{ cefr }}</span>{% else %}<span class="text-slate-400 font-normal">· Tất cả mức</span>{% endif %}
       </span>
       <div class="flex items-center gap-2 text-xs">
         <span id="count" class="text-slate-400"></span>
         {% if exam %}
         <a href="/learn?base={{ base }}&target={{ target }}&exam={{ exam }}" class="hover:text-white text-slate-400">←</a>
-        {% else %}
+        {% elif cefr %}
         <a href="/learn?base={{ base }}&target={{ target }}&cefr={{ cefr }}" class="hover:text-white text-slate-400">←</a>
+        {% else %}
+        <a href="/learn?base={{ base }}&target={{ target }}" class="hover:text-white text-slate-400">←</a>
         {% endif %}
       </div>
     </div>

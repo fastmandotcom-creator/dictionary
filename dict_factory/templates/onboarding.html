@@ -28,7 +28,7 @@
         <label class="block text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1.5">Tôi đã biết (base)</label>
         <select name="base" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
           {% for code, name, native, tag in language_specs %}
-            <option value="{{ code }}" {% if code == 'vi' %}selected{% endif %}>{{ name }} ({{ native }})</option>
+            <option value="{{ code }}" {% if code == sel_base %}selected{% endif %}>{{ name }} ({{ native }})</option>
           {% endfor %}
         </select>
       </div>
@@ -36,7 +36,7 @@
         <label class="block text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1.5">Tôi muốn học (target)</label>
         <select name="target" id="target-select" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-emerald-500">
           {% for code, name, native, tag in language_specs %}
-            <option value="{{ code }}" {% if code == 'ja' %}selected{% endif %}>{{ name }} ({{ native }})</option>
+            <option value="{{ code }}" {% if code == sel_target %}selected{% endif %}>{{ name }} ({{ native }})</option>
           {% endfor %}
         </select>
         <p id="exam-hint" class="text-xs text-slate-500 mt-2"></p>

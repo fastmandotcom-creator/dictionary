@@ -10,41 +10,39 @@
   <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
 </head>
 <body class="min-h-full flex flex-col bg-slate-950 text-slate-100">
+  <script src="/srs.js"></script>
   <script>
-    const SRS_KEY = 'dict_srs_v2_{{ base }}_{{ target }}';
+    var BASE = '{{ base }}';
+    var TARGET = '{{ target }}';
+    const CEFR = {{ cefr | tojson }};
+    const EXAM = {{ exam | tojson }};
+    // exam wins over cefr (same precedence as the /learn route)
+    var EXTRA_QS = EXAM ? '&exam=' + EXAM : (CEFR ? '&cefr=' + CEFR : '');
     const CONCEPT_ID = {{ detail.concept.id | tojson }};
-    const INTERVAL_DAYS = { hard: 1, ok: 3, good: 7 };
-    function pad(n) { return String(n).padStart(2, '0'); }
-    function isoFromOffset(days) {
-      const d = new Date();
-      d.setDate(d.getDate() + days);
-      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    const NEIGHBOR_NEXT = {{ neighbor_next | tojson }};
+
+    function cardUrl(cid) {
+      return '/learn/' + encodeURIComponent(cid) + '?base=' + BASE + '&target=' + TARGET + EXTRA_QS;
     }
-    function readSrs() { try { return JSON.parse(localStorage.getItem(SRS_KEY) || '{}'); } catch (e) { return {}; } }
     function grade(gradeVal) {
-      const srs = readSrs();
-      srs[CONCEPT_ID] = { grade: gradeVal, due: isoFromOffset(INTERVAL_DAYS[gradeVal]) };
-      localStorage.setItem(SRS_KEY, JSON.stringify(srs));
-      const bar = document.getElementById('grade-state');
-      if (bar) bar.textContent = 'Đã ghi: ' + gradeVal + ' · tới hạn ' + isoFromOffset(INTERVAL_DAYS[gradeVal]);
-      const next = {{ neighbor_next | tojson }};
-      if (next) setTimeout(function () { location.href = '/learn/' + encodeURIComponent(next) + '?base={{ base }}&target={{ target }}'; }, 350);
+      var entry = Srs.grade(CONCEPT_ID, gradeVal, BASE, TARGET);
+      var bar = document.getElementById('grade-state');
+      if (bar) bar.textContent = 'Đã ghi: ' + gradeVal + ' · tới hạn ' + entry.due;
+      if (NEIGHBOR_NEXT) setTimeout(function () { location.href = cardUrl(NEIGHBOR_NEXT); }, 350);
     }
-    function speakTarget() {
-      const el = document.getElementById('hero-target');
-      if (!el || !('speechSynthesis' in window)) return;
-      const u = new SpeechSynthesisUtterance(el.textContent);
-      u.lang = '{{ target }}';
-      const voices = speechSynthesis.getVoices();
-      const v = voices.find(function (vv) { return vv.lang && vv.lang.toLowerCase().indexOf('{{ target }}'.toLowerCase()) === 0; });
-      if (v) u.voice = v;
-      speechSynthesis.speak(u);
+    function speakTarget(withNote) {
+      var el = document.getElementById('hero-target');
+      if (!el) return;
+      Srs.speak(el.textContent, TARGET, withNote ? function (msg) {
+        var note = document.getElementById('speak-note');
+        if (note) { note.textContent = msg; note.classList.remove('hidden'); }
+      } : null);
     }
-    window.addEventListener('DOMContentLoaded', speakTarget);
+    window.addEventListener('DOMContentLoaded', function () { speakTarget(false); });
   </script>
   <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-30">
     <div class="max-w-2xl mx-auto px-4 py-3.5 flex items-center justify-between">
-      <a href="/learn?base={{ base }}&target={{ target }}" class="text-xs font-semibold text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition">← Lộ trình</a>
+      <a href="/learn?base={{ base }}&target={{ target }}{{ extra_qs }}" class="text-xs font-semibold text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition">← Lộ trình</a>
       <div class="flex items-center gap-2 text-xs">
         <span class="bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 font-mono">{{ detail.concept.cefr }}</span>
         <span class="text-slate-500">Rank #{{ detail.concept.rank }}</span>
@@ -71,8 +69,9 @@
           </div>
           {% endif %}
         </div>
-        <button onclick="speakTarget()" class="shrink-0 text-xs text-slate-400 hover:text-emerald-400 border border-slate-700 rounded-lg px-3 py-1.5 ml-3">&#128266; Nghe</button>
+        <button onclick="speakTarget(true)" class="shrink-0 text-xs text-slate-400 hover:text-emerald-400 border border-slate-700 rounded-lg px-3 py-1.5 ml-3">&#128266; Nghe</button>
       </div>
+      <p id="speak-note" class="hidden text-xs text-amber-400/90 mt-2"></p>
     </div>
     <!-- BILINGUAL EXAMPLE -->
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
@@ -82,9 +81,9 @@
         <p class="text-slate-500 text-sm mt-1">{{ detail.bilingual.sent_base }}</p>
       {% elif detail.mono %}
         <p class="text-slate-200 font-medium">{{ detail.mono }}</p>
-        <p class="text-xs text-slate-500 mt-1">Ví dụ đơn ngữ tiếng {{ target_name }} (không phải bản dịch — xem câu {{ base_name }} ở trên).</p>
+        <p class="text-xs text-slate-500 mt-1">Câu ví dụ tiếng {{ target_name }} (bản dịch tiếng {{ base_name }} sẽ được bổ sung sau).</p>
       {% else %}
-        <p class="text-sm text-slate-500">Chưa có. Chạy <code class="font-mono text-slate-400">dict_factory fill --what examples --target {{ target }} --base {{ base }}</code> để lấp.</p>
+        <p class="text-sm text-slate-500">Chưa có câu ví dụ cho từ này. Ví dụ sẽ được bổ sung trong các bản cập nhật dữ liệu tiếp theo.</p>
       {% endif %}
     </div>
     <!-- GRADING -->
@@ -101,17 +100,18 @@
     </div>
     <div class="flex items-center justify-between gap-2 text-xs">
       {% if neighbor_prev %}
-      <a href="/learn/{{ neighbor_prev }}?base={{ base }}&target={{ target }}" class="text-slate-500 hover:text-slate-300 px-3 py-2 border border-slate-800 rounded-lg">← Trước</a>
+      <a href="/learn/{{ neighbor_prev }}?base={{ base }}&target={{ target }}{{ extra_qs }}" class="text-slate-500 hover:text-slate-300 px-3 py-2 border border-slate-800 rounded-lg">← Trước</a>
       {% else %}
       <span></span>
       {% endif %}
-      <a href="/learn?base={{ base }}&target={{ target }}" class="text-slate-500 hover:text-slate-300 px-3 py-2">Lộ trình</a>
+      <a href="/learn?base={{ base }}&target={{ target }}{{ extra_qs }}" class="text-slate-500 hover:text-slate-300 px-3 py-2">Lộ trình</a>
       {% if neighbor_next %}
-      <a href="/learn/{{ neighbor_next }}?base={{ base }}&target={{ target }}" class="text-slate-500 hover:text-slate-300 px-3 py-2 border border-slate-800 rounded-lg">Tiếp →</a>
+      <a href="/learn/{{ neighbor_next }}?base={{ base }}&target={{ target }}{{ extra_qs }}" class="text-slate-500 hover:text-slate-300 px-3 py-2 border border-slate-800 rounded-lg">Tiếp →</a>
       {% else %}
       <span class="text-slate-600 px-3 py-2">Cuối unit</span>
       {% endif %}
     </div>
+    <a href="/review?base={{ base }}&target={{ target }}{{ extra_qs }}" class="block text-center text-xs text-slate-500 hover:text-slate-300 py-2">Ôn tập thẻ đến hạn →</a>
   </main>
 </body>
 </html>
