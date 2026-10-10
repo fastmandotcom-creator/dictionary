@@ -156,6 +156,28 @@ def test_list_exam_levels_lang_filter_and_display(tmp_path: Path) -> None:
     conn.close()
 
 
+def test_exam_framework_lang(tmp_path: Path) -> None:
+    from dict_factory.exam_levels import exam_framework_lang
+
+    db = tmp_path / "t.db"
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    init_schema(conn)
+    conn.execute("INSERT INTO exam_framework(code,lang,name,version) VALUES('JLPT','ja','JLPT',1)")
+    conn.execute("INSERT INTO exam_framework(code,lang,name,version) VALUES('HSK','zh','HSK',1)")
+    conn.execute(
+        "INSERT INTO exam_level(framework,code,label,cefr_lo,cefr_hi,sort_no,source,prompt_v) VALUES"
+        "('JLPT','N3','N3','A2','B1',1,'community-estimate','v1'),"
+        "('HSK','HSK-4','HSK 4','B1','B2',1,'community-estimate','v1')"
+    )
+    conn.commit()
+    assert exam_framework_lang(conn, "JLPT_N3") == "ja"
+    assert exam_framework_lang(conn, "HSK_HSK-4") == "zh"
+    assert exam_framework_lang(conn, "JLPT_N9") is None  # unknown level
+    assert exam_framework_lang(conn, "nope") is None  # malformed
+    conn.close()
+
+
 def test_missing_tables_tolerated() -> None:
     conn = sqlite3.connect(":memory:")
     assert list_exam_levels(conn) == []

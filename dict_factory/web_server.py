@@ -8,7 +8,12 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from dict_factory.languages import CEFR_LEVELS, LANGUAGE_SPECS, LANGUAGES, POS_VALUES
-from dict_factory.exam_levels import cefr_range_levels, list_exam_levels, resolve_exam_range
+from dict_factory.exam_levels import (
+    cefr_range_levels,
+    exam_framework_lang,
+    list_exam_levels,
+    resolve_exam_range,
+)
 from dict_factory.learn_queries import learn_concept_pair, learn_level_units, learn_neighbors
 from dict_factory.web_queries import get_concept_detail, get_db, get_stats, search_concepts
 
@@ -52,13 +57,23 @@ def _validate_cefr(cefr: str) -> None:
         raise HTTPException(status_code=400, detail=f"unknown CEFR level {cefr!r}")
 
 
-def _validate_exam(conn, exam: str) -> tuple[str, str] | None:
-    """Resolve ?exam=FW_CODE to a CEFR range. Returns None when no exam given."""
+def _validate_exam(conn, exam: str, target: str) -> tuple[str, str] | None:
+    """Resolve ?exam=FW_CODE to a CEFR range for `target`. None when no exam.
+
+    Rejects (400) both unknown refs and refs whose framework language does not
+    match the selected target (e.g. HSK_4 on a vi->ja page).
+    """
     if not exam:
         return None
     resolved = resolve_exam_range(conn, exam)
     if resolved is None:
         raise HTTPException(status_code=400, detail=f"unknown exam level {exam!r}")
+    exam_lang = exam_framework_lang(conn, exam)
+    if exam_lang is not None and exam_lang != target:
+        raise HTTPException(
+            status_code=400,
+            detail=f"exam {exam!r} is for {exam_lang!r}, not target {target!r}",
+        )
     return resolved
 
 
@@ -192,7 +207,7 @@ async def learn(
     conn = get_db()
     try:
         exam_levels = list_exam_levels(conn, target)
-        exam_range = _validate_exam(conn, exam)
+        exam_range = _validate_exam(conn, exam, target)
         if exam_range is not None:
             levels = cefr_range_levels(*exam_range)
             units: list = []
@@ -281,7 +296,7 @@ async def review(
     _validate_cefr(cefr)
     conn = get_db()
     try:
-        exam_range = _validate_exam(conn, exam)
+        exam_range = _validate_exam(conn, exam, target)
         if exam_range is not None:
             levels = cefr_range_levels(*exam_range)
         else:

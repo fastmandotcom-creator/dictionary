@@ -235,6 +235,29 @@ def resolve_exam_range(conn: sqlite3.Connection, exam: str) -> tuple[str, str] |
     return row["cefr_lo"], row["cefr_hi"]
 
 
+def exam_framework_lang(conn: sqlite3.Connection, exam: str) -> str | None:
+    """Target language a `?exam=FW_CODE` ref belongs to (e.g. `JLPT_N3` -> `ja`).
+
+    None when the ref is unknown or the exam tables are absent. Lets callers
+    reject an exam that does not match the selected target language.
+    """
+    if not _has_exam_tables(conn):
+        return None
+    parsed = parse_exam_ref(exam)
+    if parsed is None:
+        return None
+    framework, code = parsed
+    row = conn.execute(
+        """
+        SELECT ef.lang FROM exam_level el
+        JOIN exam_framework ef ON ef.code = el.framework
+        WHERE el.framework = ? AND el.code = ?
+        """,
+        (framework, code),
+    ).fetchone()
+    return row["lang"] if row else None
+
+
 def cefr_range_levels(lo: str, hi: str) -> list[str]:
     """CEFR levels from lo to hi inclusive, in difficulty order."""
     order = sorted(CEFR_ORDER, key=lambda k: CEFR_ORDER[k])

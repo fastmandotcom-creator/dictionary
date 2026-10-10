@@ -98,6 +98,31 @@ def test_invalid_params_rejected_with_400() -> None:
     assert client.get("/?lang=vi&cefr=A1&pos=noun").status_code == 200
 
 
+def test_learn_exam_wrong_language_rejected() -> None:
+    """?exam= must match the target language, not just exist in the table."""
+    from dict_factory.db import connect
+    from dict_factory.exam_levels import resolve_exam_range
+
+    conn = connect()
+    try:
+        if resolve_exam_range(conn, "JLPT_N3") is None:
+            pytest.skip("exam levels not seeded in live DB")
+        hsk = resolve_exam_range(conn, "HSK_HSK-4")  # HSK is zh
+    finally:
+        conn.close()
+    if hsk is None:
+        pytest.skip("HSK_HSK-4 not seeded; nothing to assert rejection on")
+    client = TestClient(app, raise_server_exceptions=False)
+    # HSK_HSK-4 on a vi->ja page is a cross-language exam -> 400
+    assert client.get("/learn?base=vi&target=ja&exam=HSK_HSK-4").status_code == 400
+    assert client.get("/review?base=vi&target=ja&exam=HSK_HSK-4").status_code == 400
+    # the matching exam still works
+    assert client.get("/learn?base=vi&target=ja&exam=JLPT_N3").status_code == 200
+    assert client.get("/review?base=vi&target=ja&exam=JLPT_N3").status_code == 200
+    # and HSK_HSK-4 is accepted on its own language page
+    assert client.get("/learn?base=vi&target=zh&exam=HSK_HSK-4").status_code == 200
+
+
 def test_learn_exam_filter() -> None:
     from dict_factory.db import connect
     from dict_factory.exam_levels import resolve_exam_range
