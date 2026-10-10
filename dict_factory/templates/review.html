@@ -23,7 +23,27 @@
       const list = document.getElementById('cards');
       if (!CARD_IDS.length) { list.innerHTML = '<div class="text-slate-500 text-sm p-6">Chưa có từ nào cho mức này.</div>'; return; }
       const due = CARD_IDS.filter(function (id) { return Srs.isDue(id, BASE, TARGET); });
-      state.pool = due.length ? Srs.shuffle(due.slice(0, 200)).slice(0, 30) : [];
+      const srsMap = Srs.readSrs(BASE, TARGET);
+      // Most-overdue first: group by due date (oldest group first), shuffle
+      // only WITHIN each group so ordering across days is deterministic.
+      var groups = {};
+      due.forEach(function (id) {
+        var key = (srsMap[id] && srsMap[id].due) || 'new';
+        (groups[key] = groups[key] || []).push(id);
+      });
+      var ordered = Object.keys(groups).sort().map(function (k) { return Srs.shuffle(groups[k]); })
+        .reduce(function (a, b) { return a.concat(b); }, []);
+      state.pool = ordered.length ? ordered.slice(0, 30) : [];
+      // estimate banner: ~20s per card
+      var banner = document.getElementById('session-est');
+      if (banner) {
+        if (state.pool.length) {
+          var mins = Math.max(1, Math.round((state.pool.length * 20) / 60));
+          banner.textContent = 'Buổi ôn hôm nay: ' + state.pool.length + ' thẻ · khoảng ' + mins + ' phút';
+        } else {
+          banner.textContent = 'Hôm nay không có thẻ nào đến hạn.';
+        }
+      }
       index = 0; flipped = false;
       if (!state.pool.length) {
         list.innerHTML = '<div class="text-center p-8 text-sm text-slate-400">Không có thẻ nào đến hạn hôm nay.<br>Thẻ "good" quay lại sau 7 ngày. 🎉</div>';
@@ -92,6 +112,7 @@
     </div>
   </header>
   <main class="flex-1 max-w-2xl w-full mx-auto px-4 py-6">
+    <p id="session-est" class="text-xs text-slate-500 mb-3"></p>
     <div id="cards" class="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center min-h-[220px] flex flex-col items-center justify-center"></div>
     <div class="flex justify-center gap-2 mt-4">
       <button onclick="grade('hard')" class="bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-rose-500/20">Chưa (1 ngày)</button>

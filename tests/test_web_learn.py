@@ -261,7 +261,56 @@ def test_no_dev_copy_in_rendered_pages() -> None:
         "/learn/GREET_HELLO?base=vi&target=ja",
         "/review?base=vi&target=ja",
         "/onboarding",
+        "/session?base=vi&target=ja",
+        "/placement?base=vi&target=ja",
     ):
         res = client.get(url)
         assert res.status_code == 200
         assert "dict_factory" not in res.text, f"dev copy leaked on {url}"
+
+
+def test_session_route_and_api() -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    page = client.get("/session?base=vi&target=ja")
+    assert page.status_code == 200
+    assert "Hôm nay của bạn" in page.text  # overview panel with N new + M due
+    assert "/srs.js" in page.text
+    # new size is bounded (5..30)
+    assert client.get("/session?base=vi&target=ja&new=999").status_code == 422
+    api = client.get("/api/session?base=vi&target=ja&cefr=A1")
+    assert api.status_code == 200
+    body = api.json()
+    assert body["levels"] == ["A1"]
+    assert body["new_count"] == 10
+    assert body["units"], "session must carry units with concept ids"
+
+
+def test_review_shows_session_estimate() -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    res = client.get("/review?base=vi&target=ja")
+    assert res.status_code == 200
+    assert "session-est" in res.text  # "Buổi ôn hôm nay: M thẻ · ~p phút"
+
+
+def test_placement_quiz_flow() -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    # questions: 10 items, 4 easy + 6 hard, each with 4 base-language options
+    q = client.get("/api/placement?base=vi&target=ja")
+    assert q.status_code == 200
+    questions = q.json()["questions"]
+    assert len(questions) == 10
+    bands = [x for x in questions if x["band"] == "hard"]
+    assert len(bands) == 6
+    for item in questions:
+        assert len(item["options"]) == 4
+        assert item["answer"] in item["options"]
+    # submitting all-correct answers must yield B1 (>=80% hard)
+    correct = [
+        {"conceptId": item["conceptId"], "choice": item["answer"]} for item in questions
+    ]
+    scored = client.post("/api/placement", json={"base": "vi", "target": "ja", "answers": correct})
+    assert scored.status_code == 200
+    assert scored.json()["cefr"] == "B1"
+    # submitting nothing must yield A1
+    empty = client.post("/api/placement", json={"base": "vi", "target": "ja", "answers": []})
+    assert empty.json()["cefr"] == "A1"

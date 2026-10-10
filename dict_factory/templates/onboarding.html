@@ -53,19 +53,28 @@
           {% endfor %}
         </div>
       </div>
+      <p class="text-xs text-slate-500">
+        Chưa chắc về trình độ của mình?
+        <a id="placement-link" href="/placement" class="text-emerald-400 hover:text-emerald-300 font-semibold">Làm bài test 10 câu (~1 phút)</a>
+        để được đặt vào đúng mức.
+      </p>
     </form>
     <script>
       (function () {
         var EXAM_BY_LANG = {{ exam_by_lang | tojson }};
+        var baseSel = document.querySelector('select[name="base"]');
         var sel = document.getElementById('target-select');
         var hint = document.getElementById('exam-hint');
+        var placement = document.getElementById('placement-link');
         function render() {
           var codes = EXAM_BY_LANG[sel.value] || [];
           hint.textContent = codes.length
             ? 'Kỳ thi có sẵn cho ngôn ngữ này: ' + codes.join(', ')
             : 'Chưa có kỳ thi chuẩn cho ngôn ngữ này — dùng lộ trình CEFR.';
+          if (placement && baseSel) placement.href = '/placement?base=' + baseSel.value + '&target=' + sel.value;
         }
         sel.addEventListener('change', render);
+        if (baseSel) baseSel.addEventListener('change', render);
         render();
       })();
     </script>

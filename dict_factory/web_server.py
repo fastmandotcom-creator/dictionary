@@ -15,6 +15,7 @@ from dict_factory.exam_levels import (
     resolve_exam_range,
 )
 from dict_factory.learn_queries import learn_concept_pair, learn_level_units, learn_neighbors
+import dict_factory.session as session_module
 from dict_factory.web_queries import get_concept_detail, get_db, get_stats, search_concepts
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -337,9 +338,13 @@ async def review(
         units: list = []
         for level in levels:
             units.extend(learn_level_units(conn, base, target, level))
+        # P1b: the server ships the whole scoped pool (rank-ordered within the
+        # scope, capped) — the client keeps the SRS store and selects only the
+        # cards that are actually due today, most-overdue first.
         card_ids: list[str] = []
         for unit in units:
-            card_ids.extend(unit["concept_ids"][:12])
+            card_ids.extend(unit["concept_ids"])
+        card_ids = list(dict.fromkeys(card_ids))[:1200]
     finally:
         conn.close()
 
@@ -353,7 +358,140 @@ async def review(
             "exam": exam,
             "base_name": _language_name(base),
             "target_name": _language_name(target),
-            "card_ids": card_ids[:120],
+            "card_ids": card_ids,
             "cefr_levels": sorted(CEFR_LEVELS),
         },
     )
+
+
+@app.get("/session", response_class=HTMLResponse)
+@app.head("/session", response_class=HTMLResponse)
+async def session_view(
+    request: Request,
+    base: str = Query("vi"),
+    target: str = Query("ja"),
+    cefr: str = Query(""),
+    exam: str = Query(""),
+    new: int = Query(10, ge=5, le=30, description="new words per session (10/20/30)"),
+):
+    _validate_pair(base, target)
+    _validate_cefr(cefr)
+    conn = get_db()
+    try:
+        queue = session_module.session_queue(conn, base, target, cefr=cefr, exam=exam, new_count=new)
+        if exam:
+            _validate_exam(conn, exam, target)
+    finally:
+        conn.close()
+
+    units_ctx = []
+    for unit in queue["units"]:
+        title_map = json.loads(unit["title_json"])
+        units_ctx.append(
+            {
+                "id": unit["id"],
+                "cefr": unit["cefr"],
+                "order_no": unit["order_no"],
+                "title": title_map.get(base) or title_map.get("en") or unit["id"],
+                "count": len(unit["concept_ids"]),
+                "concept_ids": unit["concept_ids"],
+            }
+        )
+    return templates.TemplateResponse(
+        request=request,
+        name="session.html",
+        context={
+            "base": base,
+            "target": target,
+            "base_name": _language_name(base),
+            "target_name": _language_name(target),
+            "cefr": cefr,
+            "exam": exam,
+            "new_count": new,
+            "units": units_ctx,
+            "levels": queue["levels"],
+        },
+    )
+
+
+@app.get("/api/session")
+async def api_session(
+    base: str = Query("vi"),
+    target: str = Query("ja"),
+    cefr: str = Query(""),
+    exam: str = Query(""),
+    new: int = Query(10, ge=5, le=30),
+):
+    _validate_pair(base, target)
+    _validate_cefr(cefr)
+    conn = get_db()
+    try:
+        if exam:
+            _validate_exam(conn, exam, target)
+        return session_module.session_queue(conn, base, target, cefr=cefr, exam=exam, new_count=new)
+    finally:
+        conn.close()
+
+
+@app.get("/placement", response_class=HTMLResponse)
+@app.head("/placement", response_class=HTMLResponse)
+async def placement_view(
+    request: Request,
+    base: str = Query("vi"),
+    target: str = Query("ja"),
+):
+    _validate_pair(base, target)
+    return templates.TemplateResponse(
+        request=request,
+        name="placement.html",
+        context={
+            "base": base,
+            "target": target,
+            "base_name": _language_name(base),
+            "target_name": _language_name(target),
+        },
+    )
+
+
+@app.get("/api/placement")
+async def api_placement_questions(base: str = Query("vi"), target: str = Query("ja")):
+    _validate_pair(base, target)
+    conn = get_db()
+    try:
+        questions = session_module.build_placement_questions(conn, base, target)
+    finally:
+        conn.close()
+    return {"base": base, "target": target, "questions": questions}
+
+
+@app.post("/api/placement")
+async def api_placement_submit(payload: dict):
+    """Score a finished placement quiz. Body: {base, target, answers: [{conceptId, choice}]}.
+    The quiz is deterministic per pair, so the server re-derives the same
+    questions and checks the learner's chosen options — client is never trusted."""
+    base = str(payload.get("base") or "")
+    target = str(payload.get("target") or "")
+    answers = payload.get("answers")
+    if not isinstance(answers, list):
+        raise HTTPException(status_code=400, detail="answers must be a list")
+    _validate_pair(base, target)
+    conn = get_db()
+    try:
+        questions = session_module.build_placement_questions(conn, base, target)
+        qmap = {q["conceptId"]: q for q in questions}
+        correct = 0
+        answered = 0
+        for ans in answers:
+            q = qmap.get(str(ans.get("conceptId")))
+            if q is None:
+                continue
+            answered += 1
+            correct += str(ans.get("choice")) == q["answer"]
+        cefr = session_module.estimate_start_level(correct, answered)
+    finally:
+        conn.close()
+    return {
+        "cefr": cefr,
+        "correct": correct,
+        "total": answered,
+    }

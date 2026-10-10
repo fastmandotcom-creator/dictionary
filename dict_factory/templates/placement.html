@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Đo trình độ — {{ target_name }} ← {{ base_name }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="min-h-full flex flex-col bg-slate-950 text-slate-100">
+  <script>
+    var BASE = '{{ base }}';
+    var TARGET = '{{ target }}';
+    var questions = [];
+    var idx = 0;
+    var answers = [];   // {conceptId, choice}
+
+    function load() {
+      var list = document.getElementById('quiz');
+      list.innerHTML = '<div class="text-slate-500 text-sm p-6">Đang tải bài test…</div>';
+      fetch('/api/placement?base=' + BASE + '&target=' + TARGET)
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          questions = d.questions;
+          if (!questions.length) {
+            list.innerHTML = '<div class="text-slate-500 text-sm p-6">Chưa đủ dữ liệu để làm bài test này.</div>';
+            return;
+          }
+          idx = 0; answers = [];
+          render();
+        })
+        .catch(function () {
+          list.innerHTML = '<div class="text-rose-400 text-sm p-6">Không tải được bài test. Hãy thử lại.</div>';
+        });
+    }
+    function render() {
+      var list = document.getElementById('quiz');
+      var q = questions[idx];
+      var bar = Math.round((idx / questions.length) * 100);
+      var opts = q.options.map(function (o, i) {
+        return '<button data-i="' + i + '" class="opt block w-full text-left px-4 py-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm text-slate-200 transition">' + o + '</button>';
+      }).join('');
+      list.innerHTML =
+        '<div class="flex items-center justify-between text-xs text-slate-500 mb-2"><span>Câu ' + (idx + 1) + '/' + questions.length + '</span><span>' + bar + '%</span></div>' +
+        '<div class="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-4"><div class="h-full bg-emerald-500/70" style="width:' + bar + '%"></div></div>' +
+        '<div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Ở tiếng ' + TARGET + ', “' + q.prompt + '” có nghĩa là?</div>' +
+        '<div class="space-y-2">' + opts + '</div>' +
+        '<button id="next-btn" disabled class="mt-4 w-full bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold rounded-xl py-3 transition">Tiếp tục</button>';
+      var chosen = -1;
+      list.querySelectorAll('.opt').forEach(function (b) {
+        b.onclick = function () {
+          list.querySelectorAll('.opt').forEach(function (x) { x.classList.remove('bg-emerald-600', 'text-white', 'border-emerald-500'); });
+          b.classList.add('bg-emerald-600', 'text-white', 'border-emerald-500');
+          chosen = Number(b.dataset.i);
+          document.getElementById('next-btn').disabled = false;
+        };
+      });
+      document.getElementById('next-btn').onclick = function () {
+        answers.push({ conceptId: q.conceptId, choice: q.options[chosen] });
+        idx += 1;
+        if (idx < questions.length) render();
+        else submit();
+      };
+    }
+    function submit() {
+      var list = document.getElementById('quiz');
+      list.innerHTML = '<div class="text-slate-500 text-sm p-6">Đang chấm…</div>';
+      fetch('/api/placement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base: BASE, target: TARGET, answers: answers })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          // remember the suggested level for this pair so /learn can preselect it
+          try {
+            localStorage.setItem('dict_placement_' + BASE + '_' + TARGET, res.cefr);
+          } catch (e) {}
+          showResult(res);
+        })
+        .catch(function () {
+          list.innerHTML = '<div class="text-rose-400 text-sm p-6">Không chấm được. Hãy thử lại.</div>';
+        });
+    }
+    function showResult(res) {
+      var list = document.getElementById('quiz');
+      list.innerHTML =
+        '<div class="text-center p-6">' +
+        '<div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Kết quả</div>' +
+        '<div class="text-4xl font-bold text-white mb-2">Đạt mức ' + res.cefr + '</div>' +
+        '<div class="text-sm text-slate-400 mb-5">Đúng ' + res.correct + '/' + res.total + ' câu.</div>' +
+        '<a href="/learn?base=' + BASE + '&target=' + TARGET + '&cefr=' + res.cefr + '" class="block w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl py-3.5 transition">Bắt đầu học ở mức ' + res.cefr + '</a>' +
+        '<a href="/learn?base=' + BASE + '&target=' + TARGET + '" class="block w-full text-center text-xs text-slate-500 hover:text-slate-300 mt-3 py-2">Về lộ trình (tất cả mức)</a>' +
+        '</div>';
+    }
+    window.addEventListener('DOMContentLoaded', load);
+  </script>
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-2xl mx-auto px-4 py-3.5 flex items-center justify-between">
+      <div class="flex items-center gap-2.5 text-sm">
+        <span class="text-emerald-400 font-semibold">{{ base_name }}</span>
+        <span class="text-slate-500">→</span>
+        <span class="text-sky-400 font-semibold">{{ target_name }}</span>
+      </div>
+      <a href="/onboarding?base={{ base }}&target={{ target }}" class="text-xs text-slate-400 hover:text-white">← Chọn ngôn ngữ</a>
+    </div>
+  </header>
+  <main class="flex-1 max-w-2xl w-full mx-auto px-4 py-6">
+    <h1 class="text-xl font-bold text-white mb-1">Đo trình độ nhanh</h1>
+    <p class="text-sm text-slate-400 mb-4">10 câu, khoảng 1 phút. Kết quả đặt bạn vào đúng mức học thay vì bắt đầu từ A1.</p>
+    <div id="quiz" class="bg-slate-900 border border-slate-800 rounded-xl p-5 min-h-[300px]"></div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Buổi học hôm nay — {{ target_name }} ← {{ base_name }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="min-h-full flex flex-col bg-slate-950 text-slate-100">
+  <script src="/srs.js"></script>
+  <script>
+    var BASE = '{{ base }}';
+    var TARGET = '{{ target }}';
+    const CEFR = {{ cefr | tojson }};
+    const EXAM = {{ exam | tojson }};
+    const EXTRA_QS = EXAM ? '&exam=' + EXAM : (CEFR ? '&cefr=' + CEFR : '');
+    var UNITS = {{ units | tojson }};
+    var NEW_SIZE = {{ new_count | tojson }};
+    var DUE_CAP = 50;          // due cards per session; the rest roll to tomorrow
+    var MASTERY_RATIO = 0.8;  // a unit is "done" when >=80% of its cards are graded non-hard
+    var SECONDS_PER_CARD = 20;
+
+    var srs = Srs.readSrs(BASE, TARGET);
+    var legacy = Srs.readLegacy(BASE, TARGET);
+    var activeUnit = null;    // first not-yet-mastered unit
+    var newIds = [];
+    var dueIds = [];
+
+    function isDone(id) { return Srs.isDone(srs[id], legacy[id]); }
+    function isGraded(id) { return !!(srs[id] && srs[id].grade) || !!legacy[id]; }
+
+    function unitStats(u) {
+      var total = u.concept_ids.length;
+      var done = u.concept_ids.filter(isDone).length;
+      return { total: total, done: done, complete: total > 0 && (done / total) >= MASTERY_RATIO };
+    }
+    function computeQueues() {
+      activeUnit = null;
+      for (var i = 0; i < UNITS.length; i++) {
+        if (!unitStats(UNITS[i]).complete) { activeUnit = UNITS[i]; break; }
+      }
+      // NEW: ungraded cards of the active unit, in unit order
+      newIds = [];
+      if (activeUnit) {
+        for (var j = 0; j < activeUnit.concept_ids.length && newIds.length < NEW_SIZE; j++) {
+          if (!isGraded(activeUnit.concept_ids[j])) newIds.push(activeUnit.concept_ids[j]);
+        }
+      }
+      // DUE: everything in scope whose review date arrived, most-overdue first
+      var all = UNITS.map(function (u) { return u.concept_ids; }).reduce(function (a, b) { return a.concat(b); }, []);
+      all = all.filter(function (id, idx, self) { return self.indexOf(id) === idx; }); // dedupe
+      dueIds = all.filter(function (id) { return Srs.isDue(id, BASE, TARGET); });
+      dueIds.sort(function (a, b) {
+        var da = (srs[a] && srs[a].due) || '0000';
+        var db2 = (srs[b] && srs[b].due) || '0000';
+        return da < db2 ? -1 : (da > db2 ? 1 : 0);
+      });
+    }
+    function minutesFor(n) { return n ? Math.max(1, Math.round((n * SECONDS_PER_CARD) / 60)) : 0; }
+
+    // ---------- overview ----------
+    var state = { queue: [], idx: 0, flipped: false, grades: { hard: 0, ok: 0, good: 0 } };
+    var curTarget = '', curBase = '';
+
+    function renderOverview() {
+      computeQueues();
+      var shown = document.getElementById('overview');
+      var unitTitle = activeUnit ? activeUnit.title : 'đã hoàn thành lộ trình';
+      var dueNow = dueIds.slice(0, DUE_CAP);
+      var mins = minutesFor(newIds.length + dueNow.length);
+      var lines = [];
+      lines.push('<div class="text-lg font-bold text-white mb-3">Hôm nay của bạn</div>');
+      lines.push('<div class="text-sm text-slate-300 mb-1">· <span class="text-emerald-400 font-semibold">' + newIds.length + '</span> từ mới' +
+        (activeUnit ? ' (đơn vị: ' + unitTitle + ')' : '') + '</div>');
+      lines.push('<div class="text-sm text-slate-300 mb-1">· <span class="text-amber-400 font-semibold">' + dueNow.length + '</span> thẻ cần ôn' +
+        (dueIds.length > DUE_CAP ? ' (dư ' + (dueIds.length - DUE_CAP) + ' thẻ dồn sang mai)' : '') + '</div>');
+      if (mins > 0) lines.push('<div class="text-sm text-slate-500 mb-4">· Khoảng <span class="text-slate-300 font-semibold">' + mins + ' phút</span> để hoàn thành</div>');
+      lines.push('<div class="flex items-center gap-2 mb-4 text-xs text-slate-400">Số từ mới mỗi buổi:</div>');
+      [10, 20, 30].forEach(function (n) {
+        lines.push('<button data-newsize="' + n + '" class="newsize px-3 py-1.5 rounded-lg text-xs font-semibold ' +
+          (NEW_SIZE === n ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700') + '">' + n + '</button>');
+      });
+      lines.push('<div class="mt-5"><button id="start-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl py-3.5 text-base transition">' +
+        (mins > 0 ? 'Bắt đầu buổi hôm nay (' + (newIds.length + dueNow.length) + ' thẻ)' : 'Không có gì để làm hôm nay 🎉') + '</button></div>');
+      if (newIds.length === 0 && dueNow.length === 0) document.getElementById('start-btn').disabled = true;
+      shown.innerHTML = lines.join('');
+      shown.querySelectorAll('.newsize').forEach(function (b) {
+        b.onclick = function () { NEW_SIZE = Number(b.dataset.newsize); renderOverview(); };
+      });
+      document.getElementById('start-btn').onclick = startSession;
+    }
+
+    // ---------- player ----------
+    function startSession() {
+      computeQueues();
+      var dueNow = dueIds.slice(0, DUE_CAP);
+      // new words first (learning), then due reviews
+      state.queue = newIds.map(function (id) { return { id: id, kind: 'new' }; })
+        .concat(dueNow.map(function (id) { return { id: id, kind: 'due' }; }));
+      state.idx = 0;
+      state.flipped = false;
+      document.getElementById('overview').classList.add('hidden');
+      document.getElementById('player').classList.remove('hidden');
+      renderCard();
+    }
+    function renderCard() {
+      var el = document.getElementById('card');
+      var item = state.queue[state.idx];
+      curTarget = curBase = '';
+      el.innerHTML =
+        '<div class="text-xs text-slate-500 font-mono mb-1">' + (state.idx + 1) + '/' + state.queue.length +
+        ' <span class="' + (item.kind === 'new' ? 'text-emerald-400' : 'text-amber-400') + '">' +
+        (item.kind === 'new' ? 'TỪ MỚI' : 'ÔN TẬP') + '</span></div>' +
+        '<div class="text-2xl font-bold text-white my-3" id="card-target">…</div>' +
+        '<button class="text-xs text-slate-400 mt-1 hover:text-emerald-400" id="speak-btn">🔊 Nghe</button>' +
+        '<p id="speak-note" class="hidden text-xs text-amber-400/90 mt-1"></p>' +
+        '<div class="text-sm text-emerald-300 mt-3 hidden" id="card-base"></div>' +
+        '<button class="text-xs text-slate-400 mt-4" id="flip-btn">Hiện đáp án</button>';
+      document.getElementById('speak-btn').onclick = function () {
+        Srs.speak(curTarget, TARGET, function (msg) {
+          var note = document.getElementById('speak-note');
+          if (note) { note.textContent = msg; note.classList.remove('hidden'); }
+        });
+      };
+      document.getElementById('flip-btn').onclick = function () {
+        document.getElementById('card-base').classList.remove('hidden');
+      };
+      fetch('/api/learn/' + encodeURIComponent(item.id) + '?base=' + BASE + '&target=' + TARGET)
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          curTarget = (d.target && d.target.text) || (d.concept && d.concept.gloss_en) || '';
+          curBase = (d.base && d.base.text) || '';
+          document.getElementById('card-target').textContent = curTarget;
+          document.getElementById('card-base').textContent = curBase;
+        });
+    }
+    function gradeAndAdvance(kind) {
+      var item = state.queue[state.idx];
+      var entry = Srs.grade(item.id, kind, BASE, TARGET);
+      state.grades[kind] = (state.grades[kind] || 0) + 1;
+      srs = Srs.readSrs(BASE, TARGET);
+      state.idx += 1;
+      if (state.idx < state.queue.length) { renderCard(); return; }
+      renderSummary(entry);
+    }
+    function renderSummary() {
+      document.getElementById('player').classList.add('hidden');
+      document.getElementById('summary').classList.remove('hidden');
+      var counts = state.grades;
+      var tomorrow = 0;
+      // anything graded today that resurfaces within ~1 day counts as "tomorrow"
+      for (var id in srs) {
+        var e = srs[id];
+        if (e && e.due) {
+          var t = Srs.isoFromOffset(0);
+          var off = Srs.isoFromOffset(1);
+          if (e.due === t || e.due === off) tomorrow++;
+        }
+      }
+      var el = document.getElementById('summary-body');
+      el.innerHTML =
+        '<div class="text-xl font-bold text-emerald-400 mb-3">Hoàn thành buổi học! 🎉</div>' +
+        '<div class="grid grid-cols-3 gap-2 text-center text-sm mb-4">' +
+        '<div class="bg-slate-800/60 rounded-lg py-3"><div class="text-rose-400 font-bold text-lg">' + (counts.hard || 0) + '</div><div class="text-xs text-slate-500">Chưa (1 ngày)</div></div>' +
+        '<div class="bg-slate-800/60 rounded-lg py-3"><div class="text-amber-400 font-bold text-lg">' + (counts.ok || 0) + '</div><div class="text-xs text-slate-500">Tạm (3 ngày)</div></div>' +
+        '<div class="bg-slate-800/60 rounded-lg py-3"><div class="text-emerald-400 font-bold text-lg">' + (counts.good || 0) + '</div><div class="text-xs text-slate-500">Nhớ (7 ngày)</div></div>' +
+        '</div>' +
+        (tomorrow ? '<div class="text-xs text-slate-400 mb-4">Mai có khoảng <span class="text-slate-200 font-semibold">' + tomorrow + '</span> thẻ đến hạn ôn lại.</div>' : '') +
+        '<div class="flex gap-2">' +
+        '<a href="/learn?base=' + BASE + '&target=' + TARGET + EXTRA_QS + '" class="flex-1 text-center text-xs text-slate-300 hover:text-white border border-slate-700 rounded-lg py-2.5">← Lộ trình</a>' +
+        '<a href="/review?base=' + BASE + '&target=' + TARGET + EXTRA_QS + '" class="flex-1 text-center text-xs text-slate-300 hover:text-white border border-slate-700 rounded-lg py-2.5">Ôn tập thêm</a>' +
+        '</div>';
+    }
+    document.addEventListener('DOMContentLoaded', renderOverview);
+  </script>
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-2xl mx-auto px-4 py-3.5 flex items-center justify-between">
+      <div class="flex items-center gap-2.5 text-sm">
+        <span class="text-emerald-400 font-semibold">{{ base_name }}</span>
+        <span class="text-slate-500">→</span>
+        <span class="text-sky-400 font-semibold">{{ target_name }}</span>
+        {% if exam %}<span class="text-xs text-slate-500">· {{ exam }}</span>{% endif %}
+      </div>
+      <a href="/learn?base={{ base }}&target={{ target }}{{ ('&exam=' ~ exam) if exam else ('&cefr=' ~ cefr if cefr else '') }}" class="text-xs text-slate-400 hover:text-white">Lộ trình</a>
+    </div>
+  </header>
+  <main class="flex-1 max-w-2xl w-full mx-auto px-4 py-6">
+    <div id="overview" class="bg-slate-900 border border-slate-800 rounded-xl p-6"></div>
+    <div id="player" class="hidden">
+      <div id="card" class="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center min-h-[220px] flex flex-col items-center justify-center"></div>
+      <div class="flex justify-center gap-2 mt-4">
+        <button onclick="gradeAndAdvance('hard')" class="bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-rose-500/20">Chưa (1 ngày)</button>
+        <button onclick="gradeAndAdvance('ok')" class="bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-500/20">Tạm (3 ngày)</button>
+        <button onclick="gradeAndAdvance('good')" class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-emerald-500/20">Nhớ (7 ngày)</button>
+      </div>
+    </div>
+    <div id="summary" class="hidden">
+      <div id="summary-body" class="bg-slate-900 border border-slate-800 rounded-xl p-8"></div>
+    </div>
+  </main>
+</body>
+</html>

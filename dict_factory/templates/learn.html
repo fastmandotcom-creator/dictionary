@@ -31,6 +31,14 @@
     </div>
   </header>
   <main class="flex-1 max-w-3xl w-full mx-auto px-4 py-6 space-y-4">
+    <div id="today-card" class="hidden bg-slate-900 border border-emerald-500/20 rounded-xl p-4">
+      <div class="flex items-center justify-between text-xs mb-2">
+        <span class="font-semibold text-slate-200">Hôm nay</span>
+        <a id="today-detail" href="#" class="text-slate-500 hover:text-slate-300">chi tiết →</a>
+      </div>
+      <div id="today-body" class="text-sm text-slate-400"></div>
+      <a id="today-start" href="#" class="block text-center bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg py-2.5 text-sm mt-3 transition">Bắt đầu buổi học</a>
+    </div>
     {% if units_available %}
     <div id="overall-progress" class="hidden bg-slate-900 border border-slate-800 rounded-xl p-4">
       <div class="flex items-center justify-between text-xs mb-2">
@@ -67,7 +75,7 @@
     {% for unit in units %}
     {% if unit.first %}
     <a href="/learn/{{ unit.first }}?base={{ base }}&target={{ target }}{{ extra_qs }}"
-       class="block bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-emerald-500/40 transition group"
+       class="unit-card block bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-emerald-500/40 transition group"
        data-unit-progress data-ids="{{ unit.concept_ids | join(',') }}">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2.5">
@@ -92,13 +100,14 @@
   <script>
     (function () {
       var BASE = '{{ base }}', TARGET = '{{ target }}';
+      var UNITS = {{ units | tojson }};
       var srs = Srs.readSrs(BASE, TARGET);
       var legacy = Srs.readLegacy(BASE, TARGET);
-      function isDone(id) {
-        return Srs.isDone(srs[id], legacy[id]);
-      }
-      var cards = document.querySelectorAll('[data-unit-progress]');
+      function isDone(id) { return Srs.isDone(srs[id], legacy[id]); }
+
       var shown = 0, done = 0;
+      var cards = document.querySelectorAll('[data-unit-progress]');
+      var prevComplete = true;
       cards.forEach(function (card) {
         var ids = card.getAttribute('data-ids').split(',').filter(Boolean);
         var d = 0;
@@ -109,7 +118,51 @@
         var label = card.querySelector('.unit-progress-label');
         if (label && d > 0) label.textContent = d + '/' + ids.length + ' từ';
         shown += ids.length; done += d;
+        // unit gate: a unit is locked until the previous one is >=80% done
+        var complete = ids.length > 0 && (d / ids.length) >= 0.8;
+        if (!prevComplete) {
+          card.classList.add('opacity-50');
+          var tag = card.querySelector('.unit-progress-label');
+          if (tag && tag.textContent.indexOf('/') === -1) tag.textContent = 'khóa — ' + ids.length + ' từ';
+        }
+        prevComplete = complete;
       });
+
+      // "Hôm nay" summary card: new words of the first open unit + due cards
+      var activeUnit = null;
+      for (var u = 0; u < UNITS.length; u++) {
+        var ids2 = UNITS[u].concept_ids;
+        var d2 = 0;
+        for (var k = 0; k < ids2.length; k++) { if (isDone(ids2[k])) d2++; }
+        if (!(ids2.length > 0 && (d2 / ids2.length) >= 0.8)) { activeUnit = UNITS[u]; break; }
+      }
+      var newCount = 0;
+      if (activeUnit) {
+        for (var n = 0; n < activeUnit.concept_ids.length; n++) {
+          var id0 = activeUnit.concept_ids[n];
+          if (!((srs[id0] && srs[id0].grade) || legacy[id0])) newCount++;
+        }
+      }
+      var dueCount = 0;
+      UNITS.forEach(function (unit) {
+        unit.concept_ids.forEach(function (id) { if (Srs.isDue(id, BASE, TARGET)) dueCount++; });
+      });
+      var minutes = newCount + dueCount ? Math.max(1, Math.round(((newCount + dueCount) * 20) / 60)) : 0;
+      var extra = (location.search.match(/exam=[^&]+/) ? '&exam=' + RegExp.$1
+        : (location.search.match(/cefr=[^&]+/) ? '&cefr=' + RegExp.$1 : ''));
+      var today = document.getElementById('today-card');
+      if (today) {
+        var body = document.getElementById('today-body');
+        body.innerHTML = '<span class="text-emerald-400 font-semibold">' + Math.min(newCount, 30) + '</span> từ mới · ' +
+          '<span class="text-amber-400 font-semibold">' + dueCount + '</span> thẻ cần ôn' +
+          (minutes ? ' · <span class="text-slate-300">~' + minutes + ' phút</span>' : '');
+        var start = document.getElementById('today-start');
+        start.href = '/session?base=' + BASE + '&target=' + TARGET + extra + '&new=10';
+        var det = document.getElementById('today-detail');
+        det.href = '/session?base=' + BASE + '&target=' + TARGET + extra + '&new=10';
+        if (newCount + dueCount > 0) today.classList.remove('hidden');
+      }
+
       var overall = document.getElementById('overall-progress');
       if (overall && shown > 0) {
         overall.classList.remove('hidden');
