@@ -18,26 +18,26 @@
         <span class="text-slate-500">→</span>
         <span class="text-sky-400 font-semibold">{{ target_name }}</span>
       </div>
-      <div class="flex items-center gap-3 text-xs text-slate-400">
+      <div class="flex items-center gap-2.5 text-xs text-slate-400">
         <span id="sync-badge" class="hidden items-center gap-1 text-slate-500"></span>
         <button id="export-btn" class="hover:text-white hidden">Xuất</button>
         <button id="import-btn" class="hover:text-white hidden">Nhập</button>
         <input type="file" id="import-file" accept="application/json" class="hidden">
-        <a href="/onboarding?base={{ base }}&target={{ target }}" class="hover:text-white">Đổi cặp</a>
-        <a href="/settings" class="hover:text-white">Cài đặt</a>
+        <a href="/onboarding?base={{ base }}&target={{ target }}" class="hover:text-slate-200 px-1.5 py-1">Đổi cặp</a>
+        <a href="/settings" class="hover:text-slate-200 px-1.5 py-1">Cài đặt</a>
         {% if exam %}
-        <a href="/review?base={{ base }}&target={{ target }}&exam={{ exam }}" class="hover:text-white">Ôn tập</a>
+        <a href="/review?base={{ base }}&target={{ target }}&exam={{ exam }}" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-lg border border-slate-700/60 transition">Ôn tập</a>
         {% elif cefr %}
-        <a href="/review?base={{ base }}&target={{ target }}&cefr={{ cefr }}" class="hover:text-white">Ôn tập</a>
+        <a href="/review?base={{ base }}&target={{ target }}&cefr={{ cefr }}" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-lg border border-slate-700/60 transition">Ôn tập</a>
         {% else %}
-        <a href="/review?base={{ base }}&target={{ target }}" class="hover:text-white">Ôn tập</a>
+        <a href="/review?base={{ base }}&target={{ target }}" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-lg border border-slate-700/60 transition">Ôn tập</a>
         {% endif %}
         {% if exam %}
-        <a href="/listen?base={{ base }}&target={{ target }}&exam={{ exam }}" class="hover:text-emerald-400">Nâng cao</a>
+        <a href="/listen?base={{ base }}&target={{ target }}&exam={{ exam }}" class="bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-lg font-medium transition">Nâng cao</a>
         {% elif cefr %}
-        <a href="/listen?base={{ base }}&target={{ target }}&cefr={{ cefr }}" class="hover:text-emerald-400">Nâng cao</a>
+        <a href="/listen?base={{ base }}&target={{ target }}&cefr={{ cefr }}" class="bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-lg font-medium transition">Nâng cao</a>
         {% else %}
-        <a href="/listen?base={{ base }}&target={{ target }}" class="hover:text-emerald-400">Nâng cao</a>
+        <a href="/listen?base={{ base }}&target={{ target }}" class="bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-lg font-medium transition">Nâng cao</a>
         {% endif %}
       </div>
     </div>

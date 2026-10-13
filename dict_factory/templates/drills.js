@@ -178,27 +178,30 @@
       // one block wrapper: the host container may be a flex row, and the
       // card must keep its natural top-to-bottom layout at any width
       container.innerHTML = '<div class="w-full" id="drill-wrapper">' +
-        '<div class="flex items-center justify-between text-xs text-slate-500 mb-2">' +
-        '<span>' + (state.idx + 1) + '/' + state.total + ' · ' + d.tense.replace('_simple', ' ') + ' · ' + polLabel + '</span>' +
-        '<span>' + (due ? '<span class="text-amber-400">đến hạn ôn</span>' : 'lần đầu') +
-        (d.demo ? ' · <span class="text-slate-600">demo offline</span>' : '') + '</span></div>' +
-        '<div class="flex items-center gap-3 flex-wrap">' +
-        '<button id="dl-listen" class="text-emerald-400 border border-emerald-500/30 rounded-lg px-4 py-2 text-sm hover:bg-emerald-500/10 whitespace-nowrap">&#128266; Nghe <span class="text-[10px] text-slate-500 font-normal">(Ctrl+Space)</span></button>' +
-        '<span class="text-xs text-slate-500 whitespace-nowrap">nghe rồi gõ lại câu</span>' +
-        '<span id="dl-voice-label" class="ml-auto text-[10px] text-slate-600 whitespace-nowrap">giọng: ?</span></div>' +
+        '<div class="flex items-center justify-between text-xs text-slate-500 mb-3">' +
+        '<div class="flex items-center gap-2">' +
+        '<span class="text-xs font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">' + (state.idx + 1) + '/' + state.total + '</span>' +
+        '<span class="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/60 text-[11px] text-slate-300 font-medium">' + d.tense.replace('_simple', ' ') + ' · ' + polLabel + '</span>' +
+        '</div>' +
+        '<div>' + (due ? '<span class="text-amber-400 font-medium">⚡ đến hạn ôn</span>' : '<span class="text-slate-500">lần đầu</span>') +
+        (d.demo ? ' · <span class="text-slate-600">demo offline</span>' : '') + '</div></div>' +
+        '<div class="flex items-center gap-3 flex-wrap mb-1">' +
+        '<button id="dl-listen" class="flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3.5 py-2 text-sm font-semibold hover:bg-emerald-500/20 transition whitespace-nowrap">&#128266; Nghe <span class="text-[10px] text-emerald-500/80 font-normal">(Ctrl+Space)</span></button>' +
+        '<span class="text-xs text-slate-400 whitespace-nowrap">nghe rồi viết lại câu</span>' +
+        '<span id="dl-voice-label" class="ml-auto text-[10px] text-slate-500 font-mono whitespace-nowrap">giọng: ?</span></div>' +
         '<p id="dl-note" class="hidden text-xs text-amber-400/90 mt-2"></p>' +
         '<input id="dl-input" type="text" autocomplete="off" placeholder="Viết lại câu vừa nghe…" ' +
-        'class="mt-4 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500" />' +
+        'class="mt-3 w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition shadow-inner" />' +
         '<div id="dl-asr-note" class="hidden text-xs text-amber-400/90 mt-2"></div>' +
-        '<div id="dl-result" class="hidden mt-3"></div>' +
         '<div class="flex gap-2 mt-3 flex-wrap items-center" id="dl-actions">' +
-        '<button id="dl-check" class="text-xs font-semibold px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 whitespace-nowrap">Chấm câu <span class="text-[10px] text-slate-400 font-normal">(Enter)</span></button>' +
-        '<button id="dl-reveal" class="text-xs px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200 whitespace-nowrap">Hiện đáp án</button>' +
+        '<button id="dl-check" class="text-xs font-semibold px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition whitespace-nowrap">Chấm câu <span class="text-[10px] text-emerald-200 font-normal">(Enter)</span></button>' +
+        '<button id="dl-reveal" class="text-xs px-3.5 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700/80 text-slate-300 hover:text-white transition whitespace-nowrap">Hiện đáp án</button>' +
         (typeof Asr !== 'undefined' && Asr.isSupported() && Srs.readTtsSettings().micEnabled !== false
-          ? '<button id="dl-mic" class="text-xs px-4 py-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 whitespace-nowrap">&#127908; Nói</button>'
+          ? '<button id="dl-mic" class="text-xs px-3.5 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-300 hover:bg-rose-500/20 transition whitespace-nowrap">&#127908; Nói</button>'
           : '') +
-        '<span class="text-[11px] text-slate-500 ml-auto hidden sm:inline">Phím tắt: Enter (chấm/tiếp) · 1/2/3 (tự chấm)</span>' +
+        '<span class="text-[11px] text-slate-500 ml-auto hidden sm:inline">Enter (chấm/tiếp) · 1/2/3 (tự chấm)</span>' +
         '</div>' +
+        '<div id="dl-result" class="hidden mt-4"></div>' +
         '</div>';
       var input = container.querySelector('#dl-input');
       container.querySelector('#dl-listen').onclick = function () {
@@ -304,17 +307,33 @@
 
       var res = container.querySelector('#dl-result');
       res.classList.remove('hidden');
-      res.innerHTML =
-        '<div class="' + (correct ? 'text-emerald-400' : 'text-rose-400') + ' font-semibold text-sm">' +
-        (correct ? 'Đúng! 🎉 <span class="text-xs font-normal text-emerald-300 ml-2">(Nhấn Enter lần nữa để sang câu tiếp)</span>'
-                 : (revealed ? 'Đáp án chuẩn:' : 'Chưa đúng — nghe lại rồi thử nữa.')) + '</div>' +
-        ((!correct && revealed) ? '<div class="text-slate-300 text-sm mt-1 font-mono">' + d.sentence + '</div>' : '') +
-        (d.base_hint ? '<div class="text-slate-500 text-xs mt-1">' + d.base_hint + '</div>' : '') +
-        '<div class="text-xs text-slate-500 mt-2">Tự chấm thẻ này <span class="text-[10px] text-slate-600">(Phím 1: Chưa · 2: Tạm · 3: Nhớ)</span>:</div>' +
-        '<div class="flex gap-2 mt-2 flex-wrap">' +
-        '<button data-g="hard" class="dl-g px-3 py-1.5 rounded-lg text-xs bg-rose-500/10 text-rose-400 border border-rose-500/20 whitespace-nowrap">Chưa (1 ngày)</button>' +
-        '<button data-g="ok" class="dl-g px-3 py-1.5 rounded-lg text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">Tạm (3 ngày)</button>' +
-        '<button data-g="good" class="dl-g px-3 py-1.5 rounded-lg text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap">Nhớ (7 ngày)</button></div>';
+      if (correct) {
+        res.innerHTML =
+          '<div class="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/30">' +
+          '<div class="flex items-center justify-between text-emerald-400 font-bold text-sm mb-1">' +
+          '<span>Đúng! 🎉</span>' +
+          '<span class="text-xs font-normal text-emerald-300">(Nhấn Enter lần nữa để sang câu tiếp)</span></div>' +
+          '<div class="text-white text-base font-medium font-mono my-1 select-all">' + d.sentence + '</div>' +
+          (d.base_hint ? '<div class="text-emerald-300/80 text-xs mt-1">💡 ' + d.base_hint + '</div>' : '') +
+          '<div class="text-xs text-slate-400 mt-3 mb-1.5">Tự chấm thẻ này:</div>' +
+          '<div class="grid grid-cols-3 gap-2">' +
+          '<button data-g="hard" class="dl-g py-2 px-2.5 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-300 border border-rose-500/25 hover:bg-rose-500/20 transition whitespace-nowrap text-center">Chưa (1 ngày)</button>' +
+          '<button data-g="ok" class="dl-g py-2 px-2.5 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/25 hover:bg-amber-500/20 transition whitespace-nowrap text-center">Tạm (3 ngày)</button>' +
+          '<button data-g="good" class="dl-g py-2 px-2.5 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition whitespace-nowrap text-center shadow-sm">Nhớ (7 ngày) <span class="text-[10px] opacity-75 font-normal">(Enter)</span></button></div>' +
+          '</div>';
+      } else {
+        res.innerHTML =
+          '<div class="p-4 rounded-xl bg-rose-950/30 border border-rose-500/30">' +
+          '<div class="text-rose-400 font-bold text-sm mb-1">' + (revealed ? 'Đáp án chuẩn:' : 'Chưa đúng — nghe lại rồi thử nữa.') + '</div>' +
+          '<div class="text-white text-base font-medium font-mono my-1 select-all">' + d.sentence + '</div>' +
+          (d.base_hint ? '<div class="text-slate-400 text-xs mt-1">💡 ' + d.base_hint + '</div>' : '') +
+          '<div class="text-xs text-slate-400 mt-3 mb-1.5">Tự chấm thẻ này <span class="text-[10px] text-slate-500">(Phím 1: Chưa · 2: Tạm · 3: Nhớ)</span>:</div>' +
+          '<div class="grid grid-cols-3 gap-2">' +
+          '<button data-g="hard" class="dl-g py-2 px-2.5 rounded-lg text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition whitespace-nowrap text-center">Chưa (1 ngày) <span class="text-[10px] opacity-75 font-normal">(1)</span></button>' +
+          '<button data-g="ok" class="dl-g py-2 px-2.5 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/25 hover:bg-amber-500/20 transition whitespace-nowrap text-center">Tạm (3 ngày) <span class="text-[10px] opacity-75 font-normal">(2)</span></button>' +
+          '<button data-g="good" class="dl-g py-2 px-2.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/25 hover:bg-emerald-500/20 transition whitespace-nowrap text-center">Nhớ (7 ngày) <span class="text-[10px] opacity-75 font-normal">(3)</span></button></div>' +
+          '</div>';
+      }
       res.querySelectorAll('.dl-g').forEach(function (b) {
         b.onclick = function () {
           submitGrade(b.dataset.g);

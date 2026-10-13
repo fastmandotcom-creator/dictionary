@@ -32,9 +32,10 @@
       list.innerHTML = CONCEPTS.map(function (c, idx) {
         return '<button data-cid="' + c.id + '" data-idx="' + idx + '" class="concept-btn block w-full text-left px-3 py-2.5 rounded-lg ' +
           'hover:bg-slate-800/70 transition border border-transparent">' +
-          '<div class="text-sm font-semibold text-slate-200">' + (c.en || c.id) +
-          ' <span class="text-slate-500 font-normal text-xs">' + c.id + '</span></div>' +
-          '<div class="text-xs text-slate-500">' + c.gloss + ' · ' + c.cefr + '</div></button>';
+          '<div class="flex items-center justify-between gap-1 text-sm font-semibold text-slate-200">' +
+          '<span class="truncate">' + (c.en || c.id) + '</span>' +
+          '<span class="text-[10px] font-mono text-slate-500 font-normal px-1 py-0.5 rounded bg-slate-800/80 shrink-0">' + c.id + '</span></div>' +
+          '<div class="text-xs text-slate-400 truncate mt-0.5">' + c.gloss + ' <span class="text-slate-600">· ' + c.cefr + '</span></div></button>';
       }).join('');
       list.querySelectorAll('.concept-btn').forEach(function (b) {
         b.onclick = function () {
