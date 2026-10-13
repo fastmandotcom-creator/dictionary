@@ -93,6 +93,37 @@
     return a;
   }
 
+  // ---- TTS settings (Phase E5): provider priority, speed, per-language
+  // voice, mic visibility. Stored locally; read on every speak().
+  var TTS_SETTINGS_KEY = 'dict_tts_settings_v1';
+  var TTS_DEFAULTS = { provider: 'auto', rate: 'normal', voiceMap: {}, micEnabled: true };
+
+  function readTtsSettings() {
+    var s = Object.assign({}, TTS_DEFAULTS);
+    try {
+      var raw = localStorage.getItem(TTS_SETTINGS_KEY);
+      if (raw) {
+        var stored = JSON.parse(raw);
+        if (stored && typeof stored === 'object') {
+          s = Object.assign(s, stored);
+          s.voiceMap = stored.voiceMap && typeof stored.voiceMap === 'object' ? stored.voiceMap : {};
+        }
+      }
+    } catch (e) {}
+    s.voiceMap = s.voiceMap || {};
+    return s;
+  }
+
+  function saveTtsSettings(patch) {
+    var s = readTtsSettings();
+    Object.keys(patch || {}).forEach(function (k) {
+      if (patch[k] !== undefined) s[k] = patch[k];
+    });
+    s.voiceMap = s.voiceMap || {};
+    try { localStorage.setItem(TTS_SETTINGS_KEY, JSON.stringify(s)); } catch (e) {}
+    return s;
+  }
+
   // Speaks `text` with a voice for `langCode`.
   //
   // Ladder (Phase E2, mirrors the extension architecture):
@@ -109,11 +140,19 @@
 
   function speak(text, langCode, notify, onSource) {
     if (!text) return;
+    var s = readTtsSettings();
     var lang = String(langCode || '').toLowerCase().split('-')[0];
     var usedStandard = false;
-    // 1) the server standard voice (cached; a repeat is near-instant)
-    if (typeof fetch === 'function') {
-      fetch('/api/tts?lang=' + encodeURIComponent(lang) + '&text=' + encodeURIComponent(text))
+    // Settings override: "browser only" skips the server ladder entirely.
+    var useServer = s.provider !== 'browser' && typeof fetch === 'function';
+    if (useServer) {
+      var rate = s.rate === 'slow' ? 0.7 : 1.0;
+      var voice = s.voiceMap[lang] || '';
+      var qs = 'lang=' + encodeURIComponent(lang) +
+        '&text=' + encodeURIComponent(text) +
+        '&rate=' + rate +
+        (voice ? '&voice=' + encodeURIComponent(voice) : '');
+      fetch('/api/tts?' + qs)
         .then(function (r) {
           if (!r.ok) throw new Error('tts ' + r.status);
           return r.blob();
@@ -122,24 +161,24 @@
           usedStandard = true;
           _ttsSource = 'standard';
           if (onSource) onSource('standard');
-          playAudioBlob(blob, lang, text);
+          playAudioBlob(blob, lang, text, rate);
         })
         .catch(function () {
           if (usedStandard) return;
           // 2) browser floor
-          var fell = webSpeechSpeak(text, langCode, notify);
+          var fell = webSpeechSpeak(text, langCode, notify, rate);
           _ttsSource = fell ? 'browser' : 'none';
           if (onSource) onSource(_ttsSource);
         });
       return;
     }
-    // no fetch at all (very old browser) -> straight to the floor
-    var ok = webSpeechSpeak(text, langCode, notify);
+    // server tier disabled (or no fetch) -> straight to the floor
+    var ok = webSpeechSpeak(text, langCode, notify, s.rate === 'slow' ? 0.7 : 1.0);
     _ttsSource = ok ? 'browser' : 'none';
     if (onSource) onSource(_ttsSource);
   }
 
-  function webSpeechSpeak(text, langCode, notify) {
+  function webSpeechSpeak(text, langCode, notify, rate) {
     if (!('speechSynthesis' in window)) {
       if (notify) notify('Thiết bị không hỗ trợ đọc văn bản.');
       return false;
@@ -156,6 +195,7 @@
     }
     var u = new SpeechSynthesisUtterance(text);
     u.lang = langCode;
+    u.rate = rate || 1;
     if (match) u.voice = match;
     window.speechSynthesis.speak(u);
     if (!match && notify) {
@@ -164,7 +204,7 @@
     return true;
   }
 
-  function playAudioBlob(blob, lang, text) {
+  function playAudioBlob(blob, lang, text, rate) {
     stopTtsAudio();
     var url = URL.createObjectURL(blob);
     _ttsAudio = new Audio(url);
@@ -172,7 +212,7 @@
       // standard voice failed at playback time: fall back to the floor
       if (_ttsSource === 'standard') {
         _ttsSource = 'browser';
-        webSpeechSpeak(text || '', lang, null);
+        webSpeechSpeak(text || '', lang, null, rate || 1);
       }
       URL.revokeObjectURL(url);
     };
@@ -314,6 +354,8 @@
     shuffle: shuffle,
     speak: speak,
     ttsSource: ttsSource,
+    readTtsSettings: readTtsSettings,
+    saveTtsSettings: saveTtsSettings,
     // Phase 2
     nowIso: nowIso,
     touch: touch,

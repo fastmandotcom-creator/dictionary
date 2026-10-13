@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cài đặt giọng đọc &amp; mic</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="min-h-full bg-slate-950 text-slate-100">
+  <script src="/srs.js"></script>
+  <script src="/asr.js"></script>
+  <script>
+    var LANGS = {{ langs | tojson }};
+    var sampleText = "Hello, this is a preview of your voice.";
+
+    function loadVoices() {
+      var langSel = document.getElementById('tts-lang');
+      var voiceSel = document.getElementById('tts-voice');
+      var lang = langSel.value;
+      fetch('/api/tts/voices?lang=' + encodeURIComponent(lang))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data) { voiceSel.innerHTML = '<option>(không có giọng chuẩn)</option>'; return; }
+          var stored = (Srs.readTtsSettings().voiceMap || {})[lang] || '';
+          voiceSel.innerHTML = data.options.map(function (v) {
+            var isDefault = v === data.voice;
+            return '<option value="' + v + '"' + (v === stored ? ' selected' : '') + '>' +
+              (isDefault ? v + ' (mặc định)' : v) + '</option>';
+          }).join('');
+          if (stored && data.options.indexOf(stored) === -1) voiceSel.value = data.options[0];
+        })
+        .catch(function () { voiceSel.innerHTML = '<option>(không tải được danh sách giọng)</option>'; });
+    }
+
+    function saveAll() {
+      var cur = Srs.readTtsSettings();
+      var lang = document.getElementById('tts-lang').value;
+      var voice = document.getElementById('tts-voice').value;
+      cur.voiceMap = cur.voiceMap || {};
+      if (voice) cur.voiceMap[lang] = voice;
+      cur.provider = document.getElementById('prov-auto').checked ? 'auto' : 'browser';
+      cur.rate = document.getElementById('rate-normal').checked ? 'normal' : 'slow';
+      cur.micEnabled = document.getElementById('mic-enabled').checked;
+      Srs.saveTtsSettings(cur);
+      var note = document.getElementById('save-note');
+      note.classList.remove('hidden');
+      setTimeout(function () { note.classList.add('hidden'); }, 2000);
+    }
+
+    function preview() {
+      var text = document.getElementById('preview-text').value || sampleText;
+      var lang = document.getElementById('tts-lang').value;
+      Srs.speak(text, lang, function (msg) {
+        var n = document.getElementById('preview-note');
+        if (msg) n.textContent = msg;
+      }, function (source) {
+        document.getElementById('preview-note').textContent =
+          { standard: 'Đang phát giọng chuẩn (mạng)', browser: 'Đang dùng giọng trình duyệt', none: 'Không có giọng khả dụng.' }[source] || '';
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', function () {
+      var s = Srs.readTtsSettings();
+      var langSel = document.getElementById('tts-lang');
+      langSel.innerHTML = LANGS.map(function (l) {
+        return '<option value="' + l + '"' + (l === 'en' ? ' selected' : '') + '>' + l.toUpperCase() + '</option>';
+      }).join('');
+      document.getElementById('prov-auto').checked = s.provider !== 'browser';
+      document.getElementById('prov-browser').checked = s.provider === 'browser';
+      document.getElementById('rate-normal').checked = s.rate !== 'slow';
+      document.getElementById('rate-slow').checked = s.rate === 'slow';
+      document.getElementById('mic-enabled').checked = s.micEnabled !== false;
+      document.getElementById('tts-lang').onchange = loadVoices;
+      document.getElementById('save-btn').onclick = saveAll;
+      document.getElementById('preview-btn').onclick = preview;
+      loadVoices();
+    });
+  </script>
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-2xl mx-auto px-4 py-3.5 flex items-center justify-between">
+      <div class="text-sm font-semibold">Cài đặt — giọng đọc &amp; mic</div>
+      <a href="/learn?base=vi&target=en" class="text-xs text-slate-400 hover:text-white">← Học</a>
+    </div>
+  </header>
+  <main class="max-w-2xl w-full mx-auto px-4 py-6 space-y-5">
+    <section class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-3">Giọng đọc (TTS)</div>
+      <label class="flex items-center gap-2 text-sm mb-1.5">
+        <input type="radio" name="prov" id="prov-auto" class="accent-emerald-500">
+        <span>Giọng chuẩn (mạng): Edge neural &rarr; Google free &rarr; giọng trình duyệt</span>
+      </label>
+      <label class="flex items-center gap-2 text-sm mb-3">
+        <input type="radio" name="prov" id="prov-browser" class="accent-emerald-500">
+        <span>Chỉ dùng giọng trình duyệt (offline, không gọi mạng)</span>
+      </label>
+      <div class="text-xs text-slate-500 mb-1">Tốc độ đọc</div>
+      <div class="flex gap-3 mb-4">
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="rate" id="rate-normal" class="accent-emerald-500"> Thường</label>
+        <label class="flex items-center gap-2 text-sm"><input type="radio" name="rate" id="rate-slow" class="accent-emerald-500"> Chậm (học)</label>
+      </div>
+      <div class="text-xs text-slate-500 mb-1">Chọn giọng theo ngôn ngữ</div>
+      <div class="flex gap-2">
+        <select id="tts-lang" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm w-40"></select>
+        <select id="tts-voice" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm flex-1"></select>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input id="preview-text" type="text" value="{{ sample_text }}" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
+        <button id="preview-btn" class="text-xs font-semibold px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">&#128266; Nghe thử</button>
+      </div>
+      <div id="preview-note" class="text-xs text-slate-400 mt-2 min-h-[1rem]"></div>
+      <div class="flex items-center gap-3 mt-3">
+        <button id="save-btn" class="text-xs font-semibold px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200">Lưu cài đặt</button>
+        <span id="save-note" class="hidden text-xs text-emerald-400">Đã lưu &#10003;</span>
+      </div>
+      <p class="text-xs text-slate-500 mt-3 leading-relaxed">
+        Giọng chuẩn là giọng neural miễn phí (Edge/Bing), mỗi câu chỉ tổng hợp 1 lần rồi lưu cache —
+        phát lại gần như tức thì. Giọng Anh sẽ KHÔNG bao giờ được dùng cho ngôn ngữ khác (chống fallback sai).
+      </p>
+    </section>
+    <section class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-3">Micro (đikte thay bàn phím)</div>
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" id="mic-enabled" class="accent-emerald-500">
+        <span>Hiển thị nút micro khi luyện nghe&ndash;viết</span>
+      </label>
+      <p class="text-xs text-slate-500 mt-2 leading-relaxed">
+        Nhận giọng chạy hoàn toàn trong trình duyệt (Web Speech) — âm thanh <b>không</b> được tải lên máy chủ.
+        Chỉ có khi trình duyệt hỗ trợ (Chrome/Edge).
+      </p>
+    </section>
+  </main>
+</body>
+</html>

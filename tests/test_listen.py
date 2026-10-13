@@ -57,6 +57,20 @@ def test_asr_js_served() -> None:
     assert "global.Asr" in res.text and "isSupported" in res.text
 
 
+def test_settings_page_renders() -> None:
+    res = client().get("/settings")
+    assert res.status_code == 200
+    body = res.text
+    assert "Cài đặt — giọng đọc &amp; mic" in body
+    assert "tts-voice" in body and "preview-btn" in body and "mic-enabled" in body
+    # 35 language codes are passed to the template
+    assert '"vi"' in body and '"sw"' in body
+
+
+def test_learn_header_links_to_settings() -> None:
+    assert 'Cài đặt' in client().get("/learn?base=vi&target=en").text
+
+
 def test_learn_page_links_to_listen() -> None:
     res = client().get("/learn?base=vi&target=en")
     assert res.status_code == 200

@@ -24,6 +24,7 @@
         <button id="import-btn" class="hover:text-white hidden">Nhập</button>
         <input type="file" id="import-file" accept="application/json" class="hidden">
         <a href="/onboarding?base={{ base }}&target={{ target }}" class="hover:text-white">Đổi cặp</a>
+        <a href="/settings" class="hover:text-white">Cài đặt</a>
         {% if exam %}
         <a href="/review?base={{ base }}&target={{ target }}&exam={{ exam }}" class="hover:text-white">Ôn tập</a>
         {% elif cefr %}

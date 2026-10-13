@@ -297,6 +297,32 @@ def test_listen_audio_button_never_crashes(page) -> None:
     assert label, "a voice-source label must be shown after pressing NGHE"
 
 
+def test_settings_page_saves_tts_preferences(page) -> None:
+    """Phase E5: /settings loads the 35-language voice catalog, saves
+    preferences to localStorage, and previews without crashing."""
+    page.goto(f"{page.server_url}/settings")
+    page.wait_for_selector("#tts-voice option:not(:first-child)", state="attached", timeout=20000)
+    # the language dropdown carries all 35 product codes
+    n_langs = page.eval_on_selector_all("#tts-lang option", "els => els.length")
+    assert n_langs == 35
+    # pick a non-default English voice + slow rate, then save
+    page.select_option("#tts-lang", "en")
+    page.wait_for_selector("#tts-voice option[value='en-GB-LibbyNeural']", state="attached", timeout=20000)
+    page.select_option("#tts-voice", "en-GB-LibbyNeural")
+    page.check("#rate-slow")
+    page.click("#save-btn")
+    page.wait_for_selector("#save-note:not(.hidden)", timeout=5000)
+    stored = page.evaluate(
+        """() => JSON.parse(localStorage.getItem('dict_tts_settings_v1') || '{}')"""
+    )
+    assert stored["voiceMap"]["en"] == "en-GB-LibbyNeural"
+    assert stored["rate"] == "slow"
+    # preview must not raise
+    page.click("#preview-btn")
+    page.wait_for_timeout(1000)
+    assert_no_js_errors(page)
+
+
 def test_listen_mic_dictation_button(page) -> None:
     """Phase E3: the mic dictation button appears when the browser supports
     Web Speech (Chrome does) and its hidden path never raises."""

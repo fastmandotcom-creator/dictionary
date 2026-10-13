@@ -1,0 +1,399 @@
+{
+ "en": {
+  "default": "en-US-AriaNeural",
+  "options": [
+   "en-US-AriaNeural",
+   "en-AU-NatashaNeural",
+   "en-AU-WilliamNeural",
+   "en-CA-ClaraNeural",
+   "en-CA-LiamNeural",
+   "en-HK-SamNeural",
+   "en-HK-YanNeural",
+   "en-IN-NeerjaNeural",
+   "en-IN-PrabhatNeural",
+   "en-IE-ConnorNeural",
+   "en-IE-EmilyNeural",
+   "en-KE-AsiliaNeural",
+   "en-KE-ChilembaNeural",
+   "en-NZ-MitchellNeural",
+   "en-NZ-MollyNeural",
+   "en-NG-AbeoNeural",
+   "en-NG-EzinneNeural",
+   "en-PH-JamesNeural",
+   "en-PH-RosaNeural",
+   "en-SG-LunaNeural",
+   "en-SG-WayneNeural",
+   "en-ZA-LeahNeural",
+   "en-ZA-LukeNeural",
+   "en-TZ-ElimuNeural",
+   "en-TZ-ImaniNeural",
+   "en-GB-LibbyNeural",
+   "en-GB-MaisieNeural",
+   "en-GB-RyanNeural",
+   "en-GB-SoniaNeural",
+   "en-GB-ThomasNeural",
+   "en-US-AnaNeural",
+   "en-US-ChristopherNeural",
+   "en-US-EricNeural",
+   "en-US-GuyNeural",
+   "en-US-JennyNeural",
+   "en-US-MichelleNeural",
+   "en-US-RogerNeural",
+   "en-US-SteffanNeural"
+  ]
+ },
+ "vi": {
+  "default": "vi-VN-HoaiMyNeural",
+  "options": [
+   "vi-VN-HoaiMyNeural",
+   "vi-VN-NamMinhNeural"
+  ]
+ },
+ "zh": {
+  "default": "zh-CN-XiaoxiaoNeural",
+  "options": [
+   "zh-CN-XiaoxiaoNeural",
+   "zh-HK-HiuGaaiNeural",
+   "zh-HK-HiuMaanNeural",
+   "zh-HK-WanLungNeural",
+   "zh-CN-XiaoyiNeural",
+   "zh-CN-YunjianNeural",
+   "zh-CN-YunxiNeural",
+   "zh-CN-YunxiaNeural",
+   "zh-CN-YunyangNeural",
+   "zh-CN-liaoning-XiaobeiNeural",
+   "zh-TW-HsiaoChenNeural",
+   "zh-TW-YunJheNeural",
+   "zh-TW-HsiaoYuNeural",
+   "zh-CN-shaanxi-XiaoniNeural"
+  ]
+ },
+ "ja": {
+  "default": "ja-JP-NanamiNeural",
+  "options": [
+   "ja-JP-NanamiNeural",
+   "ja-JP-KeitaNeural"
+  ]
+ },
+ "ko": {
+  "default": "ko-KR-SunHiNeural",
+  "options": [
+   "ko-KR-SunHiNeural",
+   "ko-KR-InJoonNeural"
+  ]
+ },
+ "hi": {
+  "default": "hi-IN-SwaraNeural",
+  "options": [
+   "hi-IN-SwaraNeural",
+   "hi-IN-MadhurNeural"
+  ]
+ },
+ "es": {
+  "default": "es-ES-ElviraNeural",
+  "options": [
+   "es-ES-ElviraNeural",
+   "es-AR-ElenaNeural",
+   "es-AR-TomasNeural",
+   "es-BO-MarceloNeural",
+   "es-BO-SofiaNeural",
+   "es-CL-CatalinaNeural",
+   "es-CL-LorenzoNeural",
+   "es-CO-GonzaloNeural",
+   "es-CO-SalomeNeural",
+   "es-CR-JuanNeural",
+   "es-CR-MariaNeural",
+   "es-CU-BelkysNeural",
+   "es-CU-ManuelNeural",
+   "es-DO-EmilioNeural",
+   "es-DO-RamonaNeural",
+   "es-EC-AndreaNeural",
+   "es-EC-LuisNeural",
+   "es-SV-LorenaNeural",
+   "es-SV-RodrigoNeural",
+   "es-GQ-JavierNeural",
+   "es-GQ-TeresaNeural",
+   "es-GT-AndresNeural",
+   "es-GT-MartaNeural",
+   "es-HN-CarlosNeural",
+   "es-HN-KarlaNeural",
+   "es-MX-DaliaNeural",
+   "es-MX-JorgeNeural",
+   "es-NI-FedericoNeural",
+   "es-NI-YolandaNeural",
+   "es-PA-MargaritaNeural",
+   "es-PA-RobertoNeural",
+   "es-PY-MarioNeural",
+   "es-PY-TaniaNeural",
+   "es-PE-AlexNeural",
+   "es-PE-CamilaNeural",
+   "es-PR-KarinaNeural",
+   "es-PR-VictorNeural",
+   "es-ES-AlvaroNeural",
+   "es-US-AlonsoNeural",
+   "es-US-PalomaNeural",
+   "es-UY-MateoNeural",
+   "es-UY-ValentinaNeural",
+   "es-VE-PaolaNeural",
+   "es-VE-SebastianNeural"
+  ]
+ },
+ "fr": {
+  "default": "fr-FR-DeniseNeural",
+  "options": [
+   "fr-FR-DeniseNeural",
+   "fr-BE-CharlineNeural",
+   "fr-BE-GerardNeural",
+   "fr-CA-AntoineNeural",
+   "fr-CA-JeanNeural",
+   "fr-CA-SylvieNeural",
+   "fr-FR-EloiseNeural",
+   "fr-FR-HenriNeural",
+   "fr-CH-ArianeNeural",
+   "fr-CH-FabriceNeural"
+  ]
+ },
+ "de": {
+  "default": "de-DE-KatjaNeural",
+  "options": [
+   "de-DE-KatjaNeural",
+   "de-AT-IngridNeural",
+   "de-AT-JonasNeural",
+   "de-DE-AmalaNeural",
+   "de-DE-ConradNeural",
+   "de-DE-KillianNeural",
+   "de-CH-JanNeural",
+   "de-CH-LeniNeural"
+  ]
+ },
+ "pt": {
+  "default": "pt-BR-FranciscaNeural",
+  "options": [
+   "pt-BR-FranciscaNeural",
+   "pt-BR-AntonioNeural",
+   "pt-PT-DuarteNeural",
+   "pt-PT-RaquelNeural"
+  ]
+ },
+ "ru": {
+  "default": "ru-RU-SvetlanaNeural",
+  "options": [
+   "ru-RU-SvetlanaNeural",
+   "ru-RU-DmitryNeural"
+  ]
+ },
+ "ar": {
+  "default": "ar-SA-ZariyahNeural",
+  "options": [
+   "ar-SA-ZariyahNeural",
+   "ar-DZ-AminaNeural",
+   "ar-DZ-IsmaelNeural",
+   "ar-BH-AliNeural",
+   "ar-BH-LailaNeural",
+   "ar-EG-SalmaNeural",
+   "ar-EG-ShakirNeural",
+   "ar-IQ-BasselNeural",
+   "ar-IQ-RanaNeural",
+   "ar-JO-SanaNeural",
+   "ar-JO-TaimNeural",
+   "ar-KW-FahedNeural",
+   "ar-KW-NouraNeural",
+   "ar-LB-LaylaNeural",
+   "ar-LB-RamiNeural",
+   "ar-LY-ImanNeural",
+   "ar-LY-OmarNeural",
+   "ar-MA-JamalNeural",
+   "ar-MA-MounaNeural",
+   "ar-OM-AbdullahNeural",
+   "ar-OM-AyshaNeural",
+   "ar-QA-AmalNeural",
+   "ar-QA-MoazNeural",
+   "ar-SA-HamedNeural",
+   "ar-SY-AmanyNeural",
+   "ar-SY-LaithNeural",
+   "ar-TN-HediNeural",
+   "ar-TN-ReemNeural",
+   "ar-AE-FatimaNeural",
+   "ar-AE-HamdanNeural",
+   "ar-YE-MaryamNeural",
+   "ar-YE-SalehNeural"
+  ]
+ },
+ "bn": {
+  "default": "bn-BD-NabanitaNeural",
+  "options": [
+   "bn-BD-NabanitaNeural",
+   "bn-BD-PradeepNeural",
+   "bn-IN-BashkarNeural",
+   "bn-IN-TanishaaNeural"
+  ]
+ },
+ "id": {
+  "default": "id-ID-GadisNeural",
+  "options": [
+   "id-ID-GadisNeural",
+   "id-ID-ArdiNeural"
+  ]
+ },
+ "ms": {
+  "default": "ms-MY-YasminNeural",
+  "options": [
+   "ms-MY-YasminNeural",
+   "ms-MY-OsmanNeural"
+  ]
+ },
+ "th": {
+  "default": "th-TH-PremwadeeNeural",
+  "options": [
+   "th-TH-PremwadeeNeural",
+   "th-TH-NiwatNeural"
+  ]
+ },
+ "tr": {
+  "default": "tr-TR-EmelNeural",
+  "options": [
+   "tr-TR-EmelNeural",
+   "tr-TR-AhmetNeural"
+  ]
+ },
+ "it": {
+  "default": "it-IT-ElsaNeural",
+  "options": [
+   "it-IT-ElsaNeural",
+   "it-IT-DiegoNeural",
+   "it-IT-IsabellaNeural"
+  ]
+ },
+ "nl": {
+  "default": "nl-NL-ColetteNeural",
+  "options": [
+   "nl-NL-ColetteNeural",
+   "nl-BE-ArnaudNeural",
+   "nl-BE-DenaNeural",
+   "nl-NL-FennaNeural",
+   "nl-NL-MaartenNeural"
+  ]
+ },
+ "pl": {
+  "default": "pl-PL-ZofiaNeural",
+  "options": [
+   "pl-PL-ZofiaNeural",
+   "pl-PL-MarekNeural"
+  ]
+ },
+ "uk": {
+  "default": "uk-UA-OstapNeural",
+  "options": [
+   "uk-UA-OstapNeural",
+   "uk-UA-PolinaNeural"
+  ]
+ },
+ "el": {
+  "default": "el-GR-AthinaNeural",
+  "options": [
+   "el-GR-AthinaNeural",
+   "el-GR-NestorasNeural"
+  ]
+ },
+ "cs": {
+  "default": "cs-CZ-AntoninNeural",
+  "options": [
+   "cs-CZ-AntoninNeural",
+   "cs-CZ-VlastaNeural"
+  ]
+ },
+ "sv": {
+  "default": "sv-SE-MattiasNeural",
+  "options": [
+   "sv-SE-MattiasNeural",
+   "sv-SE-SofieNeural"
+  ]
+ },
+ "da": {
+  "default": "da-DK-ChristelNeural",
+  "options": [
+   "da-DK-ChristelNeural",
+   "da-DK-JeppeNeural"
+  ]
+ },
+ "fi": {
+  "default": "fi-FI-HarriNeural",
+  "options": [
+   "fi-FI-HarriNeural",
+   "fi-FI-NooraNeural"
+  ]
+ },
+ "no": {
+  "default": "nb-NO-FinnNeural",
+  "options": [
+   "nb-NO-FinnNeural",
+   "nb-NO-PernilleNeural"
+  ]
+ },
+ "hu": {
+  "default": "hu-HU-NoemiNeural",
+  "options": [
+   "hu-HU-NoemiNeural",
+   "hu-HU-TamasNeural"
+  ]
+ },
+ "ro": {
+  "default": "ro-RO-AlinaNeural",
+  "options": [
+   "ro-RO-AlinaNeural",
+   "ro-RO-EmilNeural"
+  ]
+ },
+ "he": {
+  "default": "he-IL-AvriNeural",
+  "options": [
+   "he-IL-AvriNeural",
+   "he-IL-HilaNeural"
+  ]
+ },
+ "fa": {
+  "default": "fa-IR-DilaraNeural",
+  "options": [
+   "fa-IR-DilaraNeural",
+   "fa-IR-FaridNeural"
+  ]
+ },
+ "ur": {
+  "default": "ur-IN-GulNeural",
+  "options": [
+   "ur-IN-GulNeural",
+   "ur-IN-SalmanNeural",
+   "ur-PK-AsadNeural",
+   "ur-PK-UzmaNeural"
+  ]
+ },
+ "ta": {
+  "default": "ta-IN-PallaviNeural",
+  "options": [
+   "ta-IN-PallaviNeural",
+   "ta-IN-ValluvarNeural",
+   "ta-MY-KaniNeural",
+   "ta-MY-SuryaNeural",
+   "ta-SG-AnbuNeural",
+   "ta-SG-VenbaNeural",
+   "ta-LK-KumarNeural",
+   "ta-LK-SaranyaNeural"
+  ]
+ },
+ "te": {
+  "default": "te-IN-MohanNeural",
+  "options": [
+   "te-IN-MohanNeural",
+   "te-IN-ShrutiNeural"
+  ]
+ },
+ "sw": {
+  "default": "sw-KE-RafikiNeural",
+  "options": [
+   "sw-KE-RafikiNeural",
+   "sw-KE-ZuriNeural",
+   "sw-TZ-DaudiNeural",
+   "sw-TZ-RehemaNeural"
+  ]
+ }
+}

@@ -11,16 +11,18 @@ and the system refuses to play an English voice for a non-English language.
 
 Vendors (best first): Microsoft Edge neural TTS (edge-tts), Google free TTS
 (gTTS). Both are free; audio is cached (``out/tts_cache.db`` + in-memory LRU)
-so a given (lang, voice, text) is synthesized once.
+so a given (lang, voice, rate, text) is synthesized once.
 """
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import sqlite3
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
+from pathlib import Path
 
 from dict_factory.config import OUT_DIR
 
@@ -28,44 +30,17 @@ TTS_CACHE_DB = OUT_DIR / "tts_cache.db"
 MAX_TEXT_LEN = 300
 LRU_MAX = 32
 
-# 35 product languages -> default Microsoft Edge neural voice
-# (ported from the extension's bingTtsVoices catalog, default voice per language).
+# Full per-language voice catalog (35 product languages -> default Edge
+# neural voice + every regional option), ported from the extension's
+# bingTtsVoices. The first option is the default for that language.
+_VOICE_DATA_PATH = Path(__file__).resolve().parent / "tts_voices.json"
+_VOICE_DATA: dict[str, dict[str, object]] = json.loads(_VOICE_DATA_PATH.read_text(encoding="utf-8"))
+
 VOICE_CATALOG: dict[str, str] = {
-    "en": "en-US-AriaNeural",
-    "vi": "vi-VN-HoaiMyNeural",
-    "zh": "zh-CN-XiaoxiaoNeural",
-    "ja": "ja-JP-NanamiNeural",
-    "ko": "ko-KR-SunHiNeural",
-    "hi": "hi-IN-SwaraNeural",
-    "es": "es-ES-ElviraNeural",
-    "fr": "fr-FR-DeniseNeural",
-    "de": "de-DE-KatjaNeural",
-    "pt": "pt-BR-FranciscaNeural",
-    "ru": "ru-RU-SvetlanaNeural",
-    "ar": "ar-SA-ZariyahNeural",
-    "bn": "bn-BD-NabanitaNeural",
-    "id": "id-ID-GadisNeural",
-    "ms": "ms-MY-YasminNeural",
-    "th": "th-TH-PremwadeeNeural",
-    "tr": "tr-TR-EmelNeural",
-    "it": "it-IT-ElsaNeural",
-    "nl": "nl-NL-ColetteNeural",
-    "pl": "pl-PL-ZofiaNeural",
-    "uk": "uk-UA-OstapNeural",
-    "el": "el-GR-AthinaNeural",
-    "cs": "cs-CZ-AntoninNeural",
-    "sv": "sv-SE-MattiasNeural",
-    "da": "da-DK-ChristelNeural",
-    "fi": "fi-FI-HarriNeural",
-    "no": "nb-NO-FinnNeural",
-    "hu": "hu-HU-NoemiNeural",
-    "ro": "ro-RO-AlinaNeural",
-    "he": "he-IL-AvriNeural",
-    "fa": "fa-IR-DilaraNeural",
-    "ur": "ur-IN-GulNeural",
-    "ta": "ta-IN-PallaviNeural",
-    "te": "te-IN-MohanNeural",
-    "sw": "sw-KE-RafikiNeural",
+    code: str(data["default"]) for code, data in _VOICE_DATA.items()
+}
+VOICE_OPTIONS: dict[str, list[str]] = {
+    code: [str(v) for v in data["options"]] for code, data in _VOICE_DATA.items()
 }
 
 # Documented alias families (same as the extension): 'no' is spoken in
@@ -105,15 +80,22 @@ def allowed_families(lang: str) -> set[str]:
     return {code, VOICE_ALIAS.get(code, "")} - {""}
 
 
-def resolve_voice(lang: str) -> str:
+def resolve_voice(lang: str, voice: str | None = None) -> str:
     """Catalog voice for a product language (aliases no->nb family, he->iw).
 
-    Raises TtsVoiceError when the language is unknown or the voice's family
-    would not match the language (no silent English fallback)."""
+    With `voice` given (a user-selected option), it must belong to the
+    language's catalog options and keep the correct family. Raises
+    TtsVoiceError when the language is unknown, the voice is not catalogued
+    for it, or the family would not match (no silent English fallback)."""
     code = _primary_subtag(lang)
-    voice = VOICE_CATALOG.get(code)
-    if voice is None:
+    options = VOICE_OPTIONS.get(code)
+    if options is None:
         raise TtsVoiceError(f"no TTS voice catalogued for language {code!r}")
+    if voice:
+        if voice not in options:
+            raise TtsVoiceError(f"voice {voice!r} is not offered for language {code!r}")
+    else:
+        voice = VOICE_CATALOG[code]
     family = voice.split("-")[0]
     if family not in allowed_families(code):
         raise TtsVoiceError(f"voice {voice!r} family {family!r} does not match language {code!r}")
@@ -121,12 +103,15 @@ def resolve_voice(lang: str) -> str:
 
 
 def voice_info(lang: str) -> dict[str, str]:
-    voice = resolve_voice(lang)
     code = _primary_subtag(lang)
+    options = VOICE_OPTIONS.get(code)
+    if options is None:
+        raise TtsVoiceError(f"no TTS voice catalogued for language {code!r}")
     return {
         "lang": code,
-        "voice": voice,
-        "family": voice.split("-")[0],
+        "voice": VOICE_CATALOG.get(code, options[0]),
+        "options": list(options),
+        "family": VOICE_CATALOG.get(code, options[0]).split("-")[0],
         "alias": VOICE_ALIAS.get(code, ""),
     }
 
@@ -140,7 +125,7 @@ class TtsVendor:
 
     name: str = ""
 
-    def synthesize(self, text: str, voice: str, lang: str) -> tuple[bytes, str]:
+    def synthesize(self, text: str, voice: str, lang: str, rate: float = 1.0) -> tuple[bytes, str]:
         raise NotImplementedError
 
 
@@ -149,11 +134,11 @@ class EdgeTtsVendor(TtsVendor):
 
     name = "edge"
 
-    def synthesize(self, text: str, voice: str, lang: str) -> tuple[bytes, str]:
+    def synthesize(self, text: str, voice: str, lang: str, rate: float = 1.0) -> tuple[bytes, str]:
         import edge_tts
 
         async def _run() -> bytes:
-            communicate = edge_tts.Communicate(text=text, voice=voice)
+            communicate = edge_tts.Communicate(text=text, voice=voice, rate=f"{int((rate - 1) * 100)}%")
             chunks: list[bytes] = []
             async for chunk in communicate.stream():
                 if chunk.get("type") == "audio":
@@ -171,13 +156,14 @@ class GoogleFreeTtsVendor(TtsVendor):
 
     name = "google"
 
-    def synthesize(self, text: str, voice: str, lang: str) -> tuple[bytes, str]:
+    def synthesize(self, text: str, voice: str, lang: str, rate: float = 1.0) -> tuple[bytes, str]:
         import io
 
         from gtts import gTTS
 
         data = io.BytesIO()
-        gTTS(text=text, lang=_GTTS_CODES[_primary_subtag(lang)]).write_to_fp(data)
+        # gTTS only offers normal or slow; map rate 0.7 -> slow
+        gTTS(text=text, lang=_GTTS_CODES[_primary_subtag(lang)], slow=(rate < 1.0)).write_to_fp(data)
         audio = data.getvalue()
         if not audio:
             raise RuntimeError("gTTS returned no audio")
@@ -210,8 +196,10 @@ class VendorHealth:
 # Cache (persist + in-memory LRU)
 # ---------------------------------------------------------------------------
 
-def _cache_key(lang: str, voice: str, text: str) -> str:
-    return hashlib.sha1(f"{_primary_subtag(lang)}|{voice}|{text}".encode("utf-8")).hexdigest()
+def _cache_key(lang: str, voice: str, rate: float, text: str) -> str:
+    return hashlib.sha1(
+        f"{_primary_subtag(lang)}|{voice}|{rate:g}|{text}".encode("utf-8")
+    ).hexdigest()
 
 
 def _ensure_cache_schema(conn: sqlite3.Connection) -> None:
@@ -273,19 +261,23 @@ def synthesize_cached(
     lang: str,
     text: str,
     *,
+    voice: str | None = None,
+    rate: float = 1.0,
     vendors: list[TtsVendor] | None = None,
     health: VendorHealth | None = None,
     cache: sqlite3.Connection | None = None,
 ) -> TtsResult:
-    """Cache-first synthesis. One vendor call per unique (lang, voice, text);
-    repeat plays come from memory, then the persistent cache."""
+    """Cache-first synthesis. One vendor call per unique
+    (lang, voice, rate, text); repeat plays come from memory, then the
+    persistent cache."""
     text = (text or "").strip()
     if not text:
         raise TtsError("empty text")
     if len(text) > MAX_TEXT_LEN:
         raise TtsError(f"text longer than {MAX_TEXT_LEN} chars")
-    voice = resolve_voice(lang)  # raises TtsVoiceError (400) on unknown/mismatched lang
-    key = _cache_key(lang, voice, text)
+    rate = 0.7 if rate < 1.0 else 1.0  # only two speeds are meaningful
+    resolved_voice = resolve_voice(lang, voice)  # raises TtsVoiceError (400)
+    key = _cache_key(lang, resolved_voice, rate, text)
 
     hit = _MEM_CACHE.get(key)
     if hit is not None:
@@ -301,13 +293,13 @@ def synthesize_cached(
     try:
         row = conn.execute("SELECT mime, data FROM tts_cache WHERE key = ?", (key,)).fetchone()
         if row is not None:
-            _MEM_CACHE.put(key, (row[1], row[0], voice))
+            _MEM_CACHE.put(key, (row[1], row[0], resolved_voice))
             conn.execute(
                 "UPDATE tts_cache SET hits = hits + 1, created_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE key = ?",
                 (key,),
             )
             conn.commit()
-            return TtsResult(row[1], row[0], voice, "cache")
+            return TtsResult(row[1], row[0], resolved_voice, "cache")
     finally:
         if not persistent:
             conn.close()
@@ -320,7 +312,7 @@ def synthesize_cached(
             errors.append(f"{vendor.name}: cooling down")
             continue
         try:
-            audio, mime = vendor.synthesize(text, voice, lang)
+            audio, mime = vendor.synthesize(text, resolved_voice, lang, rate)
         except Exception as exc:  # noqa: BLE001 - vendor surface is untyped
             health.record_failure(vendor)
             errors.append(f"{vendor.name}: {exc}")
@@ -335,14 +327,14 @@ def synthesize_cached(
                 VALUES (?,?,?,?,?,?)
                 ON CONFLICT(key) DO UPDATE SET hits = hits + 1
                 """,
-                (key, _primary_subtag(lang), voice, mime, audio, now),
+                (key, _primary_subtag(lang), resolved_voice, mime, audio, now),
             )
             persistent_cache.commit()
         finally:
             if cache is None:
                 persistent_cache.close()
-        _MEM_CACHE.put(key, (audio, mime, voice))
-        return TtsResult(audio, mime, voice, vendor.name)
+        _MEM_CACHE.put(key, (audio, mime, resolved_voice))
+        return TtsResult(audio, mime, resolved_voice, vendor.name)
     raise TtsVendorError("; ".join(errors) or "no TTS vendor configured")
 
 

@@ -447,6 +447,24 @@ async def listen_view(
     )
 
 
+@app.get("/settings", response_class=HTMLResponse)
+@app.head("/settings", response_class=HTMLResponse)
+async def settings_view(request: Request):
+    """TTS + mic settings (Phase E5): provider priority, speed, per-language
+    voice from the 35-language catalog, mic visibility. Client-side
+    persistence via Srs.readTtsSettings/saveTtsSettings."""
+    from dict_factory.languages import LANGUAGES
+
+    return templates.TemplateResponse(
+        request=request,
+        name="settings.html",
+        context={
+            "langs": sorted(LANGUAGES),
+            "sample_text": "Hello, this is a preview of your voice.",
+        },
+    )
+
+
 @app.get("/session", response_class=HTMLResponse)
 @app.head("/session", response_class=HTMLResponse)
 async def session_view(
@@ -553,7 +571,8 @@ async def api_placement_questions(base: str = Query("vi"), target: str = Query("
 
 @app.get("/api/tts/voices")
 async def api_tts_voices(lang: str = Query("en")):
-    """Which standard voice the TTS service uses for a language (family-guarded)."""
+    """Which standard voices the TTS service offers for a language
+    (family-guarded; `options` feeds the settings UI voice picker)."""
     from dict_factory.tts import TtsVoiceError, voice_info
 
     try:
@@ -567,20 +586,25 @@ async def api_tts(
     request: Request,
     lang: str = Query("en"),
     text: str = Query(..., min_length=1),
+    voice: str = Query(""),
+    rate: float = Query(1.0),
 ):
     """Synthesize `text` with the standard neural voice for `lang` (cached).
 
-    Cache-first: repeat requests are served from memory / out/tts_cache.db.
-    400 = unknown language / wrong-family voice / text too long (the client
-    must then use its browser floor and say so); 503 = every free vendor is
-    down (never a generic 500, never an English voice for another language).
+    `voice` may pin one of the language's catalogued options (settings UI);
+    `rate` is 1.0 (normal) or 0.7 (slow). Cache-first: repeat requests are
+    served from memory / out/tts_cache.db.
+    400 = unknown language / non-catalogued voice / wrong-family voice /
+    text too long (the client must then use its browser floor and say so);
+    503 = every free vendor is down (never a generic 500, never an English
+    voice for another language).
     """
     from fastapi.responses import Response
 
     import dict_factory.tts as tts
 
     try:
-        result = tts.synthesize_cached(lang, text)
+        result = tts.synthesize_cached(lang, text, voice=voice or None, rate=rate)
     except tts.TtsVoiceError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except tts.TtsVendorError as exc:  # before the base TtsError: vendors down = 503

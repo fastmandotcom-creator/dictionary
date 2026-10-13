@@ -188,7 +188,9 @@
         '<div class="flex gap-2 mt-3" id="dl-actions">' +
         '<button id="dl-check" class="text-xs font-semibold px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200">Chấm câu</button>' +
         '<button id="dl-reveal" class="text-xs px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200">Hiện đáp án</button>' +
-        (typeof Asr !== 'undefined' && Asr.isSupported() ? '<button id="dl-mic" class="text-xs px-4 py-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20">&#127908; Nói</button>' : '') +
+        (typeof Asr !== 'undefined' && Asr.isSupported() && Srs.readTtsSettings().micEnabled !== false
+          ? '<button id="dl-mic" class="text-xs px-4 py-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20">&#127908; Nói</button>'
+          : '') +
         '</div>';
       var input = container.querySelector('#dl-input');
       container.querySelector('#dl-listen').onclick = function () {

@@ -95,3 +95,38 @@ def test_none_when_api_down_and_no_browser_speech() -> None:
     """)
     assert r["source"] == "none"
     assert r["notified"]
+
+
+def test_settings_provider_browser_skips_server() -> None:
+    r = _run(_PREAMBLE + f"""
+      let fetched = 0;
+      global.fetch = async () => {{ fetched++; return {{ ok: true, status: 200, blob: async () => 'X' }}; }};
+      global.SpeechSynthesisUtterance = function (t) {{ this.text = t; }};
+      global.window.speechSynthesis = {{ getVoices: () => ([{{ lang: 'en-US' }}]), speak() {{}} }};
+      eval(fs.readFileSync({str(T / 'srs.js')!r}, 'utf8'));
+      Srs.saveTtsSettings({{ provider: 'browser' }});
+      Srs.speak('hello', 'en', () => {{}}, () => {{}});
+      setTimeout(() => {{
+        console.log(JSON.stringify({{ source: Srs.ttsSource(), fetched }}));
+      }}, 50);
+    """)
+    assert r["fetched"] == 0, "provider=browser must not call /api/tts"
+    assert r["source"] == "browser"
+
+
+def test_settings_voice_and_slow_rate_in_url() -> None:
+    r = _run(_PREAMBLE + f"""
+      let url = null;
+      global.fetch = async (u) => {{ url = String(u); return {{ ok: false, status: 503 }}; }};
+      global.SpeechSynthesisUtterance = function (t) {{ this.text = t; this.rate = 1; }};
+      global.window.speechSynthesis = {{ getVoices: () => ([{{ lang: 'vi-VN' }}]), speak(u) {{ global.__rate = u.rate; }} }};
+      eval(fs.readFileSync({str(T / 'srs.js')!r}, 'utf8'));
+      Srs.saveTtsSettings({{ rate: 'slow', voiceMap: {{ vi: 'vi-VN-NamMinhNeural' }} }});
+      Srs.speak('xin chào', 'vi', () => {{}}, () => {{}});
+      setTimeout(() => {{
+        console.log(JSON.stringify({{ url, fallbackRate: global.__rate || null }}));
+      }}, 50);
+    """)
+    assert "voice=vi-VN-NamMinhNeural" in r["url"]
+    assert "rate=0.7" in r["url"]
+    assert r["fallbackRate"] == 0.7

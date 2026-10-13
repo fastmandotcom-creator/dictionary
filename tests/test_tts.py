@@ -5,6 +5,7 @@ import sqlite3
 import pytest
 
 from dict_factory.languages import LANGUAGES
+from dict_factory.languages import LANGUAGES
 import dict_factory.tts as tts
 
 
@@ -14,9 +15,11 @@ class FakeVendor:
         self.ok = ok
         self.audio = audio
         self.calls = 0
+        self.last = None
 
-    def synthesize(self, text: str, voice: str, lang: str):
+    def synthesize(self, text: str, voice: str, lang: str, rate: float = 1.0):
         self.calls += 1
+        self.last = {"text": text, "voice": voice, "lang": lang, "rate": rate}
         if not self.ok:
             raise RuntimeError(f"{self.name} is down")
         return self.audio, "audio/mpeg"
@@ -73,7 +76,7 @@ def test_cache_first_single_vendor_call(tmp_path) -> None:
     r4 = tts.synthesize_cached("vi", "tạm biệt", vendors=[vendor], health=health, cache=cache2)
     assert r4.source == "cache"
     assert vendor.calls == 2
-    key = tts._cache_key("vi", tts.VOICE_CATALOG["vi"], "tạm biệt")
+    key = tts._cache_key("vi", tts.VOICE_CATALOG["vi"], 1.0, "tạm biệt")
     assert cache2.execute("SELECT hits FROM tts_cache WHERE key = ?", (key,)).fetchone() is not None
     cache.close()
     cache2.close()
@@ -103,6 +106,34 @@ def test_text_length_guard() -> None:
         tts.synthesize_cached("en", "   ", vendors=[FakeVendor("f")], cache=_tmp_cache())
 
 
+def test_voice_and_rate_parameters(tmp_path) -> None:
+    def file_cache() -> sqlite3.Connection:
+        return tts._open_cache(str(tmp_path / "tts.db"))
+
+    cache = file_cache()
+    vendor = FakeVendor("fake")
+    health = tts.VendorHealth()
+    # a non-default, catalogued voice for vi
+    r = tts.synthesize_cached("vi", "chào bạn", voice="vi-VN-NamMinhNeural",
+                              vendors=[vendor], health=health, cache=cache)
+    assert r.voice == "vi-VN-NamMinhNeural"
+    assert vendor.last["voice"] == "vi-VN-NamMinhNeural"
+    # slow rate is honored and produces a distinct cache entry
+    r2 = tts.synthesize_cached("vi", "chào bạn", voice="vi-VN-NamMinhNeural", rate=0.7,
+                               vendors=[vendor], health=health, cache=cache)
+    assert vendor.calls == 2
+    assert vendor.last["rate"] == 0.7
+    # a voice that belongs to another language is rejected (family guard)
+    with pytest.raises(tts.TtsVoiceError):
+        tts.synthesize_cached("vi", "chào bạn", voice="en-US-AriaNeural",
+                              vendors=[vendor], health=health, cache=cache)
+    # a voice not catalogued at all is rejected
+    with pytest.raises(tts.TtsVoiceError):
+        tts.synthesize_cached("vi", "chào bạn", voice="xx-XX-UnknownNeural",
+                              vendors=[vendor], health=health, cache=cache)
+    cache.close()
+
+
 def test_voices_and_tts_routes(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     from fastapi.testclient import TestClient
 
@@ -117,7 +148,13 @@ def test_voices_and_tts_routes(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Non
 
     v = client.get("/api/tts/voices", params={"lang": "vi"})
     assert v.status_code == 200
-    assert v.json()["voice"] == "vi-VN-HoaiMyNeural"
+    body = v.json()
+    assert body["voice"] == "vi-VN-HoaiMyNeural"
+    assert "vi-VN-NamMinhNeural" in body["options"]
+    # every one of the 35 languages has a non-empty options list
+    assert set(tts.VOICE_OPTIONS) == set(LANGUAGES)
+    for code in sorted(LANGUAGES):
+        assert tts.VOICE_OPTIONS[code], f"{code} has no voice options"
 
     a = client.get("/api/tts", params={"lang": "vi", "text": "xin chào"})
     assert a.status_code == 200
