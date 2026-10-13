@@ -32,8 +32,23 @@ def test_all_prompts_have_schema_json() -> None:
             "source_tag": "community-estimate",
             "level_codes": "N5, N4",
             "mapping_table": "N5 | N5 | A1-A1",
+            # drills pack prompt variables
+            "concept_id": "X",
+            "gloss_en": "a gloss",
+            "en_surface": "x",
+            "en_meaning": "a meaning",
+            "pos": "verb",
+            "cefr": "A1",
+            "domain": "general",
+            "topic": "general",
+            "spec_block": "[]",
         })
-        assert prompt.schema.get("type") == "array", f"{name} schema must be array"
+        root = prompt.schema.get("type")
+        if name == "drills":
+            assert root == "object" and "sentences" in prompt.schema.get("properties", {}), \
+                "drills schema must be an object with a sentences array"
+        else:
+            assert root == "array", f"{name} schema must be array"
         assert prompt.system, f"{name} system prompt empty"
 
 
@@ -47,6 +62,10 @@ def test_prompts_are_generic_no_hardcoded_pair() -> None:
             "recent_ids": "", "recent_glosses": "", "created_total": 0,
             "framework_code": "JLPT", "framework_lang": "ja", "framework_name": "JLPT",
             "source_tag": "community-estimate", "level_codes": "N5", "mapping_table": "N5 | N5 | A1-A1",
+            # drills pack prompt variables
+            "concept_id": "X", "gloss_en": "a gloss", "en_surface": "x",
+            "en_meaning": "a meaning", "pos": "verb", "cefr": "A1",
+            "domain": "general", "topic": "general", "spec_block": "[]",
         })
         text = prompt.system
         assert not forbidden.search(text), f"{name} system prompt hardcodes a language pair"

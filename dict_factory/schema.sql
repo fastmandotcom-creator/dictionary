@@ -76,3 +76,23 @@ CREATE TABLE IF NOT EXISTS exam_level (
   PRIMARY KEY (framework, code)
 );
 CREATE INDEX IF NOT EXISTS idx_exam_level_framework ON exam_level(framework, sort_no);
+-- Advanced listen-and-write drills (Phase D1). One row per
+-- (concept, target_lang, topic, drill_key); drill_key = "tense/polarity".
+-- Meaning stays anchored to gloss_en: the pack is generated per concept+topic
+-- and cached here so repeat learners never pay for it again.
+CREATE TABLE IF NOT EXISTS sentence_drills (
+  id INTEGER PRIMARY KEY,
+  concept_id TEXT NOT NULL REFERENCES concepts(id),
+  target_lang TEXT NOT NULL,
+  topic TEXT NOT NULL,
+  drill_key TEXT NOT NULL,
+  tense TEXT NOT NULL,
+  polarity TEXT NOT NULL,
+  sentence TEXT NOT NULL,
+  surface TEXT NOT NULL,
+  base_hint TEXT,
+  prompt_v TEXT NOT NULL DEFAULT 'v1',
+  created_at TEXT NOT NULL,
+  UNIQUE (concept_id, target_lang, topic, drill_key)
+);
+CREATE INDEX IF NOT EXISTS idx_sentence_drills_lookup ON sentence_drills(concept_id, target_lang, topic);

@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "drills.v1",
+  "type": "object",
+  "required": ["sentences"],
+  "additionalProperties": false,
+  "properties": {
+    "sentences": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 9,
+      "items": {
+        "type": "object",
+        "required": ["drill_key", "tense", "polarity", "sentence", "surface"],
+        "additionalProperties": false,
+        "properties": {
+          "drill_key": {
+            "type": "string",
+            "pattern": "^(present_simple|past_simple|future_simple)/(affirmative|negative|question)$"
+          },
+          "tense": { "enum": ["present_simple", "past_simple", "future_simple"] },
+          "polarity": { "enum": ["affirmative", "negative", "question"] },
+          "sentence": { "type": "string", "minLength": 3, "maxLength": 240 },
+          "surface": { "type": "string", "minLength": 1, "maxLength": 60 },
+          "base_hint": { "type": "string", "maxLength": 120 }
+        }
+      }
+    }
+  }
+}

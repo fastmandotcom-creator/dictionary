@@ -19,6 +19,7 @@ PROMPT_REGISTRY: dict[str, tuple[str, str, str]] = {
     "examples_monolingual": ("examples_monolingual.system.md", "examples_monolingual.user.md", "examples_monolingual.schema.json"),
     "units_title": ("units_title.system.md", "units_title.user.md", "units_title.schema.json"),
     "exam_levels": ("exam_levels.system.md", "exam_levels.user.md", "exam_levels.schema.json"),
+    "drills": ("drills.system.md", "drills.user.md", "drills.schema.json"),
 }
 
 # aliases so callers can use the shorter table name

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import sys
 
 from dict_factory.compile_runtime import compile_runtime, sync_frontend
 from dict_factory.config import SYLLABUS_PATH
@@ -36,6 +38,13 @@ def main() -> None:
     fill_cmd.add_argument("--version", default="v1")
     compile_cmd = sub.add_parser("compile")
     compile_cmd.add_argument("--sync-frontend", action="store_true")
+    drills_cmd = sub.add_parser("drills")
+    drills_cmd.add_argument("--concept", required=True, help="concept id, e.g. GREET_HELLO")
+    drills_cmd.add_argument("--target", default="en")
+    drills_cmd.add_argument("--base", default="vi")
+    drills_cmd.add_argument("--topic", default="general")
+    drills_cmd.add_argument("--force", action="store_true", help="regenerate even if cached (replaces the pack)")
+    drills_cmd.add_argument("--dry-run", action="store_true", help="print the prompt, do not call the LLM")
     web_cmd = sub.add_parser("web")
     web_cmd.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
@@ -98,6 +107,46 @@ def main() -> None:
         from dict_factory.fill import main as fill_main
 
         fill_main(args=args)
+    elif args.cmd == "drills":
+        from dict_factory.drills import DrillError, LLMDrillProvider, get_drill_pack
+        from dict_factory.prompts import prompt_messages
+        from dict_factory.db import connect, init_schema
+
+        conn = connect()
+        try:
+            init_schema(conn)
+            if args.dry_run:
+                msgs = prompt_messages("drills", version="v1", variables={
+                    "concept_id": args.concept,
+                    "gloss_en": "(dry-run)",
+                    "en_surface": "",
+                    "en_meaning": "",
+                    "pos": "verb",
+                    "cefr": "",
+                    "domain": "",
+                    "topic": args.topic,
+                    "target_lang": args.target,
+                    "base_lang": args.base,
+                    "spec_block": "[]",
+                    "count": 0,
+                })
+                print("=== system prompt ===\n" + msgs[0]["content"])
+                print("=== user prompt ===\n" + msgs[1]["content"])
+                print("(dry-run: no LLM call made)")
+                return
+            pack = get_drill_pack(
+                conn, args.concept, args.target, args.topic,
+                LLMDrillProvider(), base_lang=args.base,
+            )
+            payload = pack.as_dict()
+            payload["source"] = pack.source
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+            print(f"drills: {len(pack.rows)} sentences ({pack.source})", file=sys.stderr)
+        except (DrillError, KeyError) as exc:
+            print(f"drills failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        finally:
+            conn.close()
     elif args.cmd == "compile":
         from dict_factory.config import WAREHOUSE_DB
         from dict_factory.compile_runtime import load_exam_for_runtime, load_examples_for_runtime
