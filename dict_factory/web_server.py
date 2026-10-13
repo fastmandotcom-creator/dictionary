@@ -464,6 +464,86 @@ async def api_placement_questions(base: str = Query("vi"), target: str = Query("
     return {"base": base, "target": target, "questions": questions}
 
 
+# ---- Phase D2: advanced drill packs (cache-first LLM) ----------------------
+
+@app.get("/api/drills/topics")
+async def api_drill_topics():
+    from dict_factory.drills import DRILL_TOPICS
+
+    return {"topics": list(DRILL_TOPICS)}
+
+
+@app.get("/api/drills")
+async def api_drills(
+    concept_id: str = Query(..., min_length=1),
+    target: str = Query("en"),
+    topic: str = Query("general"),
+):
+    """Cached advanced drill pack for a concept (listen-and-write drills).
+
+    Cache-first: existing sentences come from the warehouse; only a full
+    miss triggers one paid LLM call that fills the whole pack, so repeated
+    learners never pay again. Provider failures surface as 503 with a clear
+    detail, never as a generic 500.
+    """
+    _validate_pair("vi", target)  # target must be a supported language
+    from dict_factory.drills import DRILL_TOPICS, DrillError, LLMDrillProvider, get_drill_pack
+
+    conn = get_db()
+    try:
+        if topic not in DRILL_TOPICS:
+            raise HTTPException(status_code=400, detail=f"unknown topic {topic!r}; known: {list(DRILL_TOPICS)}")
+        try:
+            pack = get_drill_pack(conn, concept_id, target, topic, LLMDrillProvider(), base_lang="vi")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=f"unknown concept: {exc}") from exc
+        except DrillError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            # LLM gateway down / unconfigured / pack rejected repeatedly
+            raise HTTPException(status_code=503, detail=f"drill generation unavailable: {exc}") from exc
+        out = pack.as_dict()
+        out["meta"] = {"source": pack.source, "count": len(pack.rows)}
+        return out
+    finally:
+        conn.close()
+
+
+@app.post("/api/drills/generate")
+async def api_drills_generate(payload: dict):
+    """Force a fresh pack for a concept+topic (user-initiated only)."""
+    from dict_factory.drills import DRILL_TOPICS, DrillError, LLMDrillProvider, get_drill_pack
+
+    concept_id = str(payload.get("concept_id") or "")
+    target = str(payload.get("target") or "en")
+    topic = str(payload.get("topic") or "general")
+    if not concept_id:
+        raise HTTPException(status_code=400, detail="concept_id is required")
+    if topic not in DRILL_TOPICS:
+        raise HTTPException(status_code=400, detail=f"unknown topic {topic!r}; known: {list(DRILL_TOPICS)}")
+    conn = get_db()
+    try:
+        # force = drop the cached pack so the provider refills it
+        conn.execute(
+            "DELETE FROM sentence_drills WHERE concept_id = ? AND target_lang = ? AND topic = ?",
+            (concept_id, target, topic),
+        )
+        conn.commit()
+        try:
+            pack = get_drill_pack(conn, concept_id, target, topic, LLMDrillProvider(), base_lang="vi")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=f"unknown concept: {exc}") from exc
+        except DrillError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=f"drill generation unavailable: {exc}") from exc
+        out = pack.as_dict()
+        out["meta"] = {"source": pack.source, "count": len(pack.rows), "forced": True}
+        return out
+    finally:
+        conn.close()
+
+
 @app.post("/api/placement")
 async def api_placement_submit(payload: dict):
     """Score a finished placement quiz. Body: {base, target, answers: [{conceptId, choice}]}.

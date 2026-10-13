@@ -224,6 +224,7 @@ def get_drill_pack(
     ).fetchone()
     if concept is None:
         raise KeyError(f"unknown concept {concept_id!r}")
+    concept = dict(concept)
     if not concept["gloss_en"] or not concept["en_surface"]:
         raise DrillError(f"{concept_id!r} has no English anchor; drills require gloss_en + en surface")
 
