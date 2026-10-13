@@ -385,10 +385,14 @@ async def listen_view(
     cefr: str = Query(""),
     exam: str = Query(""),
     topic: str = Query("general"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(60, ge=1, le=200),
 ):
-    """Listen-and-write drill page (Phase D3). Concepts are scoped like /learn
-    (exam range > cefr > all levels); drills come from the cache-first API."""
+    """Listen-and-write drill page (Phase D3 + infinite pagination). Concepts are
+    scoped like /learn (exam range > cefr > all levels); supports offset & limit
+    so learners can study smoothly through all 12,000 concepts."""
     from dict_factory.drills import DRILL_TOPICS
+    from dict_factory.languages import CEFR_ORDER
 
     _validate_pair(base, target)
     _validate_cefr(cefr)
@@ -408,8 +412,10 @@ async def listen_view(
             # synthesized in rank order — same as /learn)
             for unit in learn_level_units(conn, base, target, cefr):
                 ids.extend(unit["concept_ids"])
-        ids = list(dict.fromkeys(ids))[:60]
-        if not ids:
+        all_ids = list(dict.fromkeys(ids))
+        total_count = len(all_ids)
+        page_ids = all_ids[offset : offset + limit]
+        if not page_ids:
             concepts: list[dict] = []
         else:
             rows = conn.execute(
@@ -417,19 +423,20 @@ async def listen_view(
                 SELECT c.id, c.gloss_en AS gloss, c.cefr, c.pos, e.text AS en
                 FROM concepts c
                 LEFT JOIN expressions e ON e.concept_id = c.id AND e.lang = 'en'
-                WHERE c.id IN ({','.join('?' for _ in ids)})
+                WHERE c.id IN ({','.join('?' for _ in page_ids)})
                 """,
-                ids,
+                page_ids,
             ).fetchall()
             by_id = {r["id"]: r for r in rows}
             concepts = [
                 {"id": i, "gloss": by_id[i]["gloss"], "cefr": by_id[i]["cefr"],
                  "pos": by_id[i]["pos"], "en": by_id[i]["en"] or ""}
-                for i in ids if i in by_id
+                for i in page_ids if i in by_id
             ]
     finally:
         conn.close()
 
+    ordered_cefr = sorted(CEFR_ORDER, key=lambda k: CEFR_ORDER[k])
     return templates.TemplateResponse(
         request=request,
         name="listen.html",
@@ -439,10 +446,17 @@ async def listen_view(
             "base_name": _language_name(base),
             "target_name": _language_name(target),
             "cefr": cefr,
+            "cefr_levels": ordered_cefr,
             "exam": exam,
             "topic": topic,
             "topics": list(DRILL_TOPICS),
             "concepts": concepts,
+            "offset": offset,
+            "limit": limit,
+            "total_count": total_count,
+            "has_next_page": offset + limit < total_count,
+            "next_offset": offset + limit,
+            "prev_offset": max(0, offset - limit),
         },
     )
 

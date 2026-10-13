@@ -17,9 +17,15 @@
     var BASE = '{{ base }}';
     var TARGET = '{{ target }}';
     var TOPIC0 = {{ topic | tojson }};
+    var CEFR0 = {{ cefr | tojson }};
     const TOPICS = {{ topics | tojson }};
     const CONCEPTS = {{ concepts | tojson }};
+    const HAS_NEXT_PAGE = {{ has_next_page | tojson }};
+    const NEXT_OFFSET = {{ next_offset | tojson }};
+    const CURRENT_OFFSET = {{ offset | tojson }};
+    const TOTAL_COUNT = {{ total_count | tojson }};
     var topic = TOPIC0;
+    var cefrVal = CEFR0;
     var currentConceptIdx = 0;
     var autoNextTimer = null;
 
@@ -124,11 +130,53 @@
                 doNext();
               }
             }, 1000);
+          } else if (HAS_NEXT_PAGE) {
+            var nextBatchUrl = '/listen?base=' + BASE + '&target=' + TARGET + '&topic=' + topic +
+              (cefrVal ? '&cefr=' + cefrVal : '') + '&offset=' + NEXT_OFFSET;
+            var cdBatch = 3;
+            el.innerHTML =
+              '<div class="text-center p-6 w-full">' +
+              '<div class="text-2xl font-bold text-emerald-400 mb-2">🎉 Hoàn thành đợt này!</div>' +
+              '<p class="text-sm text-slate-300 mb-4">Đã luyện xong ' + CONCEPTS.length + ' từ (từ ' + (CURRENT_OFFSET + 1) + ' đến ' + (CURRENT_OFFSET + CONCEPTS.length) + ' trên tổng ' + TOTAL_COUNT + ' từ).</p>' +
+              '<div class="bg-slate-950 border border-slate-800 rounded-xl p-4 max-w-sm mx-auto mb-5 text-left">' +
+              '  <div class="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Đợt tiếp theo:</div>' +
+              '  <div class="text-base font-bold text-white">Từ ' + (NEXT_OFFSET + 1) + ' đến ' + Math.min(NEXT_OFFSET + 60, TOTAL_COUNT) + '</div>' +
+              '  <div id="batch-cd" class="text-xs text-emerald-400 mt-2">Tự động nạp sau <span id="batch-sec">' + cdBatch + '</span>s...</div>' +
+              '</div>' +
+              '<div class="flex justify-center gap-3">' +
+              '  <a id="load-next-batch-btn" href="' + nextBatchUrl + '" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-lg text-sm transition">Nạp tiếp 60 từ &rarr; (Enter)</a>' +
+              '  <a href="/learn?base=' + BASE + '&target=' + TARGET + '" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-lg text-sm transition">Về lộ trình</a>' +
+              '</div>' +
+              '</div>';
+
+            var goNextBatch = function () {
+              location.href = nextBatchUrl;
+            };
+
+            var onBatchKey = function (e) {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                document.removeEventListener('keydown', onBatchKey);
+                goNextBatch();
+              }
+            };
+            document.addEventListener('keydown', onBatchKey);
+
+            var batchTimer = setInterval(function () {
+              cdBatch--;
+              var secEl = document.getElementById('batch-sec');
+              if (secEl) secEl.textContent = cdBatch;
+              if (cdBatch <= 0) {
+                clearInterval(batchTimer);
+                document.removeEventListener('keydown', onBatchKey);
+                goNextBatch();
+              }
+            }, 1000);
           } else {
             el.innerHTML =
               '<div class="text-center p-6 w-full">' +
-              '<div class="text-2xl font-bold text-emerald-400 mb-2">🎉 Xuất sắc!</div>' +
-              '<p class="text-sm text-slate-300 mb-4">Bạn đã hoàn thành tất cả từ vựng trong danh sách này.</p>' +
+              '<div class="text-2xl font-bold text-emerald-400 mb-2">🎉 Đỉnh cao!</div>' +
+              '<p class="text-sm text-slate-300 mb-4">Bạn đã hoàn thành toàn bộ ' + TOTAL_COUNT + ' từ vựng trong kho dữ liệu.</p>' +
               '<a href="/learn?base=' + BASE + '&target=' + TARGET + '" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-2.5 rounded-lg text-sm transition">← Về lộ trình</a>' +
               '</div>';
           }
@@ -140,8 +188,16 @@
       var sel = document.getElementById('topic-select');
       sel.value = topic;
       sel.onchange = function () {
-        location.href = '/listen?base=' + BASE + '&target=' + TARGET + '&topic=' + this.value;
+        location.href = '/listen?base=' + BASE + '&target=' + TARGET + '&topic=' + this.value +
+          (cefrVal ? '&cefr=' + cefrVal : '') + '&offset=0';
       };
+      var cefrSel = document.getElementById('cefr-select');
+      if (cefrSel) {
+        cefrSel.onchange = function () {
+          location.href = '/listen?base=' + BASE + '&target=' + TARGET + '&topic=' + topic +
+            (this.value ? '&cefr=' + this.value : '') + '&offset=0';
+        };
+      }
       renderConceptList();
       Srs.ensureDevice().then(function () {
         Srs.sync(BASE, TARGET, function (s, n) {
@@ -176,7 +232,13 @@
         <option value="{{ t }}" {% if t == topic %}selected{% endif %}>{{ t }}</option>
         {% endfor %}
       </select>
-      <span class="text-slate-600 hidden sm:inline">câu LLM theo chủ đề</span>
+      <span class="text-slate-500 ml-1">Mức:</span>
+      <select id="cefr-select" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">
+        <option value="" {% if not cefr %}selected{% endif %}>Tất cả mức</option>
+        {% for lvl in cefr_levels %}
+        <option value="{{ lvl }}" {% if cefr == lvl %}selected{% endif %}>{{ lvl }}</option>
+        {% endfor %}
+      </select>
       <label class="flex items-center gap-1.5 text-slate-400 ml-auto cursor-pointer select-none">
         <input type="checkbox" id="autoplay-toggle" class="accent-emerald-500" checked>
         <span>🔊 Tự động phát âm</span>
@@ -191,7 +253,10 @@
         <p class="text-xs text-slate-500 mt-2">Nghe câu → gõ lại đúng chính tả → tự chấm thẻ (Chưa 1 ngày / Tạm 3 ngày / Nhớ 7 ngày).</p>
       </section>
       <aside class="w-full md:w-56 shrink-0 order-2 md:order-1">
-        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Từ để luyện</div>
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Từ để luyện</div>
+          <span class="text-[10px] text-slate-500 font-mono">{{ offset + 1 }}-{{ [offset + limit, total_count] | min }}/{{ total_count }}</span>
+        </div>
         <div id="concept-list" class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden max-h-64 md:max-h-[640px] overflow-y-auto"></div>
       </aside>
     </div>

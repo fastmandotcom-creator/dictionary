@@ -40,6 +40,24 @@
       } : null);
     }
     window.addEventListener('DOMContentLoaded', function () { speakTarget(false); });
+
+    // 0-Mouse Keyboard Flow: 1/2/3 (grade), R (speak), Arrow keys (prev/next)
+    document.addEventListener('keydown', function (e) {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+      if (e.key === '1') { grade('hard'); return; }
+      if (e.key === '2') { grade('ok'); return; }
+      if (e.key === '3') { grade('good'); return; }
+      if (e.key === 'r' || e.key === 'R' || ((e.ctrlKey || e.metaKey) && e.code === 'Space')) {
+        e.preventDefault(); speakTarget(true); return;
+      }
+      if (e.key === 'ArrowRight' && NEIGHBOR_NEXT) {
+        location.href = cardUrl(NEIGHBOR_NEXT); return;
+      }
+      var prevNeighbor = {{ neighbor_prev | tojson }};
+      if (e.key === 'ArrowLeft' && prevNeighbor) {
+        location.href = cardUrl(prevNeighbor); return;
+      }
+    });
   </script>
   <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-30">
     <div class="max-w-2xl mx-auto px-4 py-3.5 flex items-center justify-between">
@@ -98,6 +116,7 @@
         <button onclick="grade('ok')" class="bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg py-2.5 text-sm font-semibold hover:bg-amber-500/20 transition">Tạm (3 ngày)</button>
         <button onclick="grade('good')" class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg py-2.5 text-sm font-semibold hover:bg-emerald-500/20 transition">Nhớ (7 ngày)</button>
       </div>
+      <div class="text-[11px] text-slate-500 text-center mt-2.5">Phím tắt: 1 (Chưa) · 2 (Tạm) · 3 (Nhớ) · R (nghe) · ←/→ (trước/tiếp)</div>
     </div>
     <div class="flex items-center justify-between gap-2 text-xs">
       {% if neighbor_prev %}

@@ -265,14 +265,35 @@
         (drills.total > 0 ? '<div class="text-xs text-slate-400 mb-4">Luyện nghe–viết: <span class="text-slate-200 font-semibold">' +
           drills.done + '/' + drills.total + '</span> câu (chủ đề ' + drills.topic + ').</div>' : '') +
         (tomorrow ? '<div class="text-xs text-slate-400 mb-4">Mai có khoảng <span class="text-slate-200 font-semibold">' + tomorrow + '</span> thẻ đến hạn ôn lại.</div>' : '') +
+        '<div class="mb-3">' +
+        '<button id="continue-next-batch" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl text-sm transition shadow-sm">🚀 Học tiếp ' + NEW_SIZE + ' từ mới nữa &rarr; (Enter)</button>' +
+        '</div>' +
         '<div class="flex gap-2">' +
         '<a href="/learn?base=' + BASE + '&target=' + TARGET + EXTRA_QS + '" class="flex-1 text-center text-xs text-slate-300 hover:text-white border border-slate-700 rounded-lg py-2.5">← Lộ trình</a>' +
         '<a href="/review?base=' + BASE + '&target=' + TARGET + EXTRA_QS + '" class="flex-1 text-center text-xs text-slate-300 hover:text-white border border-slate-700 rounded-lg py-2.5">Ôn tập thêm</a>' +
         '</div>';
+
+      var continueBtn = document.getElementById('continue-next-batch');
+      if (continueBtn) {
+        continueBtn.onclick = function () {
+          document.getElementById('summary').classList.add('hidden');
+          startSession();
+        };
+      }
     }
 
     // 0-Mouse Keyboard Flow: Space/Enter (flip), 1/2/3 (grade), R (speak)
     document.addEventListener('keydown', function (e) {
+      var summaryEl = document.getElementById('summary');
+      if (summaryEl && !summaryEl.classList.contains('hidden')) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          var contBtn = document.getElementById('continue-next-batch');
+          if (contBtn) contBtn.click();
+          return;
+        }
+      }
+
       var playerEl = document.getElementById('player');
       if (!playerEl || playerEl.classList.contains('hidden')) return;
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
