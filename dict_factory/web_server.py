@@ -837,18 +837,19 @@ async def api_srs_get(
 @app.post("/api/srs/sync")
 async def api_srs_sync(request: Request, payload: dict):
     """Upsert this device's SRS entries (latest updated_at wins)."""
-    _validate_pair(payload.get("base") or "vi", payload.get("target") or "ja")
+    base = str(payload.get("base") or "vi")
+    target = str(payload.get("target") or "ja")
+    _validate_pair(base, target)
     auth = _authenticated_device(request)
     if auth is None:
         raise HTTPException(status_code=401, detail="device not registered (call /api/sync/device)")
     device_id, _ = auth
-    base = str(payload.get("base") or "")
-    target = str(payload.get("target") or "")
     entries = payload.get("entries")
     if not isinstance(entries, list):
         raise HTTPException(status_code=400, detail="entries must be a list")
     pair = _progress.pair_key(base, target)
     now = _now_iso()
+    valid_grades = {"", "hard", "ok", "good"}
     norm = [
         {
             "concept_id": str(e.get("concept_id") or ""),
@@ -859,6 +860,9 @@ async def api_srs_sync(request: Request, payload: dict):
         for e in entries
         if isinstance(e, dict) and str(e.get("concept_id") or "").strip()
     ]
+    for row in norm:
+        if row["grade"] not in valid_grades:
+            raise HTTPException(status_code=400, detail=f"invalid grade {row['grade']!r}")
     try:
         _progress.upsert_entries(device_id, pair, norm)
     except ValueError as exc:

@@ -1,5 +1,8 @@
 # Runtime dependencies for the web learn app + TTS/LLM services
-fastapi>=0.110
+# NOTE: install under python3.11. fastapi and starlette are version-locked
+# together by fastapi; a mismatched starlette (e.g. starlette 1.x on an
+# unrelated python) makes `FastAPI(...)` raise at import.
+fastapi>=0.110,<0.116
 uvicorn>=0.29
 jinja2>=3.1
 openai>=1.30          # LLM data plane (fill + drill generation)

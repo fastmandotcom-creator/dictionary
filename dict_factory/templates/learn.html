@@ -150,8 +150,9 @@
         }
       }
       var dueCount = 0;
+      var dueSet = Srs.dueSet(BASE, TARGET);
       UNITS.forEach(function (unit) {
-        unit.concept_ids.forEach(function (id) { if (Srs.isDue(id, BASE, TARGET)) dueCount++; });
+        unit.concept_ids.forEach(function (id) { if (dueSet[id]) dueCount++; });
       });
       // a session processes at most 50 due cards; the rest roll to tomorrow
       var DUE_CAP = 50;

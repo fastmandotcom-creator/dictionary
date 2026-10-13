@@ -25,6 +25,7 @@
     const NEXT_CONCEPT_ID = {{ next_concept_id | tojson }};
     const CURRENT_OFFSET = {{ offset | tojson }};
     const TOTAL_COUNT = {{ total_count | tojson }};
+    const LIMIT = {{ limit | tojson }};
     const EXAM = {{ exam | tojson }};
     var topic = TOPIC0;
     var cefrVal = CEFR0;
@@ -146,11 +147,11 @@
               '<p class="text-sm text-slate-300 mb-4">Đã luyện xong ' + CONCEPTS.length + ' từ (từ ' + (CURRENT_OFFSET + 1) + ' đến ' + (CURRENT_OFFSET + CONCEPTS.length) + ' trên tổng ' + TOTAL_COUNT + ' từ).</p>' +
               '<div class="bg-slate-950 border border-slate-800 rounded-xl p-4 max-w-sm mx-auto mb-5 text-left">' +
               '  <div class="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Đợt tiếp theo:</div>' +
-              '  <div class="text-base font-bold text-white">Từ ' + (NEXT_OFFSET + 1) + ' đến ' + Math.min(NEXT_OFFSET + 60, TOTAL_COUNT) + '</div>' +
+              '  <div class="text-base font-bold text-white">Từ ' + (NEXT_OFFSET + 1) + ' đến ' + Math.min(NEXT_OFFSET + LIMIT, TOTAL_COUNT) + '</div>' +
               '  <div id="batch-cd" class="text-xs text-emerald-400 mt-2">Tự động nạp sau <span id="batch-sec">' + cdBatch + '</span>s...</div>' +
               '</div>' +
               '<div class="flex justify-center gap-3">' +
-              '  <a id="load-next-batch-btn" href="' + nextBatchUrl + '" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-lg text-sm transition">Nạp tiếp 60 từ &rarr; (Enter)</a>' +
+              '  <a id="load-next-batch-btn" href="' + nextBatchUrl + '" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-lg text-sm transition">Nạp tiếp ' + LIMIT + ' từ &rarr; (Enter)</a>' +
               '  <a href="/learn?base=' + BASE + '&target=' + TARGET + '" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-lg text-sm transition">Về lộ trình</a>' +
               '</div>' +
               '</div>';

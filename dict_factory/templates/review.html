@@ -22,7 +22,8 @@
     function loadCards() {
       const list = document.getElementById('cards');
       if (!CARD_IDS.length) { list.innerHTML = '<div class="text-slate-500 text-sm p-6">Chưa có từ nào cho mức này.</div>'; return; }
-      const due = CARD_IDS.filter(function (id) { return Srs.isDue(id, BASE, TARGET); });
+      const dueSet = Srs.dueSet(BASE, TARGET);
+      const due = CARD_IDS.filter(function (id) { return dueSet[id]; });
       const srsMap = Srs.readSrs(BASE, TARGET);
       // Most-overdue first: group by due date (oldest group first), shuffle
       // only WITHIN each group so ordering across days is deterministic.
@@ -77,6 +78,13 @@
           curTarget = (d.target && d.target.text) || (d.concept && d.concept.gloss_en) || '';
           document.getElementById('card-target').textContent = curTarget;
           document.getElementById('card-base').textContent = (d.base && d.base.text) || '';
+        })
+        .catch(function () {
+          // offline / 404: fall back to the raw id so the review pool never stalls
+          curTarget = id;
+          document.getElementById('card-target').textContent = curTarget;
+          var note = document.getElementById('speak-note');
+          if (note) { note.textContent = 'Không tải được chi tiết — dùng mã từ thay thế.'; note.classList.remove('hidden'); }
         });
     }
     function flip() { document.getElementById('card-base').classList.remove('hidden'); }

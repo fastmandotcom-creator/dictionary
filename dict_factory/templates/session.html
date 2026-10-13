@@ -58,7 +58,8 @@
       }
       var newSet = {};
       newIds.forEach(function (id) { newSet[id] = true; });
-      dueIds = all.filter(function (id) { return !newSet[id] && Srs.isDue(id, BASE, TARGET); });
+      var dueSet = Srs.dueSet(BASE, TARGET);
+      dueIds = all.filter(function (id) { return !newSet[id] && dueSet[id]; });
       dueIds.sort(function (a, b) {
         var da = (srs[a] && srs[a].due) || '0000';
         var db2 = (srs[b] && srs[b].due) || '0000';
@@ -200,10 +201,18 @@
             var speakBtn = document.getElementById('speak-btn');
             if (speakBtn) speakBtn.click();
           }, 120);
+        })
+        .catch(function () {
+          // offline / 404: fall back to the raw id so the queue never stalls
+          curTarget = item.id;
+          document.getElementById('card-target').textContent = curTarget;
+          var note = document.getElementById('speak-note');
+          if (note) { note.textContent = 'Không tải được chi tiết — dùng mã từ thay thế.'; note.classList.remove('hidden'); }
         });
     }
     function gradeAndAdvance(kind) {
       var item = state.queue[state.idx];
+      if (!item) return; // drill segment owns the flow once the card queue is exhausted
       var entry = Srs.grade(item.id, kind, BASE, TARGET);
       Srs.sync(BASE, TARGET);  // fire-and-forget device sync
       state.grades[kind] = (state.grades[kind] || 0) + 1;

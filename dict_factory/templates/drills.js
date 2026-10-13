@@ -162,10 +162,14 @@
 
   // Player: renders one concept's drill sequence into `container`.
   // options: {base, target, topic, concept, autoplay, onDrillGraded(done, total), onAllDone(done, total)}
+  var playerSeq = 0; // the newest player() invalidates every stale one (listeners linger on reused containers)
   function player(container, opts) {
     var state = { drills: [], idx: 0, done: 0, total: 0 };
+    var seq = ++playerSeq;
+    var isLive = function () { return seq === playerSeq; };
     container.innerHTML = '<div class="text-slate-500 text-sm p-6">Đang tải drill…</div>';
     loadPack(opts.concept, opts.target, opts.topic).then(function (pack) {
+      if (!isLive()) return;
       state.drills = pack;
       state.total = pack.length;
       var first = pickDrillKey(opts.concept.id, pack, opts.base, opts.target);
@@ -294,7 +298,7 @@
 
     // Document-level keyboard listener for shortcuts like Ctrl+Space (Replay audio)
     function onDocKeyDown(e) {
-      if (!document.body.contains(container)) {
+      if (!document.body.contains(container) || !isLive()) {
         document.removeEventListener('keydown', onDocKeyDown);
         return;
       }
@@ -316,7 +320,9 @@
     document.addEventListener('keydown', onDocKeyDown);
 
     function submitGrade(g) {
+      if (!isLive()) return;
       var d = current();
+      if (!d) return;
       Srs.grade(srsId(opts.concept.id, d.drill_key), g, opts.base, opts.target);
       Srs.sync(opts.base, opts.target);
       state.done += 1;
@@ -326,7 +332,9 @@
     }
 
     function check(revealed) {
+      if (!isLive()) return;
       var d = current();
+      if (!d) return;
       var attempt = normalize(container.querySelector('#dl-input').value);
       var target = normalize(d.sentence);
       var correct = attempt.length > 0 && attempt === target;

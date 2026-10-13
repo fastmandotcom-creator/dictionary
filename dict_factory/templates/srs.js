@@ -63,22 +63,32 @@
     return legacyValue === 'good';
   }
 
+  // One-pass due lookup for hot loops (list pages walk thousands of ids and
+  // must not re-parse both localStorage stores per card).
+  function dueSet(base, target, todayIso) {
+    var srsStore = readSrs(base, target);
+    var legacyStore = readLegacy(base, target);
+    var t = todayIso || isoFromOffset(0);
+    var set = {};
+    var keys = Object.keys(srsStore);
+    for (var i = 0; i < keys.length; i++) {
+      var id = keys[i];
+      var e = srsStore[id];
+      if (e && e.grade) {
+        if (e.grade === 'hard' || !e.due || e.due <= t) set[id] = true;
+      }
+    }
+    for (var l in legacyStore) set[l] = true;
+    return set;
+  }
+
   // "Due" = already learned and its review date arrived (or graded hard,
   // which resurfaces tomorrow). A card that was NEVER learned is "new", not
   // due — otherwise every unlearned word floods the review pool and the same
   // card repeats inside one session.
   // Legacy v1 entries (no due date) come back for one pass.
   function isDue(id, base, target, todayIso) {
-    var srs = readSrs(base, target);
-    var legacy = readLegacy(base, target);
-    var entry = srs[id];
-    var t = todayIso || isoFromOffset(0);
-    if (entry && entry.grade) {
-      if (entry.grade === 'hard') return true;
-      return !entry.due || entry.due <= t;
-    }
-    if (legacy[id]) return true;
-    return false;
+    return !!dueSet(base, target, todayIso)[id];
   }
 
   // Fisher-Yates; returns a new array.
@@ -271,6 +281,8 @@
         return 0;
       }
       var local = readSrs(base, target);
+      var out = {};
+      for (var k in local) out[k] = local[k];
       var entries = Object.keys(local).map(function (id) {
         var e = local[id] || {};
         return {
@@ -280,22 +292,37 @@
           updated_at: e.updated_at || nowIso()
         };
       });
-      return fetch('/api/srs/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base: base, target: target, entries: entries })
+      // chunked upsert: the server caps one POST at MAX_SYNC_BATCH entries,
+      // so a store grown past that cap must not dead-lock device sync.
+      var BATCH = 2000;
+      var chain = Promise.resolve();
+      for (var i = 0; i < entries.length; i += BATCH) {
+        var start = i;
+        chain = chain.then(function () {
+          var chunk = entries.slice(start, start + BATCH);
+          return fetch('/api/srs/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ base: base, target: target, entries: chunk })
+          }).then(function (r) {
+            if (!r.ok) throw new Error('sync failed ' + r.status);
+            return r;
+          });
+        });
+      }
+      return chain.then(function () {
+        return fetch('/api/srs?base=' + encodeURIComponent(base) +
+          '&target=' + encodeURIComponent(target));
       }).then(function (r) {
-        if (!r.ok) throw new Error('sync failed ' + r.status);
+        if (!r.ok) throw new Error('sync pull failed ' + r.status);
         return r.json();
       }).then(function (data) {
-        var merged = data.entries || {};
         // keep the union: local-only entries stay, server entries fill in
-        var out = {};
-        for (var k in local) out[k] = local[k];
-        for (var k2 in merged) {
-          var lts = (local[k2] && local[k2].updated_at) || '';
-          var sts = merged[k2].updated_at || '';
-          if (!(k2 in local) || sts >= lts) out[k2] = merged[k2];
+        var server = data.entries || {};
+        for (var k2 in server) {
+          var lts = (out[k2] && out[k2].updated_at) || '';
+          var sts = server[k2].updated_at || '';
+          if (!(k2 in out) || sts >= lts) out[k2] = server[k2];
         }
         writeSrs(base, target, out);
         if (onStatus) onStatus('synced', Object.keys(out).length);
@@ -351,6 +378,7 @@
     grade: grade,
     isDone: isDone,
     isDue: isDue,
+    dueSet: dueSet,
     shuffle: shuffle,
     speak: speak,
     ttsSource: ttsSource,
