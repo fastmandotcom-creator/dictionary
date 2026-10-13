@@ -75,7 +75,8 @@ def test_learn_card_neighbors_and_api() -> None:
     # the learn card page renders prev/next blocks
     page = client.get("/learn/GREET_HELLO?base=vi&target=ja")
     assert page.status_code == 200
-    assert ("Cuối unit" in page.text) or ("Tiếp →" in page.text) or ("← Trước" in page.text)
+    assert ("Hết lộ trình" in page.text) or ("Tiếp →" in page.text) or ("← Trước" in page.text)
+    assert body["neighbors"]["next"], "first concept must chain forward, not stop at an empty unit"
 
 
 def test_learn_list_has_progress_data() -> None:

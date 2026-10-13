@@ -22,7 +22,6 @@
     var UNITS = {{ units | tojson }};
     var NEW_SIZE = {{ new_count | tojson }};
     var DUE_CAP = 50;          // due cards per session; the rest roll to tomorrow
-    var MASTERY_RATIO = 0.8;  // a unit is "done" when >=80% of its cards are graded non-hard
     var SECONDS_PER_CARD = 20;
 
     var srs = Srs.readSrs(BASE, TARGET);
@@ -31,30 +30,32 @@
     var newIds = [];
     var dueIds = [];
 
-    function isDone(id) { return Srs.isDone(srs[id], legacy[id]); }
     function isGraded(id) { return !!(srs[id] && srs[id].grade) || !!legacy[id]; }
 
-    function unitStats(u) {
-      var total = u.concept_ids.length;
-      var done = u.concept_ids.filter(isDone).length;
-      return { total: total, done: done, complete: total > 0 && (done / total) >= MASTERY_RATIO };
-    }
     function computeQueues() {
+      // New-word cursor walks the whole path. A "hard" grade does not trap
+      // the learner inside the current unit — those cards return via due.
       activeUnit = null;
-      for (var i = 0; i < UNITS.length; i++) {
-        if (!unitStats(UNITS[i]).complete) { activeUnit = UNITS[i]; break; }
-      }
-      // NEW: ungraded cards of the active unit, in unit order
       newIds = [];
-      if (activeUnit) {
-        for (var j = 0; j < activeUnit.concept_ids.length && newIds.length < NEW_SIZE; j++) {
-          if (!isGraded(activeUnit.concept_ids[j])) newIds.push(activeUnit.concept_ids[j]);
+      for (var i = 0; i < UNITS.length && newIds.length < NEW_SIZE; i++) {
+        var ids = UNITS[i].concept_ids;
+        for (var j = 0; j < ids.length && newIds.length < NEW_SIZE; j++) {
+          if (!isGraded(ids[j])) {
+            if (!activeUnit) activeUnit = UNITS[i];
+            newIds.push(ids[j]);
+          }
         }
       }
       // DUE: everything in scope whose review date arrived, most-overdue
       // first, minus the new cards of this session (no card may repeat).
-      var all = UNITS.map(function (u) { return u.concept_ids; }).reduce(function (a, b) { return a.concat(b); }, []);
-      all = all.filter(function (id, idx, self) { return self.indexOf(id) === idx; }); // dedupe
+      var seen = {};
+      var all = [];
+      for (var u = 0; u < UNITS.length; u++) {
+        var unitIds = UNITS[u].concept_ids;
+        for (var n = 0; n < unitIds.length; n++) {
+          if (!seen[unitIds[n]]) { seen[unitIds[n]] = true; all.push(unitIds[n]); }
+        }
+      }
       var newSet = {};
       newIds.forEach(function (id) { newSet[id] = true; });
       dueIds = all.filter(function (id) { return !newSet[id] && Srs.isDue(id, BASE, TARGET); });
@@ -136,17 +137,29 @@
     }
 
     // ---------- player ----------
-    function startSession() {
+    function startSession(opts) {
+      var newOnly = !!(opts && opts.newOnly);
       computeQueues();
-      var dueNow = dueIds.slice(0, DUE_CAP);
-      // new words first (learning), then due reviews
-      state.queue = newIds.map(function (id) { return { id: id, kind: 'new' }; })
+      var dueNow = newOnly ? [] : dueIds.slice(0, DUE_CAP);
+      // new words first (learning), then due reviews. "Học tiếp" is new-only
+      // so a continue press never dumps the due pile or repeats an empty queue.
+      var queue = newIds.map(function (id) { return { id: id, kind: 'new' }; })
         .concat(dueNow.map(function (id) { return { id: id, kind: 'due' }; }));
+      if (!queue.length) {
+        document.getElementById('overview').classList.add('hidden');
+        document.getElementById('player').classList.add('hidden');
+        renderSummary();
+        return;
+      }
+      state.queue = queue;
       state.idx = 0;
       state.flipped = false;
-      // advanced listen-and-write segment (optional)
-      drills.queue = (drills.on && newIds.length) ? newIds.slice(0, drills.count) : [];
+      state.grades = { hard: 0, ok: 0, good: 0 };
+      // advanced listen-and-write segment (optional; not on a pure new-word continue)
+      drills.queue = (!newOnly && drills.on && newIds.length) ? newIds.slice(0, drills.count) : [];
       drills.idx = 0; drills.done = 0; drills.total = 0;
+      document.getElementById('grades').classList.remove('hidden');
+      document.getElementById('summary').classList.add('hidden');
       document.getElementById('overview').classList.add('hidden');
       document.getElementById('player').classList.remove('hidden');
       renderCard();
@@ -213,6 +226,8 @@
         return;
       }
       var cid = drills.queue[drills.idx];
+      var nextCid = drills.queue[drills.idx + 1];
+      if (nextCid && DrillUI.prefetch) DrillUI.prefetch({ id: nextCid }, TARGET, drills.topic);
       var el = document.getElementById('card');
       el.innerHTML =
         '<div class="text-xs text-emerald-400 font-semibold mb-2">★ NÂNG CAO — nghe & viết (' +
@@ -243,6 +258,8 @@
     function renderSummary() {
       document.getElementById('player').classList.add('hidden');
       document.getElementById('summary').classList.remove('hidden');
+      computeQueues();
+      var moreNew = newIds.length;
       var counts = state.grades;
       var tomorrow = 0;
       // anything graded today that resurfaces within ~1 day counts as "tomorrow"
@@ -265,9 +282,9 @@
         (drills.total > 0 ? '<div class="text-xs text-slate-400 mb-4">Luyện nghe–viết: <span class="text-slate-200 font-semibold">' +
           drills.done + '/' + drills.total + '</span> câu (chủ đề ' + drills.topic + ').</div>' : '') +
         (tomorrow ? '<div class="text-xs text-slate-400 mb-4">Mai có khoảng <span class="text-slate-200 font-semibold">' + tomorrow + '</span> thẻ đến hạn ôn lại.</div>' : '') +
-        '<div class="mb-3">' +
-        '<button id="continue-next-batch" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl text-sm transition shadow-sm">🚀 Học tiếp ' + NEW_SIZE + ' từ mới nữa &rarr; (Enter)</button>' +
-        '</div>' +
+        (moreNew
+          ? '<div class="mb-3"><button id="continue-next-batch" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl text-sm transition shadow-sm">🚀 Học tiếp ' + moreNew + ' từ mới &rarr; (Enter)</button></div>'
+          : '<div class="text-sm text-slate-300 mb-3">Đã học hết từ mới trong phạm vi này. Thẻ "Chưa" sẽ về mục ôn, không chặn từ sau.</div>') +
         '<div class="flex gap-2">' +
         '<a href="/learn?base=' + BASE + '&target=' + TARGET + EXTRA_QS + '" class="flex-1 text-center text-xs text-slate-300 hover:text-white border border-slate-700 rounded-lg py-2.5">← Lộ trình</a>' +
         '<a href="/review?base=' + BASE + '&target=' + TARGET + EXTRA_QS + '" class="flex-1 text-center text-xs text-slate-300 hover:text-white border border-slate-700 rounded-lg py-2.5">Ôn tập thêm</a>' +
@@ -277,7 +294,7 @@
       if (continueBtn) {
         continueBtn.onclick = function () {
           document.getElementById('summary').classList.add('hidden');
-          startSession();
+          startSession({ newOnly: true });
         };
       }
     }

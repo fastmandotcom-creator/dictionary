@@ -9,6 +9,30 @@ def client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
+def test_listen_paginates_the_full_path() -> None:
+    res = client().get("/listen?base=vi&target=en&topic=general&offset=60&limit=60")
+    assert res.status_code == 200
+    assert "61-120/" in res.text
+    assert "cefr-select" in res.text
+
+
+def test_neighbors_cross_the_empty_unit_table() -> None:
+    from dict_factory.db import connect
+    from dict_factory.learn_queries import learn_neighbors
+
+    conn = connect()
+    try:
+        first = learn_neighbors(conn, "GREET_HELLO", "en")
+        assert first["prev"] is None
+        assert first["next"]
+        a1_tail = learn_neighbors(conn, "BLOW_OUT_CANDLE", "en", levels=["A1"])
+        assert a1_tail["next"] is None
+        crossed = learn_neighbors(conn, "BLOW_OUT_CANDLE", "en")
+        assert crossed["next"] == "FAMILY_HOME"
+    finally:
+        conn.close()
+
+
 def test_listen_page_renders() -> None:
     res = client().get("/listen?base=vi&target=en&topic=general")
     assert res.status_code == 200

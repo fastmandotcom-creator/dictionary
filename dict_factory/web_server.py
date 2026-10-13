@@ -45,13 +45,23 @@ async def asr_js():
 
 
 @app.get("/api/learn/{concept_id}")
-async def api_learn_concept(concept_id: str, base: str = Query("vi"), target: str = Query("ja")):
+async def api_learn_concept(
+    concept_id: str,
+    base: str = Query("vi"),
+    target: str = Query("ja"),
+    cefr: str = Query(""),
+    exam: str = Query(""),
+):
     _validate_pair(base, target)
+    _validate_cefr(cefr)
     conn = get_db()
     try:
+        exam_range = _validate_exam(conn, exam, target)
         detail = learn_concept_pair(conn, concept_id, base, target)
         if detail:
-            detail["neighbors"] = learn_neighbors(conn, concept_id, target)
+            detail["neighbors"] = learn_neighbors(
+                conn, concept_id, target, levels=_path_levels(exam_range, cefr)
+            )
     finally:
         conn.close()
     if not detail:
@@ -94,6 +104,15 @@ def _validate_exam(conn, exam: str, target: str) -> tuple[str, str] | None:
             detail=f"exam {exam!r} is for {exam_lang!r}, not target {target!r}",
         )
     return resolved
+
+
+def _path_levels(exam_range: tuple[str, str] | None, cefr: str) -> list[str] | None:
+    """CEFR band for neighbor walks. None = the full A1–C1 path."""
+    if exam_range is not None:
+        return cefr_range_levels(*exam_range)
+    if cefr:
+        return [cefr]
+    return None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -296,11 +315,12 @@ async def learn_concept_view(
     conn = get_db()
     neighbors: dict = {"prev": None, "next": None, "unit_id": None}
     try:
-        if exam:
-            _validate_exam(conn, exam, target)
+        exam_range = _validate_exam(conn, exam, target)
         detail = learn_concept_pair(conn, concept_id, base, target)
         if detail:
-            neighbors = learn_neighbors(conn, concept_id, target)
+            neighbors = learn_neighbors(
+                conn, concept_id, target, levels=_path_levels(exam_range, cefr)
+            )
     finally:
         conn.close()
 
@@ -415,6 +435,7 @@ async def listen_view(
         all_ids = list(dict.fromkeys(ids))
         total_count = len(all_ids)
         page_ids = all_ids[offset : offset + limit]
+        next_concept_id = all_ids[offset + limit] if offset + limit < total_count else ""
         if not page_ids:
             concepts: list[dict] = []
         else:
@@ -457,6 +478,7 @@ async def listen_view(
             "has_next_page": offset + limit < total_count,
             "next_offset": offset + limit,
             "prev_offset": max(0, offset - limit),
+            "next_concept_id": next_concept_id,
         },
     )
 

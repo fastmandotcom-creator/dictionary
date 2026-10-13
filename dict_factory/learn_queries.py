@@ -98,27 +98,79 @@ def learn_level_units(conn: sqlite3.Connection, base: str, target: str, cefr: st
     return result
 
 
-def learn_neighbors(conn: sqlite3.Connection, concept_id: str, target: str) -> dict[str, Any]:
-    """Prev/next concept ids within the same filled unit (for this target)."""
-    if not _has_extra(conn)["units"]:
-        return {"prev": None, "next": None, "unit_id": None}
-    row = conn.execute(
-        """
-        SELECT ui.unit_id AS unit_id,
-               ui.concept_id AS cur_id,
-               (SELECT ui2.concept_id FROM unit_items ui2
-                 WHERE ui2.unit_id = ui.unit_id AND ui2.order_no < ui.order_no
-                 ORDER BY ui2.order_no DESC LIMIT 1) AS prev_id,
-               (SELECT ui3.concept_id FROM unit_items ui3
-                 WHERE ui3.unit_id = ui.unit_id AND ui3.order_no > ui.order_no
-                 ORDER BY ui3.order_no ASC LIMIT 1) AS next_id
-        FROM unit_items ui
-        JOIN units u ON u.id = ui.unit_id
-        WHERE ui.concept_id = ? AND u.target = ?
-        LIMIT 1
-        """,
-        (concept_id, target),
-    ).fetchone()
+def learn_neighbors(
+    conn: sqlite3.Connection,
+    concept_id: str,
+    target: str,
+    *,
+    levels: list[str] | None = None,
+) -> dict[str, Any]:
+    """Prev/next concept on the same path /learn and /session walk.
+
+    Filled units: unit order, crossing the unit boundary.
+    Empty units table (the live 12k set): CEFR then rank, same order as
+    learn_level_units. `levels` keeps a CEFR or exam filter inside its band.
+    """
+    allowed = levels or ["A1", "A2", "B1", "B2", "C1"]
+    placeholders = ",".join("?" for _ in allowed)
+    flags = _has_extra(conn)
+    units_filled = False
+    if flags["units"]:
+        units_filled = (
+            conn.execute("SELECT COUNT(*) FROM units WHERE target = ?", (target,)).fetchone()[0] > 0
+        )
+    if units_filled:
+        row = conn.execute(
+            f"""
+            WITH ordered AS (
+              SELECT ui.concept_id AS concept_id,
+                     ui.unit_id AS unit_id,
+                     ROW_NUMBER() OVER (
+                       ORDER BY CASE u.cefr
+                         WHEN 'A1' THEN 1 WHEN 'A2' THEN 2 WHEN 'B1' THEN 3
+                         WHEN 'B2' THEN 4 WHEN 'C1' THEN 5 ELSE 9 END,
+                         u.order_no, ui.order_no, ui.concept_id
+                     ) AS rn
+              FROM unit_items ui
+              JOIN units u ON u.id = ui.unit_id
+              WHERE u.target = ? AND u.cefr IN ({placeholders})
+            ),
+            cur AS (
+              SELECT rn, unit_id FROM ordered WHERE concept_id = ? ORDER BY rn LIMIT 1
+            )
+            SELECT
+              (SELECT concept_id FROM ordered o WHERE o.rn = cur.rn - 1) AS prev_id,
+              (SELECT concept_id FROM ordered o WHERE o.rn = cur.rn + 1) AS next_id,
+              cur.unit_id AS unit_id
+            FROM cur
+            """,
+            (target, *allowed, concept_id),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            f"""
+            WITH ordered AS (
+              SELECT c.id AS concept_id,
+                     ROW_NUMBER() OVER (
+                       ORDER BY CASE c.cefr
+                         WHEN 'A1' THEN 1 WHEN 'A2' THEN 2 WHEN 'B1' THEN 3
+                         WHEN 'B2' THEN 4 WHEN 'C1' THEN 5 ELSE 9 END,
+                         c.rank, c.id
+                     ) AS rn
+              FROM concepts c
+              WHERE c.cefr IN ({placeholders})
+            ),
+            cur AS (
+              SELECT rn FROM ordered WHERE concept_id = ? LIMIT 1
+            )
+            SELECT
+              (SELECT concept_id FROM ordered o WHERE o.rn = cur.rn - 1) AS prev_id,
+              (SELECT concept_id FROM ordered o WHERE o.rn = cur.rn + 1) AS next_id,
+              NULL AS unit_id
+            FROM cur
+            """,
+            (*allowed, concept_id),
+        ).fetchone()
     if row is None:
         return {"prev": None, "next": None, "unit_id": None}
     return {"prev": row["prev_id"], "next": row["next_id"], "unit_id": row["unit_id"]}

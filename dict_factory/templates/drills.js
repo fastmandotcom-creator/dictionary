@@ -103,33 +103,61 @@
     return drills.length ? drills[0].drill_key : null;
   }
 
-  // Loads a pack: server cache first (GET /api/drills), demo offline fallback.
-  // The fallback kicks in fast (8s) so a slow/unavailable LLM never blocks
-  // the learner; the server call may still complete later and fill the cache.
-  function loadPack(concept, target, topic) {
-    var specs = specsFor(concept);
-    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 8000) : null;
-    return fetch('/api/drills?concept_id=' + encodeURIComponent(concept.id) +
-      '&target=' + target + '&topic=' + topic, ctrl ? { signal: ctrl.signal } : undefined)
+  // Real packs only. Demo fallback must not poison this — a timed-out
+  // player still lets the in-flight request fill the cache for the next card.
+  var packCache = {};
+  var packInflight = {};
+
+  function packKey(concept, target, topic) {
+    return (concept && concept.id) + '|' + target + '|' + topic;
+  }
+
+  function mapServerPack(data) {
+    if (!data || !Array.isArray(data.sentences) || !data.sentences.length) return null;
+    return data.sentences.map(function (s) {
+      return {
+        drill_key: s.drill_key, tense: s.tense, polarity: s.polarity,
+        sentence: s.sentence, surface: s.surface,
+        base_hint: s.base_hint || '', demo: false
+      };
+    });
+  }
+
+  function fetchServerPack(concept, target, topic) {
+    var key = packKey(concept, target, topic);
+    if (packCache[key]) return Promise.resolve(packCache[key]);
+    if (packInflight[key]) return packInflight[key];
+    packInflight[key] = fetch('/api/drills?concept_id=' + encodeURIComponent(concept.id) +
+      '&target=' + target + '&topic=' + topic)
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
-        if (data && Array.isArray(data.sentences) && data.sentences.length) {
-          return data.sentences.map(function (s) {
-            return {
-              drill_key: s.drill_key, tense: s.tense, polarity: s.polarity,
-              sentence: s.sentence, surface: s.surface,
-              base_hint: s.base_hint || '', demo: false
-            };
-          });
-        }
-        return demoPack(concept, topic);
+        var pack = mapServerPack(data);
+        if (pack) packCache[key] = pack;
+        return pack;
       })
-      .catch(function () { return demoPack(concept, topic); })
+      .catch(function () { return null; })
       .then(function (pack) {
-        if (timer) clearTimeout(timer);
+        delete packInflight[key];
         return pack;
       });
+    return packInflight[key];
+  }
+
+  // Loads a pack: memory/server cache first, demo offline fallback after 8s
+  // so a slow LLM never blocks the learner.
+  function loadPack(concept, target, topic) {
+    var key = packKey(concept, target, topic);
+    if (packCache[key]) return Promise.resolve(packCache[key]);
+    var server = fetchServerPack(concept, target, topic);
+    var timeout = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 8000); });
+    return Promise.race([server, timeout]).then(function (pack) {
+      return pack || demoPack(concept, topic);
+    });
+  }
+
+  function prefetch(concept, target, topic) {
+    if (!concept || !concept.id) return;
+    fetchServerPack(concept, target, topic);
   }
 
   // Player: renders one concept's drill sequence into `container`.
@@ -348,6 +376,7 @@
     specsFor: specsFor,
     demoPack: demoPack,
     loadPack: loadPack,
+    prefetch: prefetch,
     pickDrillKey: pickDrillKey,
     player: player
   };

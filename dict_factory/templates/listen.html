@@ -22,8 +22,10 @@
     const CONCEPTS = {{ concepts | tojson }};
     const HAS_NEXT_PAGE = {{ has_next_page | tojson }};
     const NEXT_OFFSET = {{ next_offset | tojson }};
+    const NEXT_CONCEPT_ID = {{ next_concept_id | tojson }};
     const CURRENT_OFFSET = {{ offset | tojson }};
     const TOTAL_COUNT = {{ total_count | tojson }};
+    const EXAM = {{ exam | tojson }};
     var topic = TOPIC0;
     var cefrVal = CEFR0;
     var currentConceptIdx = 0;
@@ -81,6 +83,10 @@
 
       var autoPlayChecked = document.getElementById('autoplay-toggle') ? document.getElementById('autoplay-toggle').checked : true;
 
+      var upcoming = CONCEPTS[currentConceptIdx + 1];
+      if (upcoming) DrillUI.prefetch(upcoming, TARGET, topic);
+      else if (NEXT_CONCEPT_ID) DrillUI.prefetch({ id: NEXT_CONCEPT_ID }, TARGET, topic);
+
       DrillUI.player(el, {
         base: BASE, target: TARGET, topic: topic, concept: c,
         autoplay: autoPlayChecked,
@@ -132,7 +138,7 @@
             }, 1000);
           } else if (HAS_NEXT_PAGE) {
             var nextBatchUrl = '/listen?base=' + BASE + '&target=' + TARGET + '&topic=' + topic +
-              (cefrVal ? '&cefr=' + cefrVal : '') + '&offset=' + NEXT_OFFSET;
+              (cefrVal ? '&cefr=' + cefrVal : '') + (EXAM ? '&exam=' + EXAM : '') + '&offset=' + NEXT_OFFSET;
             var cdBatch = 3;
             el.innerHTML =
               '<div class="text-center p-6 w-full">' +
@@ -189,16 +195,17 @@
       sel.value = topic;
       sel.onchange = function () {
         location.href = '/listen?base=' + BASE + '&target=' + TARGET + '&topic=' + this.value +
-          (cefrVal ? '&cefr=' + cefrVal : '') + '&offset=0';
+          (cefrVal ? '&cefr=' + cefrVal : '') + (EXAM ? '&exam=' + EXAM : '') + '&offset=0';
       };
       var cefrSel = document.getElementById('cefr-select');
       if (cefrSel) {
         cefrSel.onchange = function () {
           location.href = '/listen?base=' + BASE + '&target=' + TARGET + '&topic=' + topic +
-            (this.value ? '&cefr=' + this.value : '') + '&offset=0';
+            (this.value ? '&cefr=' + this.value : '') + (EXAM ? '&exam=' + EXAM : '') + '&offset=0';
         };
       }
       renderConceptList();
+      if (CONCEPTS.length) openDrills(CONCEPTS[0], 0);
       Srs.ensureDevice().then(function () {
         Srs.sync(BASE, TARGET, function (s, n) {
           var badge = document.getElementById('sync-badge');

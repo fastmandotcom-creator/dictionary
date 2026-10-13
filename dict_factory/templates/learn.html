@@ -119,7 +119,6 @@
 
       var shown = 0, done = 0;
       var cards = document.querySelectorAll('[data-unit-progress]');
-      var prevComplete = true;
       cards.forEach(function (card) {
         var ids = card.getAttribute('data-ids').split(',').filter(Boolean);
         var d = 0;
@@ -130,23 +129,18 @@
         var label = card.querySelector('.unit-progress-label');
         if (label && d > 0) label.textContent = d + '/' + ids.length + ' từ';
         shown += ids.length; done += d;
-        // unit gate: a unit is locked until the previous one is >=80% done
-        var complete = ids.length > 0 && (d / ids.length) >= 0.8;
-        if (!prevComplete) {
-          card.classList.add('opacity-50');
-          var tag = card.querySelector('.unit-progress-label');
-          if (tag && tag.textContent.indexOf('/') === -1) tag.textContent = 'khóa — ' + ids.length + ' từ';
-        }
-        prevComplete = complete;
       });
 
       // "Hôm nay" summary card: new words of the first open unit + due cards
       var activeUnit = null;
       for (var u = 0; u < UNITS.length; u++) {
         var ids2 = UNITS[u].concept_ids;
-        var d2 = 0;
-        for (var k = 0; k < ids2.length; k++) { if (isDone(ids2[k])) d2++; }
-        if (!(ids2.length > 0 && (d2 / ids2.length) >= 0.8)) { activeUnit = UNITS[u]; break; }
+        var open = false;
+        for (var k = 0; k < ids2.length; k++) {
+          var seen = (srs[ids2[k]] && srs[ids2[k]].grade) || legacy[ids2[k]];
+          if (!seen) { open = true; break; }
+        }
+        if (open) { activeUnit = UNITS[u]; break; }
       }
       var newCount = 0;
       if (activeUnit) {
