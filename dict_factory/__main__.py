@@ -55,7 +55,6 @@ def main() -> None:
     elif args.cmd == "warehouse":
         load_warehouse()
     elif args.cmd == "normalize-domains":
-        import json
         from collections import Counter
 
         from dict_factory.db import connect
