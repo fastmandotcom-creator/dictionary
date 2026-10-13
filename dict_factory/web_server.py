@@ -543,6 +543,55 @@ async def api_placement_questions(base: str = Query("vi"), target: str = Query("
 
 # ---- Phase D2: advanced drill packs (cache-first LLM) ----------------------
 
+# ---- Phase E1: free-online TTS (standard voices, cache-first) -------------
+
+@app.get("/api/tts/voices")
+async def api_tts_voices(lang: str = Query("en")):
+    """Which standard voice the TTS service uses for a language (family-guarded)."""
+    from dict_factory.tts import TtsVoiceError, voice_info
+
+    try:
+        return voice_info(lang)
+    except TtsVoiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/tts")
+async def api_tts(
+    request: Request,
+    lang: str = Query("en"),
+    text: str = Query(..., min_length=1),
+):
+    """Synthesize `text` with the standard neural voice for `lang` (cached).
+
+    Cache-first: repeat requests are served from memory / out/tts_cache.db.
+    400 = unknown language / wrong-family voice / text too long (the client
+    must then use its browser floor and say so); 503 = every free vendor is
+    down (never a generic 500, never an English voice for another language).
+    """
+    from fastapi.responses import Response
+
+    import dict_factory.tts as tts
+
+    try:
+        result = tts.synthesize_cached(lang, text)
+    except tts.TtsVoiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except tts.TtsVendorError as exc:  # before the base TtsError: vendors down = 503
+        raise HTTPException(status_code=503, detail=f"TTS unavailable: {exc}") from exc
+    except tts.TtsError as exc:  # too long / empty text
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(
+        content=result.audio,
+        media_type=result.mime,
+        headers={
+            "X-TTS-Voice": result.voice,
+            "X-TTS-Source": result.source,
+            "Cache-Control": "public, max-age=86400",
+        },
+    )
+
+
 @app.get("/api/drills/topics")
 async def api_drill_topics():
     from dict_factory.drills import DRILL_TOPICS
