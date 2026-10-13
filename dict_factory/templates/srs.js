@@ -93,17 +93,59 @@
     return a;
   }
 
-  // Speaks `text` with a voice for `langCode`. Shows a visible note instead
-  // of failing silently when the device has no voice for that language.
-  // `notify` receives the message string when speech cannot be played.
-  function speak(text, langCode, notify) {
+  // Speaks `text` with a voice for `langCode`.
+  //
+  // Ladder (Phase E2, mirrors the extension architecture):
+  //   1. /api/tts  -> the server's standard neural voice for the language
+  //      (free-online, cached). Reported as source 'standard'.
+  //   2. Web Speech API browser voice (the floor) -> source 'browser'.
+  //   3. no usable voice at all -> source 'none'.
+  // `notify` receives a message when playback was NOT the standard voice.
+  // `onSource` (optional) receives 'standard' | 'browser' | 'none' as soon as
+  // the source is decided, so callers can show a "giọng: ..." label.
+  var _ttsAudio = null;
+  var _ttsSource = 'none';
+  function ttsSource() { return _ttsSource; }
+
+  function speak(text, langCode, notify, onSource) {
     if (!text) return;
-    if (!('speechSynthesis' in window)) {
-      if (notify) notify('Thiết bị không hỗ trợ đọc văn bản.');
+    var lang = String(langCode || '').toLowerCase().split('-')[0];
+    var usedStandard = false;
+    // 1) the server standard voice (cached; a repeat is near-instant)
+    if (typeof fetch === 'function') {
+      fetch('/api/tts?lang=' + encodeURIComponent(lang) + '&text=' + encodeURIComponent(text))
+        .then(function (r) {
+          if (!r.ok) throw new Error('tts ' + r.status);
+          return r.blob();
+        })
+        .then(function (blob) {
+          usedStandard = true;
+          _ttsSource = 'standard';
+          if (onSource) onSource('standard');
+          playAudioBlob(blob, lang, text);
+        })
+        .catch(function () {
+          if (usedStandard) return;
+          // 2) browser floor
+          var fell = webSpeechSpeak(text, langCode, notify);
+          _ttsSource = fell ? 'browser' : 'none';
+          if (onSource) onSource(_ttsSource);
+        });
       return;
     }
+    // no fetch at all (very old browser) -> straight to the floor
+    var ok = webSpeechSpeak(text, langCode, notify);
+    _ttsSource = ok ? 'browser' : 'none';
+    if (onSource) onSource(_ttsSource);
+  }
+
+  function webSpeechSpeak(text, langCode, notify) {
+    if (!('speechSynthesis' in window)) {
+      if (notify) notify('Thiết bị không hỗ trợ đọc văn bản.');
+      return false;
+    }
     var voices = window.speechSynthesis.getVoices();
-    var prefix = String(langCode || '').toLowerCase();
+    var prefix = String(langCode || '').toLowerCase().split('-')[0];
     var match = null;
     for (var i = 0; i < voices.length; i++) {
       var v = voices[i];
@@ -117,7 +159,30 @@
     if (match) u.voice = match;
     window.speechSynthesis.speak(u);
     if (!match && notify) {
-      notify('Thiết bị chưa có giọng cho ngôn ngữ này — bật đọc thử không khả dụng.');
+      notify('Giọng trình duyệt không có ngôn ngữ này — bật đọc thử không khả dụng.');
+    }
+    return true;
+  }
+
+  function playAudioBlob(blob, lang, text) {
+    stopTtsAudio();
+    var url = URL.createObjectURL(blob);
+    _ttsAudio = new Audio(url);
+    var onError = function () {
+      // standard voice failed at playback time: fall back to the floor
+      if (_ttsSource === 'standard') {
+        _ttsSource = 'browser';
+        webSpeechSpeak(text || '', lang, null);
+      }
+      URL.revokeObjectURL(url);
+    };
+    _ttsAudio.onerror = onError;
+    _ttsAudio.play().catch(onError);
+  }
+  function stopTtsAudio() {
+    if (_ttsAudio) {
+      try { _ttsAudio.pause(); } catch (e) {}
+      _ttsAudio = null;
     }
   }
 
@@ -248,6 +313,7 @@
     isDue: isDue,
     shuffle: shuffle,
     speak: speak,
+    ttsSource: ttsSource,
     // Phase 2
     nowIso: nowIso,
     touch: touch,

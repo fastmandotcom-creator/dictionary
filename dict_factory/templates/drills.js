@@ -172,7 +172,8 @@
         (d.demo ? ' · <span class="text-slate-600">demo offline</span>' : '') + '</span></div>' +
         '<div class="flex items-center gap-3">' +
         '<button id="dl-listen" class="text-emerald-400 border border-emerald-500/30 rounded-lg px-4 py-2 text-sm hover:bg-emerald-500/10">&#128266; Nghe</button>' +
-        '<span class="text-xs text-slate-500">nghe rồi gõ lại câu</span></div>' +
+        '<span class="text-xs text-slate-500">nghe rồi gõ lại câu</span>' +
+        '<span id="dl-voice-label" class="ml-auto text-[10px] text-slate-600">giọng: ?</span></div>' +
         '<p id="dl-note" class="hidden text-xs text-amber-400/90 mt-2"></p>' +
         '<input id="dl-input" type="text" autocomplete="off" placeholder="Viết lại câu vừa nghe…" ' +
         'class="mt-4 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500" />' +
@@ -185,6 +186,9 @@
         Srs.speak(d.sentence, opts.target, function (msg) {
           var n = container.querySelector('#dl-note');
           if (n) { n.textContent = msg; n.classList.remove('hidden'); }
+        }, function (source) {
+          var b = container.querySelector('#dl-voice-label');
+          if (b) b.textContent = { standard: 'giọng chuẩn (mạng)', browser: 'giọng trình duyệt', none: 'chưa có giọng' }[source] || source;
         });
       };
       container.querySelector('#dl-check').onclick = function () { check(false); };

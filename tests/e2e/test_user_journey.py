@@ -282,6 +282,21 @@ def test_listen_write_correct_flow(page) -> None:
     assert_no_js_errors(page)
 
 
+def test_listen_audio_button_never_crashes(page) -> None:
+    """Phase E2: the NGHE button runs the TTS ladder (server standard voice,
+    browser floor, or nothing) and must never raise a JS error."""
+    page.goto(f"{page.server_url}/listen?base=vi&target=en&topic=general")
+    page.wait_for_selector(".concept-btn", timeout=15000)
+    page.click(".concept-btn")
+    page.wait_for_selector("#dl-listen", timeout=20000)
+    page.click("#dl-listen")
+    page.wait_for_timeout(2000)  # give the ladder (fetch + fallback) time to settle
+    assert_no_js_errors(page)
+    # the voice label reflects whatever source actually played
+    label = page.text_content("#dl-voice-label")
+    assert label, "a voice-source label must be shown after pressing NGHE"
+
+
 def test_listen_typo_shows_answer(page) -> None:
     """A misspelled attempt must show 'Chưa đúng' and reveal the correct sentence."""
     page.goto(f"{page.server_url}/listen?base=vi&target=en&topic=general")
