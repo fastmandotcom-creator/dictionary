@@ -88,7 +88,40 @@ lists the presets. Each drill is its own SRS card
 (`{concept}::{tense}/{polarity}`, 1/3/7-day intervals) shared with the regular flashcards.
 The optional **"Nâng cao"** segment in `/session` (English target only) weaves a few
 listen-write drills into a normal study session and reports "luyện nghe–viết: x/y" in
-the end summary. When the LLM is unreachable the UI falls back to a deterministic
-offline **demo pack** (clearly labelled) so the flow never blocks.
+ the end summary. When the LLM is unreachable the UI falls back to a deterministic
+ offline **demo pack** (clearly labelled) so the flow never blocks.
+
+### Standard voices for 35 languages + microphone input
+
+The learner can **hear** a standard neural voice and **dictate** the answer with a
+microphone, in any of the 35 product languages.
+
+**TTS ladder** (mirrors the extension architecture — network standard voice first,
+browser voice only as the floor):
+1. `GET /api/tts?lang=&text=` → server synthesizes with **Microsoft Edge neural
+   voices** (`edge-tts`), one cached neural voice per language from the
+   35-entry catalog in `dict_factory/tts.py` (ported from the extension's
+   `bingTtsVoices` defaults). Repeat plays come from `out/tts_cache.db` + an
+   in-memory LRU, so a given `(lang, voice, text)` is synthesized **once**.
+2. If the Edge rung fails, the free **Google TTS** rung (`gTTS`) is tried.
+3. In the browser, `Srs.speak` plays the server audio and, only if that is
+   unavailable, falls back to the **Web Speech** browser voice (shown as
+   "giọng trình duyệt"). `Srs.ttsSource()` reports `standard` / `browser` / `none`.
+
+Safety rules: a non-English language **never** resolves to an English voice
+(the catalog family-guard rejects it, the API returns 400 so the browser floor
+takes over); the documented aliases `no->nb` and `he->iw` are honoured. A voice
+for every language is guaranteed by `tests/test_tts.py` (35-language coverage).
+
+**Microphone dictation** (`/asr.js`, served like `srs.js`): a mic button next to the
+drill's dictation box (visible only when the browser supports Web Speech). It runs the
+extension's `useBrowserSpeechRecognition` behaviour — continuous + interim results,
+final transcripts commit into the box for editing **before** grading, language switch
+restarted inside `onend` (Chrome race), and clear error messages (mic denied, no
+network, no mic). Recognition is 100% client-side: **audio is never uploaded**. The
+35 language codes map to their best-coverage BCP-47 tags in `asr.js`.
+
+Dependencies: `edge-tts` + `gTTS` (see `requirements.txt`). With both missing the
+ladder degrades to the browser floor automatically — the app still works.
 
 Model default: `ag/gemini-3.7-flash-low` via `LEXICON_LLM_*`.

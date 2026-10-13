@@ -1,0 +1,9 @@
+# Runtime dependencies for the web learn app + TTS/LLM services
+fastapi>=0.110
+uvicorn>=0.29
+jinja2>=3.1
+openai>=1.30          # LLM data plane (fill + drill generation)
+edge-tts>=7.0         # free standard neural voices (TTS ladder, rung 1)
+gTTS>=2.5             # Google free TTS (TTS ladder, rung 2)
+pytest>=8.0           # test runner
+playwright>=1.40      # e2e (opt-in with RUN_E2E=1; system Chrome required)
