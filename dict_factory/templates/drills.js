@@ -164,33 +164,36 @@
       stopAsr();
       var d = current();
       if (!d) {
-        container.innerHTML = '<div class="text-center p-6 text-emerald-400 font-semibold">Xong ' +
+        container.innerHTML = '<div class="text-center p-6 text-emerald-400 font-semibold w-full">Xong ' +
           state.total + ' drill.</div>';
         if (opts.onAllDone) opts.onAllDone(state.done, state.total);
         return;
       }
       var due = Srs.isDue(srsId(opts.concept.id, d.drill_key), opts.base, opts.target);
       var polLabel = { affirmative: 'khẳng định', negative: 'phủ định', question: 'câu hỏi' }[d.polarity] || d.polarity;
-      container.innerHTML =
+      // one block wrapper: the host container may be a flex row, and the
+      // card must keep its natural top-to-bottom layout at any width
+      container.innerHTML = '<div class="w-full">' +
         '<div class="flex items-center justify-between text-xs text-slate-500 mb-2">' +
         '<span>' + (state.idx + 1) + '/' + state.total + ' · ' + d.tense.replace('_simple', ' ') + ' · ' + polLabel + '</span>' +
         '<span>' + (due ? '<span class="text-amber-400">đến hạn ôn</span>' : 'lần đầu') +
         (d.demo ? ' · <span class="text-slate-600">demo offline</span>' : '') + '</span></div>' +
-        '<div class="flex items-center gap-3">' +
-        '<button id="dl-listen" class="text-emerald-400 border border-emerald-500/30 rounded-lg px-4 py-2 text-sm hover:bg-emerald-500/10">&#128266; Nghe</button>' +
-        '<span class="text-xs text-slate-500">nghe rồi gõ lại câu</span>' +
-        '<span id="dl-voice-label" class="ml-auto text-[10px] text-slate-600">giọng: ?</span></div>' +
+        '<div class="flex items-center gap-3 flex-wrap">' +
+        '<button id="dl-listen" class="text-emerald-400 border border-emerald-500/30 rounded-lg px-4 py-2 text-sm hover:bg-emerald-500/10 whitespace-nowrap">&#128266; Nghe</button>' +
+        '<span class="text-xs text-slate-500 whitespace-nowrap">nghe rồi gõ lại câu</span>' +
+        '<span id="dl-voice-label" class="ml-auto text-[10px] text-slate-600 whitespace-nowrap">giọng: ?</span></div>' +
         '<p id="dl-note" class="hidden text-xs text-amber-400/90 mt-2"></p>' +
         '<input id="dl-input" type="text" autocomplete="off" placeholder="Viết lại câu vừa nghe…" ' +
         'class="mt-4 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500" />' +
         '<div id="dl-asr-note" class="hidden text-xs text-amber-400/90 mt-2"></div>' +
         '<div id="dl-result" class="hidden mt-3"></div>' +
-        '<div class="flex gap-2 mt-3" id="dl-actions">' +
-        '<button id="dl-check" class="text-xs font-semibold px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200">Chấm câu</button>' +
-        '<button id="dl-reveal" class="text-xs px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200">Hiện đáp án</button>' +
+        '<div class="flex gap-2 mt-3 flex-wrap" id="dl-actions">' +
+        '<button id="dl-check" class="text-xs font-semibold px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 whitespace-nowrap">Chấm câu</button>' +
+        '<button id="dl-reveal" class="text-xs px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200 whitespace-nowrap">Hiện đáp án</button>' +
         (typeof Asr !== 'undefined' && Asr.isSupported() && Srs.readTtsSettings().micEnabled !== false
-          ? '<button id="dl-mic" class="text-xs px-4 py-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20">&#127908; Nói</button>'
+          ? '<button id="dl-mic" class="text-xs px-4 py-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 whitespace-nowrap">&#127908; Nói</button>'
           : '') +
+        '</div>' +
         '</div>';
       var input = container.querySelector('#dl-input');
       container.querySelector('#dl-listen').onclick = function () {
@@ -237,10 +240,10 @@
         ((!correct && revealed) ? '<div class="text-slate-300 text-sm mt-1 font-mono">' + d.sentence + '</div>' : '') +
         (d.base_hint ? '<div class="text-slate-500 text-xs mt-1">' + d.base_hint + '</div>' : '') +
         '<div class="text-xs text-slate-500 mt-2">Tự chấm thẻ này:</div>' +
-        '<div class="flex gap-2 mt-2">' +
-        '<button data-g="hard" class="dl-g px-3 py-1.5 rounded-lg text-xs bg-rose-500/10 text-rose-400 border border-rose-500/20">Chưa (1 ngày)</button>' +
-        '<button data-g="ok" class="dl-g px-3 py-1.5 rounded-lg text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20">Tạm (3 ngày)</button>' +
-        '<button data-g="good" class="dl-g px-3 py-1.5 rounded-lg text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Nhớ (7 ngày)</button></div>';
+        '<div class="flex gap-2 mt-2 flex-wrap">' +
+        '<button data-g="hard" class="dl-g px-3 py-1.5 rounded-lg text-xs bg-rose-500/10 text-rose-400 border border-rose-500/20 whitespace-nowrap">Chưa (1 ngày)</button>' +
+        '<button data-g="ok" class="dl-g px-3 py-1.5 rounded-lg text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">Tạm (3 ngày)</button>' +
+        '<button data-g="good" class="dl-g px-3 py-1.5 rounded-lg text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap">Nhớ (7 ngày)</button></div>';
       res.querySelectorAll('.dl-g').forEach(function (b) {
         b.onclick = function () {
           Srs.grade(srsId(opts.concept.id, d.drill_key), b.dataset.g, opts.base, opts.target);
