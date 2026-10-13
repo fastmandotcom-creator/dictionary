@@ -38,6 +38,12 @@ async def drills_js():
     return FileResponse(TEMPLATES_DIR / "drills.js", media_type="text/javascript")
 
 
+@app.get("/asr.js")
+async def asr_js():
+    """Shared microphone dictation module (Phase E3)."""
+    return FileResponse(TEMPLATES_DIR / "asr.js", media_type="text/javascript")
+
+
 @app.get("/api/learn/{concept_id}")
 async def api_learn_concept(concept_id: str, base: str = Query("vi"), target: str = Query("ja")):
     _validate_pair(base, target)

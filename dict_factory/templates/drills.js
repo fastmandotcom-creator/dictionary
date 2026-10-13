@@ -154,8 +154,14 @@
     });
 
     function current() { return state.drills[state.idx]; }
+    var asrHandle = null; // active dictation session (one at a time)
+
+    function stopAsr() {
+      if (asrHandle) { asrHandle.stop(); asrHandle = null; }
+    }
 
     function render() {
+      stopAsr();
       var d = current();
       if (!d) {
         container.innerHTML = '<div class="text-center p-6 text-emerald-400 font-semibold">Xong ' +
@@ -177,10 +183,13 @@
         '<p id="dl-note" class="hidden text-xs text-amber-400/90 mt-2"></p>' +
         '<input id="dl-input" type="text" autocomplete="off" placeholder="Viết lại câu vừa nghe…" ' +
         'class="mt-4 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500" />' +
+        '<div id="dl-asr-note" class="hidden text-xs text-amber-400/90 mt-2"></div>' +
         '<div id="dl-result" class="hidden mt-3"></div>' +
-        '<div class="flex gap-2 mt-3">' +
+        '<div class="flex gap-2 mt-3" id="dl-actions">' +
         '<button id="dl-check" class="text-xs font-semibold px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200">Chấm câu</button>' +
-        '<button id="dl-reveal" class="text-xs px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200">Hiện đáp án</button></div>';
+        '<button id="dl-reveal" class="text-xs px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200">Hiện đáp án</button>' +
+        (typeof Asr !== 'undefined' && Asr.isSupported() ? '<button id="dl-mic" class="text-xs px-4 py-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20">&#127908; Nói</button>' : '') +
+        '</div>';
       var input = container.querySelector('#dl-input');
       container.querySelector('#dl-listen').onclick = function () {
         Srs.speak(d.sentence, opts.target, function (msg) {
@@ -193,6 +202,22 @@
       };
       container.querySelector('#dl-check').onclick = function () { check(false); };
       container.querySelector('#dl-reveal').onclick = function () { check(true); };
+      var micBtn = container.querySelector('#dl-mic');
+      if (micBtn) {
+        micBtn.onclick = function () {
+          if (asrHandle && asrHandle.listening) { stopAsr(); return; }
+          asrHandle = Asr.start(input, opts.target, {
+            onState: function (on) {
+              micBtn.innerHTML = on ? '&#9632; Đang nghe&hellip;' : '&#127908; Nói';
+              micBtn.classList.toggle('bg-rose-500/30', on);
+            },
+            onError: function (msg) {
+              var n = container.querySelector('#dl-asr-note');
+              if (n && msg) { n.textContent = msg; n.classList.remove('hidden'); }
+            }
+          });
+        };
+      }
       input.onkeydown = function (e) { if (e.key === 'Enter') check(false); };
       input.focus();
     }

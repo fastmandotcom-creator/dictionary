@@ -297,6 +297,22 @@ def test_listen_audio_button_never_crashes(page) -> None:
     assert label, "a voice-source label must be shown after pressing NGHE"
 
 
+def test_listen_mic_dictation_button(page) -> None:
+    """Phase E3: the mic dictation button appears when the browser supports
+    Web Speech (Chrome does) and its hidden path never raises."""
+    page.goto(f"{page.server_url}/listen?base=vi&target=en&topic=general")
+    page.wait_for_selector(".concept-btn", timeout=15000)
+    page.click(".concept-btn")
+    page.wait_for_selector("#dl-input", timeout=20000)
+    supported = page.evaluate("typeof Asr !== 'undefined' && Asr.isSupported()")
+    mic = page.query_selector("#dl-mic")
+    if supported:
+        assert mic, "the mic button must be visible when Web Speech is supported"
+    else:
+        assert mic is None, "the mic button must be hidden when unsupported"
+    assert_no_js_errors(page)
+
+
 def test_listen_typo_shows_answer(page) -> None:
     """A misspelled attempt must show 'Chưa đúng' and reveal the correct sentence."""
     page.goto(f"{page.server_url}/listen?base=vi&target=en&topic=general")

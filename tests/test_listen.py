@@ -51,6 +51,12 @@ def test_session_page_has_advanced_segment() -> None:
     assert "TARGET === 'en'" in res.text
 
 
+def test_asr_js_served() -> None:
+    res = client().get("/asr.js")
+    assert res.status_code == 200
+    assert "global.Asr" in res.text and "isSupported" in res.text
+
+
 def test_learn_page_links_to_listen() -> None:
     res = client().get("/learn?base=vi&target=en")
     assert res.status_code == 200
