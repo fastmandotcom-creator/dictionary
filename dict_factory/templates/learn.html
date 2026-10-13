@@ -31,6 +31,13 @@
         {% else %}
         <a href="/review?base={{ base }}&target={{ target }}" class="hover:text-white">Ôn tập</a>
         {% endif %}
+        {% if exam %}
+        <a href="/listen?base={{ base }}&target={{ target }}&exam={{ exam }}" class="hover:text-emerald-400">Nâng cao</a>
+        {% elif cefr %}
+        <a href="/listen?base={{ base }}&target={{ target }}&cefr={{ cefr }}" class="hover:text-emerald-400">Nâng cao</a>
+        {% else %}
+        <a href="/listen?base={{ base }}&target={{ target }}" class="hover:text-emerald-400">Nâng cao</a>
+        {% endif %}
       </div>
     </div>
   </header>

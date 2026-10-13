@@ -143,7 +143,12 @@ class LLMDrillProvider:
         )
         from dict_factory.llm import call_chat_json
 
-        payload = call_chat_json(messages[0]["content"], messages[1]["content"], timeout=180.0)
+        # interactive call: keep it snappy (fewer retries, shorter timeout) —
+        # the client also races a demo fallback so the learner is never blocked.
+        payload = call_chat_json(
+            messages[0]["content"], messages[1]["content"],
+            retries=2, timeout=60.0,
+        )
         try:
             validate_payload("drills", payload)
         except SchemaViolation as exc:

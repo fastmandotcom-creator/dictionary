@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Luyện nghe–viết — {{ target_name }} ← {{ base_name }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="min-h-full flex flex-col bg-slate-950 text-slate-100">
+  <script src="/srs.js"></script>
+  <script src="/drills.js"></script>
+  <script>
+    var BASE = '{{ base }}';
+    var TARGET = '{{ target }}';
+    var TOPIC0 = {{ topic | tojson }};
+    const TOPICS = {{ topics | tojson }};
+    const CONCEPTS = {{ concepts | tojson }};
+    var topic = TOPIC0;
+
+    function renderConceptList() {
+      var list = document.getElementById('concept-list');
+      if (!CONCEPTS.length) {
+        list.innerHTML = '<div class="text-xs text-slate-500 p-3">Chưa có từ ở mức này.</div>';
+        return;
+      }
+      list.innerHTML = CONCEPTS.map(function (c) {
+        return '<button data-cid="' + c.id + '" class="concept-btn block w-full text-left px-3 py-2.5 rounded-lg ' +
+          'hover:bg-slate-800/70 transition border border-transparent">' +
+          '<div class="text-sm font-semibold text-slate-200">' + (c.en || c.id) +
+          ' <span class="text-slate-500 font-normal text-xs">' + c.id + '</span></div>' +
+          '<div class="text-xs text-slate-500">' + c.gloss + ' · ' + c.cefr + '</div></button>';
+      }).join('');
+      list.querySelectorAll('.concept-btn').forEach(function (b) {
+        b.onclick = function () {
+          list.querySelectorAll('.concept-btn').forEach(function (x) { x.classList.remove('bg-slate-800', 'border-emerald-500/40'); });
+          b.classList.add('bg-slate-800', 'border-emerald-500/40');
+          var c = CONCEPTS.find(function (x) { return x.id === b.dataset.cid; });
+          openDrills(c);
+        };
+      });
+    }
+
+    function openDrills(c) {
+      var el = document.getElementById('drill-card');
+      el.innerHTML = '<div class="text-center p-8 text-sm text-slate-500">Đang chuẩn bị: ' + c.id + '…</div>';
+      document.getElementById('drill-meta').textContent = c.id + ' · chủ đề: ' + topic;
+      DrillUI.player(el, {
+        base: BASE, target: TARGET, topic: topic, concept: c,
+        onAllDone: function () {
+          el.insertAdjacentHTML('beforeend',
+            '<div class="mt-4 text-center"><a href="/learn?base=' + BASE + '&target=' + TARGET +
+            '" class="text-xs text-slate-400 hover:text-white">← Về lộ trình</a></div>');
+        }
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', function () {
+      var sel = document.getElementById('topic-select');
+      sel.value = topic;
+      sel.onchange = function () {
+        location.href = '/listen?base=' + BASE + '&target=' + TARGET + '&topic=' + this.value;
+      };
+      renderConceptList();
+      Srs.ensureDevice().then(function () {
+        Srs.sync(BASE, TARGET, function (s, n) {
+          var badge = document.getElementById('sync-badge');
+          if (badge) {
+            badge.classList.remove('hidden'); badge.classList.add('flex');
+            badge.textContent = s === 'synced' ? '☁ Đã đồng bộ' : '☁ Chờ đồng bộ ' + n;
+          }
+        });
+      }).catch(function () {});
+    });
+  </script>
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-3xl mx-auto px-4 py-3.5 flex items-center justify-between">
+      <div class="flex items-center gap-2.5 text-sm">
+        <span class="text-emerald-400 font-semibold">{{ base_name }}</span>
+        <span class="text-slate-500">→</span>
+        <span class="text-sky-400 font-semibold">{{ target_name }}</span>
+        <span class="text-xs text-slate-500">· Luyện nghe–viết</span>
+      </div>
+      <div class="flex items-center gap-3 text-xs text-slate-400">
+        <span id="sync-badge" class="hidden items-center gap-1 text-slate-500"></span>
+        <a href="/learn?base={{ base }}&target={{ target }}" class="hover:text-white">← Lộ trình</a>
+      </div>
+    </div>
+  </header>
+  <main class="flex-1 max-w-3xl w-full mx-auto px-4 py-6">
+    <div class="flex items-center gap-3 mb-4 text-xs">
+      <span class="text-slate-500">Chủ đề:</span>
+      <select id="topic-select" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">
+        {% for t in topics %}
+        <option value="{{ t }}" {% if t == topic %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+      <span class="text-slate-600">câu LLM theo chủ đề; thiếu LLM thì dùng demo offline</span>
+    </div>
+    <div class="flex gap-4">
+      <aside class="w-56 shrink-0">
+        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Từ để luyện</div>
+        <div id="concept-list" class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"></div>
+      </aside>
+      <section class="flex-1 min-w-0">
+        <div id="drill-card" class="bg-slate-900 border border-slate-800 rounded-xl p-5 min-h-[260px] flex items-center justify-center">
+          <div class="text-center text-sm text-slate-500">Chọn một từ ở bên trái để bắt đầu luyện nghe–viết.</div>
+        </div>
+        <div id="drill-meta" class="text-xs text-slate-600 mt-2"></div>
+        <p class="text-xs text-slate-500 mt-2">Nghe câu → gõ lại đúng chính tả → tự chấm thẻ (Chưa 1 ngày / Tạm 3 ngày / Nhớ 7 ngày).</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

@@ -32,6 +32,12 @@ async def srs_js():
     return FileResponse(TEMPLATES_DIR / "srs.js", media_type="text/javascript")
 
 
+@app.get("/drills.js")
+async def drills_js():
+    """Shared listen-and-write drill UI module (Phase D3)."""
+    return FileResponse(TEMPLATES_DIR / "drills.js", media_type="text/javascript")
+
+
 @app.get("/api/learn/{concept_id}")
 async def api_learn_concept(concept_id: str, base: str = Query("vi"), target: str = Query("ja")):
     _validate_pair(base, target)
@@ -360,6 +366,77 @@ async def review(
             "target_name": _language_name(target),
             "card_ids": card_ids,
             "cefr_levels": sorted(CEFR_LEVELS),
+        },
+    )
+
+
+@app.get("/listen", response_class=HTMLResponse)
+@app.head("/listen", response_class=HTMLResponse)
+async def listen_view(
+    request: Request,
+    base: str = Query("vi"),
+    target: str = Query("en"),
+    cefr: str = Query(""),
+    exam: str = Query(""),
+    topic: str = Query("general"),
+):
+    """Listen-and-write drill page (Phase D3). Concepts are scoped like /learn
+    (exam range > cefr > all levels); drills come from the cache-first API."""
+    from dict_factory.drills import DRILL_TOPICS
+
+    _validate_pair(base, target)
+    _validate_cefr(cefr)
+    if topic not in DRILL_TOPICS:
+        raise HTTPException(status_code=400, detail=f"unknown topic {topic!r}")
+    conn = get_db()
+    try:
+        exam_range = _validate_exam(conn, exam, target)
+        ids: list[str] = []
+        if exam_range is not None:
+            levels = cefr_range_levels(*exam_range)
+            for level in levels:
+                for unit in learn_level_units(conn, base, target, level):
+                    ids.extend(unit["concept_ids"])
+        else:
+            # no exam filter: one call spans the cefr filter ("" = all levels,
+            # synthesized in rank order — same as /learn)
+            for unit in learn_level_units(conn, base, target, cefr):
+                ids.extend(unit["concept_ids"])
+        ids = list(dict.fromkeys(ids))[:60]
+        if not ids:
+            concepts: list[dict] = []
+        else:
+            rows = conn.execute(
+                f"""
+                SELECT c.id, c.gloss_en AS gloss, c.cefr, c.pos, e.text AS en
+                FROM concepts c
+                LEFT JOIN expressions e ON e.concept_id = c.id AND e.lang = 'en'
+                WHERE c.id IN ({','.join('?' for _ in ids)})
+                """,
+                ids,
+            ).fetchall()
+            by_id = {r["id"]: r for r in rows}
+            concepts = [
+                {"id": i, "gloss": by_id[i]["gloss"], "cefr": by_id[i]["cefr"],
+                 "pos": by_id[i]["pos"], "en": by_id[i]["en"] or ""}
+                for i in ids if i in by_id
+            ]
+    finally:
+        conn.close()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="listen.html",
+        context={
+            "base": base,
+            "target": target,
+            "base_name": _language_name(base),
+            "target_name": _language_name(target),
+            "cefr": cefr,
+            "exam": exam,
+            "topic": topic,
+            "topics": list(DRILL_TOPICS),
+            "concepts": concepts,
         },
     )
 

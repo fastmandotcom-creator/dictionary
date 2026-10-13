@@ -11,6 +11,7 @@
 </head>
 <body class="min-h-full flex flex-col bg-slate-950 text-slate-100">
   <script src="/srs.js"></script>
+  <script src="/drills.js"></script>
   <script>
     var BASE = '{{ base }}';
     var TARGET = '{{ target }}';
@@ -66,6 +67,8 @@
 
     // ---------- overview ----------
     var state = { queue: [], idx: 0, flipped: false, grades: { hard: 0, ok: 0, good: 0 } };
+    // advanced listen-and-write drills (Phase D3, optional)
+    var drills = { on: false, topic: 'general', count: 1, queue: [], idx: 0, done: 0, total: 0 };
     var curTarget = '', curBase = '';
 
     function renderOverview() {
@@ -92,6 +95,23 @@
         '<b class="text-slate-400">Cách hoạt động:</b> học xong mỗi thẻ, bạn tự chấm. Thẻ chỉ lặp lại khi đến hẹn — ' +
         '<span class="text-rose-400">Chưa</span> = mai, <span class="text-amber-400">Tạm</span> = 3 ngày, ' +
         '<span class="text-emerald-400">Nhớ</span> = 7 ngày. Thẻ chưa từng học không xuất hiện ở mục "cần ôn".</div>');
+      // optional advanced listen-and-write drills segment (English target only:
+      // drill sentences are anchored on the en surface by design)
+      if (TARGET === 'en') {
+        lines.push('<div class="mt-4 border-t border-slate-800 pt-3">' +
+          '<label class="flex items-center gap-2 text-sm text-slate-300">' +
+          '<input type="checkbox" id="drills-toggle" class="accent-emerald-500" ' + (drills.on ? 'checked' : '') + '>' +
+          '<b>Nâng cao (tuỳ chọn):</b> luyện nghe–viết câu (nghe → gõ lại)</label>' +
+          '<div id="drills-options" class="' + (drills.on ? '' : 'hidden ') + 'mt-2 flex items-center gap-2 text-xs text-slate-400">' +
+          'Chủ đề: <select id="drill-topic" class="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs">' +
+          '<option value="general" ' + (drills.topic === 'general' ? 'selected' : '') + '>general</option>' +
+          '<option value="business" ' + (drills.topic === 'business' ? 'selected' : '') + '>business</option>' +
+          '<option value="travel" ' + (drills.topic === 'travel' ? 'selected' : '') + '>travel</option>' +
+          '<option value="daily" ' + (drills.topic === 'daily' ? 'selected' : '') + '>daily</option></select>' +
+          '<label>Số từ: <input type="number" id="drill-count" min="1" max="3" value="' + drills.count + '" ' +
+          'class="w-14 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs"></label></div>' +
+          '</div>');
+      }
       lines.push('<div class="mt-5"><button id="start-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl py-3.5 text-base transition">' +
         (mins > 0 ? 'Bắt đầu buổi hôm nay (' + (newIds.length + dueNow.length) + ' thẻ)' : 'Không có gì để làm hôm nay 🎉') + '</button></div>');
       if (newIds.length === 0 && dueNow.length === 0) document.getElementById('start-btn').disabled = true;
@@ -99,7 +119,19 @@
       shown.querySelectorAll('.newsize').forEach(function (b) {
         b.onclick = function () { NEW_SIZE = Number(b.dataset.newsize); renderOverview(); };
       });
-      document.getElementById('start-btn').onclick = startSession;
+      var toggle = document.getElementById('drills-toggle');
+      if (toggle) {
+        toggle.onchange = function () {
+          drills.on = toggle.checked;
+          document.getElementById('drills-options').classList.toggle('hidden', !drills.on);
+        };
+        document.getElementById('drill-topic').onchange = function () { drills.topic = this.value; };
+        document.getElementById('drill-count').onchange = function () {
+          drills.count = Math.max(1, Math.min(3, Number(this.value) || 1));
+          this.value = drills.count;
+        };
+      }
+      document.getElementById('start-btn').onclick = function () { startSession(); };
     }
 
     // ---------- player ----------
@@ -111,6 +143,9 @@
         .concat(dueNow.map(function (id) { return { id: id, kind: 'due' }; }));
       state.idx = 0;
       state.flipped = false;
+      // advanced listen-and-write segment (optional)
+      drills.queue = (drills.on && newIds.length) ? newIds.slice(0, drills.count) : [];
+      drills.idx = 0; drills.done = 0; drills.total = 0;
       document.getElementById('overview').classList.add('hidden');
       document.getElementById('player').classList.remove('hidden');
       renderCard();
@@ -157,7 +192,48 @@
       srs = Srs.readSrs(BASE, TARGET);
       state.idx += 1;
       if (state.idx < state.queue.length) { renderCard(); return; }
+      if (drills.queue.length) { startDrillSegment(); return; }
       renderSummary(entry);
+    }
+
+    // ---------- advanced listen-and-write segment ----------
+    function startDrillSegment() {
+      document.getElementById('grades').classList.add('hidden');
+      nextDrill();
+    }
+    function nextDrill() {
+      if (drills.idx >= drills.queue.length) {
+        document.getElementById('grades').classList.remove('hidden');
+        renderSummary();
+        return;
+      }
+      var cid = drills.queue[drills.idx];
+      var el = document.getElementById('card');
+      el.innerHTML =
+        '<div class="text-xs text-emerald-400 font-semibold mb-2">★ NÂNG CAO — nghe & viết (' +
+        (drills.idx + 1) + '/' + drills.queue.length + ' từ, chủ đề ' + drills.topic + ')</div>' +
+        '<div class="text-sm text-slate-500 p-4">Đang chuẩn bị drill: ' + cid + '…</div>';
+      fetch('/api/learn/' + encodeURIComponent(cid) + '?base=' + BASE + '&target=' + TARGET)
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          var c = {
+            id: cid,
+            gloss: (d.concept && d.concept.gloss_en) || '',
+            en: (d.target && d.target.text) || '',
+            pos: (d.concept && d.concept.pos) || ''
+          };
+          DrillUI.player(el, {
+            base: BASE, target: TARGET, topic: drills.topic, concept: c,
+            onePerConcept: true,
+            onPackLoaded: function (n) { drills.total += n; },
+            onDrillGraded: function () { drills.done += 1; },
+            onAllDone: function () { drills.idx += 1; nextDrill(); }
+          });
+        })
+        .catch(function () {
+          el.innerHTML = '<div class="text-sm text-rose-400 p-4">Không tải được drill cho ' + cid +
+            '. <button class="text-xs underline" onclick="drills.idx += 1; nextDrill()">Bỏ qua</button></div>';
+        });
     }
     function renderSummary() {
       document.getElementById('player').classList.add('hidden');
@@ -181,6 +257,8 @@
         '<div class="bg-slate-800/60 rounded-lg py-3"><div class="text-amber-400 font-bold text-lg">' + (counts.ok || 0) + '</div><div class="text-xs text-slate-500">Tạm (3 ngày)</div></div>' +
         '<div class="bg-slate-800/60 rounded-lg py-3"><div class="text-emerald-400 font-bold text-lg">' + (counts.good || 0) + '</div><div class="text-xs text-slate-500">Nhớ (7 ngày)</div></div>' +
         '</div>' +
+        (drills.total > 0 ? '<div class="text-xs text-slate-400 mb-4">Luyện nghe–viết: <span class="text-slate-200 font-semibold">' +
+          drills.done + '/' + drills.total + '</span> câu (chủ đề ' + drills.topic + ').</div>' : '') +
         (tomorrow ? '<div class="text-xs text-slate-400 mb-4">Mai có khoảng <span class="text-slate-200 font-semibold">' + tomorrow + '</span> thẻ đến hạn ôn lại.</div>' : '') +
         '<div class="flex gap-2">' +
         '<a href="/learn?base=' + BASE + '&target=' + TARGET + EXTRA_QS + '" class="flex-1 text-center text-xs text-slate-300 hover:text-white border border-slate-700 rounded-lg py-2.5">← Lộ trình</a>' +
@@ -204,7 +282,7 @@
     <div id="overview" class="bg-slate-900 border border-slate-800 rounded-xl p-6"></div>
     <div id="player" class="hidden">
       <div id="card" class="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center min-h-[220px] flex flex-col items-center justify-center"></div>
-      <div class="flex justify-center gap-2 mt-4">
+      <div id="grades" class="flex justify-center gap-2 mt-4">
         <button onclick="gradeAndAdvance('hard')" class="bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-rose-500/20">Chưa (1 ngày)</button>
         <button onclick="gradeAndAdvance('ok')" class="bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-500/20">Tạm (3 ngày)</button>
         <button onclick="gradeAndAdvance('good')" class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-emerald-500/20">Nhớ (7 ngày)</button>
