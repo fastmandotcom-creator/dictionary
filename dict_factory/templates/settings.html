@@ -102,13 +102,13 @@
         <label class="flex items-center gap-2 text-sm"><input type="radio" name="rate" id="rate-slow" class="accent-emerald-500"> Chậm (học)</label>
       </div>
       <div class="text-xs text-slate-500 mb-1">Chọn giọng theo ngôn ngữ</div>
-      <div class="flex gap-2">
-        <select id="tts-lang" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm w-40"></select>
-        <select id="tts-voice" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm flex-1"></select>
+      <div class="flex gap-2 flex-col sm:flex-row">
+        <select id="tts-lang" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm w-full sm:w-40"></select>
+        <select id="tts-voice" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm w-full sm:flex-1"></select>
       </div>
-      <div class="flex items-center gap-2 mt-4">
+      <div class="flex items-stretch sm:items-center gap-2 mt-4 flex-col sm:flex-row">
         <input id="preview-text" type="text" value="{{ sample_text }}" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500" />
-        <button id="preview-btn" class="text-xs font-semibold px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">&#128266; Nghe thử</button>
+        <button id="preview-btn" class="text-xs font-semibold px-4 py-2.5 sm:py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shrink-0 text-center transition">&#128266; Nghe thử</button>
       </div>
       <div id="preview-note" class="text-xs text-slate-400 mt-2 min-h-[1rem]"></div>
       <div class="flex items-center gap-3 mt-3">

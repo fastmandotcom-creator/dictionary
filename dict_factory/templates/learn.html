@@ -12,19 +12,19 @@
 </head>
 <body class="min-h-full flex flex-col bg-slate-950 text-slate-100">
   <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-30">
-    <div class="max-w-3xl mx-auto px-4 py-3.5 flex items-center justify-between">
-      <div class="flex items-center gap-2.5 text-sm">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+      <div class="flex items-center gap-2 text-sm shrink-0">
         <span class="text-emerald-400 font-semibold">{{ base_name }}</span>
-        <span class="text-slate-500">→</span>
+        <span class="text-slate-500 text-xs">→</span>
         <span class="text-sky-400 font-semibold">{{ target_name }}</span>
       </div>
-      <div class="flex items-center gap-2.5 text-xs text-slate-400">
-        <span id="sync-badge" class="hidden items-center gap-1 text-slate-500"></span>
+      <div class="flex items-center gap-1.5 sm:gap-2 text-xs text-slate-400 flex-wrap">
+        <span id="sync-badge" class="hidden md:inline-flex items-center gap-1 text-slate-500"></span>
         <button id="export-btn" class="hover:text-white hidden">Xuất</button>
         <button id="import-btn" class="hover:text-white hidden">Nhập</button>
         <input type="file" id="import-file" accept="application/json" class="hidden">
-        <a href="/onboarding?base={{ base }}&target={{ target }}" class="hover:text-slate-200 px-1.5 py-1">Đổi cặp</a>
-        <a href="/settings" class="hover:text-slate-200 px-1.5 py-1">Cài đặt</a>
+        <a href="/onboarding?base={{ base }}&target={{ target }}" class="hover:text-slate-200 px-1 py-1">Đổi cặp</a>
+        <a href="/settings" class="hover:text-slate-200 px-1 py-1">Cài đặt</a>
         {% if exam %}
         <a href="/review?base={{ base }}&target={{ target }}&exam={{ exam }}" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-lg border border-slate-700/60 transition">Ôn tập</a>
         {% elif cefr %}
@@ -67,16 +67,16 @@
       Chưa có lộ trình biên soạn cho cặp ngôn ngữ này. Bạn vẫn học được ngay — danh sách dưới đây tự động sắp theo thứ tự ưu tiên.
     </div>
     {% endif %}
-    <div class="flex items-center gap-2 text-xs">
-      <span class="text-slate-500">Mức:</span>
-      <a href="/learn?base={{ base }}&target={{ target }}" class="px-2.5 py-1 rounded-lg {% if not cefr and not exam %}bg-emerald-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">Tất cả</a>
+    <div class="flex items-center gap-1.5 sm:gap-2 text-xs overflow-x-auto pb-1 scrollbar-none flex-nowrap">
+      <span class="text-slate-500 shrink-0">Mức:</span>
+      <a href="/learn?base={{ base }}&target={{ target }}" class="shrink-0 px-2.5 py-1 rounded-lg {% if not cefr and not exam %}bg-emerald-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">Tất cả</a>
       {% for lvl in cefr_levels %}
         <a href="/learn?base={{ base }}&target={{ target }}&cefr={{ lvl }}"
-          class="px-2.5 py-1 rounded-lg {% if cefr == lvl and not exam %}bg-emerald-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">{{ lvl }}</a>
+          class="shrink-0 px-2.5 py-1 rounded-lg {% if cefr == lvl and not exam %}bg-emerald-600 text-white{% else %}bg-slate-800 text-slate-300 hover:bg-slate-700{% endif %}">{{ lvl }}</a>
       {% endfor %}
       {% if exam_levels %}
       <select onchange="if (this.value) location.href='/learn?base={{ base }}&target={{ target }}&exam=' + this.value"
-        class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">
+        class="shrink-0 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">
         <option value="">Kỳ thi…</option>
         {% for e in exam_levels %}
           <option value="{{ e.framework }}_{{ e.code }}" {% if exam == e.framework ~ '_' ~ e.code %}selected{% endif %}>{{ e.display }}</option>

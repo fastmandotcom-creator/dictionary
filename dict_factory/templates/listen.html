@@ -160,7 +160,7 @@
         <span class="text-emerald-400 font-semibold">{{ base_name }}</span>
         <span class="text-slate-500">→</span>
         <span class="text-sky-400 font-semibold">{{ target_name }}</span>
-        <span class="text-xs text-slate-500">· Luyện nghe–viết</span>
+        <span class="text-xs text-slate-500 hidden sm:inline">· Luyện nghe–viết</span>
       </div>
       <div class="flex items-center gap-3 text-xs text-slate-400">
         <span id="sync-badge" class="hidden items-center gap-1 text-slate-500"></span>
@@ -182,18 +182,18 @@
         <span>🔊 Tự động phát âm</span>
       </label>
     </div>
-    <div class="flex gap-4">
-      <aside class="w-56 shrink-0">
-        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Từ để luyện</div>
-        <div id="concept-list" class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden"></div>
-      </aside>
-      <section class="flex-1 min-w-0">
-        <div id="drill-card" class="bg-slate-900 border border-slate-800 rounded-xl p-5 min-h-[260px] flex items-center justify-center">
-          <div class="text-center text-sm text-slate-500">Chọn một từ ở bên trái để bắt đầu luyện nghe–viết.</div>
+    <div class="flex flex-col md:flex-row gap-4">
+      <section class="flex-1 min-w-0 order-1 md:order-2">
+        <div id="drill-card" class="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 min-h-[260px] flex items-center justify-center">
+          <div class="text-center text-sm text-slate-500">Chọn một từ để bắt đầu luyện nghe–viết.</div>
         </div>
         <div id="drill-meta" class="text-xs text-slate-600 mt-2"></div>
         <p class="text-xs text-slate-500 mt-2">Nghe câu → gõ lại đúng chính tả → tự chấm thẻ (Chưa 1 ngày / Tạm 3 ngày / Nhớ 7 ngày).</p>
       </section>
+      <aside class="w-full md:w-56 shrink-0 order-2 md:order-1">
+        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-2">Từ để luyện</div>
+        <div id="concept-list" class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden max-h-64 md:max-h-[640px] overflow-y-auto"></div>
+      </aside>
     </div>
   </main>
 </body>
