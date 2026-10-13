@@ -250,6 +250,93 @@ def test_export_import_roundtrip(page) -> None:
     assert_no_js_errors(page)
 
 
+def test_listen_write_correct_flow(page) -> None:
+    """Phase D3: /listen advanced flow — pick a concept, hear the sentence,
+    type it back, grade it; SRS state lands under the drill-scoped key."""
+    page.goto(f"{page.server_url}/listen?base=vi&target=en&topic=general")
+    page.wait_for_selector(".concept-btn", timeout=15000)
+    page.click(".concept-btn")
+    page.wait_for_selector("#dl-input", timeout=20000)
+    # reveal the answer, then retype it correctly
+    page.click("#dl-reveal")
+    answer = page.evaluate(
+        """() => {
+            const el = document.querySelector('#dl-result .font-mono');
+            return el ? el.textContent : null;
+        }"""
+    )
+    assert answer, "reveal must show the correct sentence"
+    page.fill("#dl-input", answer)
+    page.click("#dl-check")
+    assert "Đúng!" in page.text_content("#dl-result")
+    # grade the drill card "Nhớ" -> SRS entry under the drill-scoped id
+    page.click("#dl-result .dl-g[data-g='good']")
+    page.wait_for_selector("#dl-input", timeout=15000)  # advanced to next drill
+    stored = page.evaluate(
+        """() => {
+            const s = JSON.parse(localStorage.getItem('dict_srs_v2_vi_en') || '{}');
+            return Object.keys(s).filter((k) => k.indexOf('::') !== -1 && s[k] && s[k].grade === 'good');
+        }"""
+    )
+    assert stored, "a drill-scoped SRS entry must be stored under dict_srs_v2_vi_en"
+    assert_no_js_errors(page)
+
+
+def test_listen_typo_shows_answer(page) -> None:
+    """A misspelled attempt must show 'Chưa đúng' and reveal the correct sentence."""
+    page.goto(f"{page.server_url}/listen?base=vi&target=en&topic=general")
+    page.wait_for_selector(".concept-btn", timeout=15000)
+    page.click(".concept-btn")
+    page.wait_for_selector("#dl-input", timeout=20000)
+    # reveal first to capture the sentence, then check a deliberate typo
+    page.click("#dl-reveal")
+    revealed = page.text_content("#dl-result .font-mono")
+    typo = revealed[: max(3, len(revealed) // 2)] + "ZZZ"
+    page.fill("#dl-input", typo)
+    page.click("#dl-check")
+    assert "Chưa đúng" in page.text_content("#dl-result")
+    # grade it "hard" -> due tomorrow
+    page.click("#dl-result .dl-g[data-g='hard']")
+    assert_no_js_errors(page)
+
+
+def test_session_advanced_drill_segment(page) -> None:
+    """Phase D3: optional "Nâng cao" segment inside /session (en target): after
+    the normal card queue, a listen-write drill runs; the summary shows
+    "Luyện nghe–viết: x/y"."""
+    page.goto(f"{page.server_url}/session?base=vi&target=en&cefr=A1&new=1")
+    page.wait_for_selector("#overview >> text=Hôm nay của bạn", timeout=15000)
+    page.check("#drills-toggle")
+    page.click("#start-btn")
+    # normal card first
+    page.wait_for_function(
+        """() => {
+            const t = document.getElementById('card-target');
+            return t && t.textContent && t.textContent !== '…';
+        }"""
+    )
+    page.click("#flip-btn")
+    grade(page, "Nhớ (7 ngày)")
+    # advanced drill segment takes over the card area
+    page.wait_for_selector("#card >> text=NÂNG CAO", timeout=20000)
+    page.wait_for_selector("#dl-input", timeout=20000)
+    page.click("#dl-reveal")
+    answer = page.evaluate(
+        """() => {
+            const el = document.querySelector('#dl-result .font-mono');
+            return el ? el.textContent : null;
+        }"""
+    )
+    assert answer
+    page.fill("#dl-input", answer)
+    page.click("#dl-check")
+    assert "Đúng!" in page.text_content("#dl-result")
+    page.click("#dl-result .dl-g[data-g='good']")
+    page.wait_for_selector("#summary:not(.hidden)", timeout=15000)
+    assert "Luyện nghe–viết: 1/" in page.text_content("#summary-body")
+    assert_no_js_errors(page)
+
+
 def test_offline_grading_still_persists(page) -> None:
     # network failure must not block learning: state lands in localStorage.
     page.route("**/api/srs/**", lambda r: r.abort())

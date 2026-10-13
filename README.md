@@ -53,4 +53,42 @@ never hardcode a concrete language pair — it only carries `target_lang` / `bas
 
 All routes are generic over the 35 ISO 639-1 codes; nothing is hardcoded to `vi->ja`.
 
+### Advanced mode (listen-and-write drills)
+
+Not just "word = meaning": each concept spawns **advanced drill sentences** the learner
+*hears and types back* to practise listening + writing at once.
+
+- **Meaning anchor**: a pack is generated per `(concept, target_lang, topic)` and cached
+  in `sentence_drills`. Meaning stays anchored to the concept's `gloss_en`, so all 35
+  language surfaces keep one shared meaning and every repeat learner pays **zero** extra
+  tokens — the DB fills up organically as people learn.
+- **Cache-first, one call per pack**: the LLM is only invoked on a cache miss, and a single
+  call fills the whole bounded pack (never per-sentence, never a bulk pass over the 12k
+  concepts). `dict_factory/drills.py` → `get_drill_pack()` reads `sentence_drills` first.
+- **Bounded drill matrix by part of speech**:
+  - verbs / phrases: 3 tenses (present/past/future simple) × 3 polarities
+    (affirmative / negative / question) = **9 sentences** per miss;
+  - nouns / adjectives / adverbs / other: present × 3 polarities = **3 sentences**.
+- **Closed topic presets**: `general`, `business`, `travel`, `daily` — free-form topics
+  are intentionally out of scope so the cache key space stays bounded. To add one:
+  extend `DRILL_TOPICS` in `dict_factory/drills.py`.
+
+Usage:
+```bash
+# generate + cache one pack (paid LLM via .env gateway); dry-run only prints the prompt
+python -m dict_factory drills --concept EAT_FOOD --topic business
+python -m dict_factory drills --concept EAT_FOOD --topic travel --dry-run
+
+# web: topic picker + concept list + hear -> type -> grade flow
+GET /listen?base=vi&target=en&topic=business
+```
+`GET /api/drills` serves a cached pack (503 with a clear detail when the LLM is
+unavailable); `POST /api/drills/generate` forces a refresh; `GET /api/drills/topics`
+lists the presets. Each drill is its own SRS card
+(`{concept}::{tense}/{polarity}`, 1/3/7-day intervals) shared with the regular flashcards.
+The optional **"Nâng cao"** segment in `/session` (English target only) weaves a few
+listen-write drills into a normal study session and reports "luyện nghe–viết: x/y" in
+the end summary. When the LLM is unreachable the UI falls back to a deterministic
+offline **demo pack** (clearly labelled) so the flow never blocks.
+
 Model default: `ag/gemini-3.7-flash-low` via `LEXICON_LLM_*`.

@@ -1,0 +1,57 @@
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+from dict_factory.web_server import app
+
+
+def client() -> TestClient:
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_listen_page_renders() -> None:
+    res = client().get("/listen?base=vi&target=en&topic=general")
+    assert res.status_code == 200
+    body = res.text
+    assert "DrillUI" in body
+    assert "concept-list" in body
+    assert "topic-select" in body
+    assert "EAT_FOOD" in body or "CONCEPTS = []" in body
+
+
+def test_listen_topic_presets_guarded() -> None:
+    c = client()
+    assert c.get("/listen?base=vi&target=en&topic=kitchen").status_code == 400
+    assert c.get("/listen?base=vi&target=en&topic=business").status_code == 200
+
+
+def test_listen_cross_language_exam_rejected() -> None:
+    # HSK is a zh exam: linking it to target=en must 400 (same rule as /learn)
+    assert client().get("/listen?base=vi&target=en&exam=HSK").status_code == 400
+
+
+def test_listen_pair_guarded() -> None:
+    assert client().get("/listen?base=xx&target=en").status_code == 400
+
+
+def test_drills_js_served() -> None:
+    res = client().get("/drills.js")
+    assert res.status_code == 200
+    assert "DrillUI" in res.text
+    assert "demoPack" in res.text
+
+
+def test_session_page_has_advanced_segment() -> None:
+    res = client().get("/session?base=vi&target=en")
+    assert res.status_code == 200
+    # the segment is client-rendered; the template must carry the guard so it
+    # only appears for an English target
+    assert "Nâng cao (tuỳ chọn)" in res.text
+    assert "drills-toggle" in res.text
+    assert "TARGET === 'en'" in res.text
+
+
+def test_learn_page_links_to_listen() -> None:
+    res = client().get("/learn?base=vi&target=en")
+    assert res.status_code == 200
+    assert '/listen?base=vi&target=en' in res.text
