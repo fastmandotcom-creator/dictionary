@@ -183,6 +183,10 @@
           curBase = (d.base && d.base.text) || '';
           document.getElementById('card-target').textContent = curTarget;
           document.getElementById('card-base').textContent = curBase;
+          setTimeout(function () {
+            var speakBtn = document.getElementById('speak-btn');
+            if (speakBtn) speakBtn.click();
+          }, 120);
         });
     }
     function gradeAndAdvance(kind) {
@@ -266,6 +270,30 @@
         '<a href="/review?base=' + BASE + '&target=' + TARGET + EXTRA_QS + '" class="flex-1 text-center text-xs text-slate-300 hover:text-white border border-slate-700 rounded-lg py-2.5">Ôn tập thêm</a>' +
         '</div>';
     }
+
+    // 0-Mouse Keyboard Flow: Space/Enter (flip), 1/2/3 (grade), R (speak)
+    document.addEventListener('keydown', function (e) {
+      var playerEl = document.getElementById('player');
+      if (!playerEl || playerEl.classList.contains('hidden')) return;
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+
+      if (e.code === 'Space' || e.key === 'Enter') {
+        e.preventDefault();
+        var flipBtn = document.getElementById('flip-btn');
+        if (flipBtn) flipBtn.click();
+        return;
+      }
+      if (e.key === 'r' || e.key === 'R' || ((e.ctrlKey || e.metaKey) && e.code === 'Space')) {
+        e.preventDefault();
+        var speakBtn = document.getElementById('speak-btn');
+        if (speakBtn) speakBtn.click();
+        return;
+      }
+      if (e.key === '1') { gradeAndAdvance('hard'); return; }
+      if (e.key === '2') { gradeAndAdvance('ok'); return; }
+      if (e.key === '3') { gradeAndAdvance('good'); return; }
+    });
+
     document.addEventListener('DOMContentLoaded', renderOverview);
   </script>
   <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-30">
@@ -288,6 +316,7 @@
         <button onclick="gradeAndAdvance('ok')" class="bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-amber-500/20">Tạm (3 ngày)</button>
         <button onclick="gradeAndAdvance('good')" class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-emerald-500/20">Nhớ (7 ngày)</button>
       </div>
+      <div class="text-[11px] text-slate-500 text-center mt-2.5">Phím tắt: Space (lật thẻ) · 1 (Chưa) · 2 (Tạm) · 3 (Nhớ) · R (nghe lại)</div>
     </div>
     <div id="summary" class="hidden">
       <div id="summary-body" class="bg-slate-900 border border-slate-800 rounded-xl p-8"></div>

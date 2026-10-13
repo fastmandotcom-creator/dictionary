@@ -133,7 +133,7 @@
   }
 
   // Player: renders one concept's drill sequence into `container`.
-  // options: {base, target, topic, concept, onDrillGraded(done, total), onAllDone()}
+  // options: {base, target, topic, concept, autoplay, onDrillGraded(done, total), onAllDone(done, total)}
   function player(container, opts) {
     var state = { drills: [], idx: 0, done: 0, total: 0 };
     container.innerHTML = '<div class="text-slate-500 text-sm p-6">Đang tải drill…</div>';
@@ -155,6 +155,8 @@
 
     function current() { return state.drills[state.idx]; }
     var asrHandle = null; // active dictation session (one at a time)
+    var resultShown = false;
+    var lastCheckedCorrect = false;
 
     function stopAsr() {
       if (asrHandle) { asrHandle.stop(); asrHandle = null; }
@@ -162,6 +164,8 @@
 
     function render() {
       stopAsr();
+      resultShown = false;
+      lastCheckedCorrect = false;
       var d = current();
       if (!d) {
         container.innerHTML = '<div class="text-center p-6 text-emerald-400 font-semibold w-full">Xong ' +
@@ -173,13 +177,13 @@
       var polLabel = { affirmative: 'khẳng định', negative: 'phủ định', question: 'câu hỏi' }[d.polarity] || d.polarity;
       // one block wrapper: the host container may be a flex row, and the
       // card must keep its natural top-to-bottom layout at any width
-      container.innerHTML = '<div class="w-full">' +
+      container.innerHTML = '<div class="w-full" id="drill-wrapper">' +
         '<div class="flex items-center justify-between text-xs text-slate-500 mb-2">' +
         '<span>' + (state.idx + 1) + '/' + state.total + ' · ' + d.tense.replace('_simple', ' ') + ' · ' + polLabel + '</span>' +
         '<span>' + (due ? '<span class="text-amber-400">đến hạn ôn</span>' : 'lần đầu') +
         (d.demo ? ' · <span class="text-slate-600">demo offline</span>' : '') + '</span></div>' +
         '<div class="flex items-center gap-3 flex-wrap">' +
-        '<button id="dl-listen" class="text-emerald-400 border border-emerald-500/30 rounded-lg px-4 py-2 text-sm hover:bg-emerald-500/10 whitespace-nowrap">&#128266; Nghe</button>' +
+        '<button id="dl-listen" class="text-emerald-400 border border-emerald-500/30 rounded-lg px-4 py-2 text-sm hover:bg-emerald-500/10 whitespace-nowrap">&#128266; Nghe <span class="text-[10px] text-slate-500 font-normal">(Ctrl+Space)</span></button>' +
         '<span class="text-xs text-slate-500 whitespace-nowrap">nghe rồi gõ lại câu</span>' +
         '<span id="dl-voice-label" class="ml-auto text-[10px] text-slate-600 whitespace-nowrap">giọng: ?</span></div>' +
         '<p id="dl-note" class="hidden text-xs text-amber-400/90 mt-2"></p>' +
@@ -187,12 +191,13 @@
         'class="mt-4 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500" />' +
         '<div id="dl-asr-note" class="hidden text-xs text-amber-400/90 mt-2"></div>' +
         '<div id="dl-result" class="hidden mt-3"></div>' +
-        '<div class="flex gap-2 mt-3 flex-wrap" id="dl-actions">' +
-        '<button id="dl-check" class="text-xs font-semibold px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 whitespace-nowrap">Chấm câu</button>' +
+        '<div class="flex gap-2 mt-3 flex-wrap items-center" id="dl-actions">' +
+        '<button id="dl-check" class="text-xs font-semibold px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 whitespace-nowrap">Chấm câu <span class="text-[10px] text-slate-400 font-normal">(Enter)</span></button>' +
         '<button id="dl-reveal" class="text-xs px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200 whitespace-nowrap">Hiện đáp án</button>' +
         (typeof Asr !== 'undefined' && Asr.isSupported() && Srs.readTtsSettings().micEnabled !== false
           ? '<button id="dl-mic" class="text-xs px-4 py-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 whitespace-nowrap">&#127908; Nói</button>'
           : '') +
+        '<span class="text-[11px] text-slate-500 ml-auto hidden sm:inline">Phím tắt: Enter (chấm/tiếp) · 1/2/3 (tự chấm)</span>' +
         '</div>' +
         '</div>';
       var input = container.querySelector('#dl-input');
@@ -223,8 +228,70 @@
           });
         };
       }
-      input.onkeydown = function (e) { if (e.key === 'Enter') check(false); };
+
+      // Smooth keyboard flow:
+      // First Enter -> check answer
+      // Second Enter (if correct) -> auto-grade 'good' and instant advance to next sentence!
+      // Keys 1, 2, 3 -> self-grade
+      input.onkeydown = function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (resultShown && lastCheckedCorrect) {
+            submitGrade('good');
+            return;
+          }
+          check(false);
+          return;
+        }
+        if (resultShown) {
+          if (e.key === '1') { e.preventDefault(); submitGrade('hard'); return; }
+          if (e.key === '2') { e.preventDefault(); submitGrade('ok'); return; }
+          if (e.key === '3') { e.preventDefault(); submitGrade('good'); return; }
+        }
+      };
+
       input.focus();
+
+      // Big Tech Flow: Autoplay speech on card appearance
+      if (opts.autoplay !== false) {
+        setTimeout(function () {
+          var listenBtn = container.querySelector('#dl-listen');
+          if (listenBtn) listenBtn.click();
+        }, 120);
+      }
+    }
+
+    // Document-level keyboard listener for shortcuts like Ctrl+Space (Replay audio)
+    function onDocKeyDown(e) {
+      if (!document.body.contains(container)) {
+        document.removeEventListener('keydown', onDocKeyDown);
+        return;
+      }
+      // Replay audio: Ctrl+Space or Alt+S
+      if ((e.ctrlKey || e.metaKey || e.altKey) && (e.code === 'Space' || e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        var listenBtn = container.querySelector('#dl-listen');
+        if (listenBtn) listenBtn.click();
+        return;
+      }
+      // If result is shown and focus is outside input, 1/2/3 and Enter still grade
+      if (resultShown && document.activeElement !== container.querySelector('#dl-input')) {
+        if (e.key === 'Enter' && lastCheckedCorrect) { e.preventDefault(); submitGrade('good'); return; }
+        if (e.key === '1') { e.preventDefault(); submitGrade('hard'); return; }
+        if (e.key === '2') { e.preventDefault(); submitGrade('ok'); return; }
+        if (e.key === '3') { e.preventDefault(); submitGrade('good'); return; }
+      }
+    }
+    document.addEventListener('keydown', onDocKeyDown);
+
+    function submitGrade(g) {
+      var d = current();
+      Srs.grade(srsId(opts.concept.id, d.drill_key), g, opts.base, opts.target);
+      Srs.sync(opts.base, opts.target);
+      state.done += 1;
+      state.idx += 1;
+      if (opts.onDrillGraded) opts.onDrillGraded(state.done, state.total);
+      render();
     }
 
     function check(revealed) {
@@ -232,26 +299,25 @@
       var attempt = normalize(container.querySelector('#dl-input').value);
       var target = normalize(d.sentence);
       var correct = attempt.length > 0 && attempt === target;
+      resultShown = true;
+      lastCheckedCorrect = correct;
+
       var res = container.querySelector('#dl-result');
       res.classList.remove('hidden');
       res.innerHTML =
         '<div class="' + (correct ? 'text-emerald-400' : 'text-rose-400') + ' font-semibold text-sm">' +
-        (correct ? 'Đúng!' : (revealed ? 'Chưa đúng — đáp án:' : 'Chưa đúng — nghe lại rồi thử nữa.')) + '</div>' +
+        (correct ? 'Đúng! 🎉 <span class="text-xs font-normal text-emerald-300 ml-2">(Nhấn Enter lần nữa để sang câu tiếp)</span>'
+                 : (revealed ? 'Đáp án chuẩn:' : 'Chưa đúng — nghe lại rồi thử nữa.')) + '</div>' +
         ((!correct && revealed) ? '<div class="text-slate-300 text-sm mt-1 font-mono">' + d.sentence + '</div>' : '') +
         (d.base_hint ? '<div class="text-slate-500 text-xs mt-1">' + d.base_hint + '</div>' : '') +
-        '<div class="text-xs text-slate-500 mt-2">Tự chấm thẻ này:</div>' +
+        '<div class="text-xs text-slate-500 mt-2">Tự chấm thẻ này <span class="text-[10px] text-slate-600">(Phím 1: Chưa · 2: Tạm · 3: Nhớ)</span>:</div>' +
         '<div class="flex gap-2 mt-2 flex-wrap">' +
         '<button data-g="hard" class="dl-g px-3 py-1.5 rounded-lg text-xs bg-rose-500/10 text-rose-400 border border-rose-500/20 whitespace-nowrap">Chưa (1 ngày)</button>' +
         '<button data-g="ok" class="dl-g px-3 py-1.5 rounded-lg text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">Tạm (3 ngày)</button>' +
         '<button data-g="good" class="dl-g px-3 py-1.5 rounded-lg text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap">Nhớ (7 ngày)</button></div>';
       res.querySelectorAll('.dl-g').forEach(function (b) {
         b.onclick = function () {
-          Srs.grade(srsId(opts.concept.id, d.drill_key), b.dataset.g, opts.base, opts.target);
-          Srs.sync(opts.base, opts.target);
-          state.done += 1;
-          state.idx += 1;
-          if (opts.onDrillGraded) opts.onDrillGraded(state.done, state.total);
-          render();
+          submitGrade(b.dataset.g);
         };
       });
     }

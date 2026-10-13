@@ -20,6 +20,8 @@
     const TOPICS = {{ topics | tojson }};
     const CONCEPTS = {{ concepts | tojson }};
     var topic = TOPIC0;
+    var currentConceptIdx = 0;
+    var autoNextTimer = null;
 
     function renderConceptList() {
       var list = document.getElementById('concept-list');
@@ -27,8 +29,8 @@
         list.innerHTML = '<div class="text-xs text-slate-500 p-3">Chưa có từ ở mức này.</div>';
         return;
       }
-      list.innerHTML = CONCEPTS.map(function (c) {
-        return '<button data-cid="' + c.id + '" class="concept-btn block w-full text-left px-3 py-2.5 rounded-lg ' +
+      list.innerHTML = CONCEPTS.map(function (c, idx) {
+        return '<button data-cid="' + c.id + '" data-idx="' + idx + '" class="concept-btn block w-full text-left px-3 py-2.5 rounded-lg ' +
           'hover:bg-slate-800/70 transition border border-transparent">' +
           '<div class="text-sm font-semibold text-slate-200">' + (c.en || c.id) +
           ' <span class="text-slate-500 font-normal text-xs">' + c.id + '</span></div>' +
@@ -36,24 +38,99 @@
       }).join('');
       list.querySelectorAll('.concept-btn').forEach(function (b) {
         b.onclick = function () {
-          list.querySelectorAll('.concept-btn').forEach(function (x) { x.classList.remove('bg-slate-800', 'border-emerald-500/40'); });
-          b.classList.add('bg-slate-800', 'border-emerald-500/40');
-          var c = CONCEPTS.find(function (x) { return x.id === b.dataset.cid; });
-          openDrills(c);
+          var idx = Number(b.dataset.idx);
+          var c = CONCEPTS[idx];
+          openDrills(c, idx);
         };
       });
     }
 
-    function openDrills(c) {
+    function openDrills(c, idx) {
+      if (autoNextTimer) { clearTimeout(autoNextTimer); autoNextTimer = null; }
+      if (typeof idx === 'number') {
+        currentConceptIdx = idx;
+      } else {
+        currentConceptIdx = CONCEPTS.findIndex(function (x) { return x.id === c.id; });
+        if (currentConceptIdx < 0) currentConceptIdx = 0;
+      }
+
+      // Highlight active concept button and scroll into view smoothly
+      var list = document.getElementById('concept-list');
+      if (list) {
+        var btns = list.querySelectorAll('.concept-btn');
+        btns.forEach(function (b, i) {
+          if (i === currentConceptIdx) {
+            b.classList.add('bg-slate-800', 'border-emerald-500/40');
+            b.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          } else {
+            b.classList.remove('bg-slate-800', 'border-emerald-500/40');
+          }
+        });
+      }
+
       var el = document.getElementById('drill-card');
       el.innerHTML = '<div class="text-center p-8 text-sm text-slate-500">Đang chuẩn bị: ' + c.id + '…</div>';
       document.getElementById('drill-meta').textContent = c.id + ' · chủ đề: ' + topic;
+
+      var autoPlayChecked = document.getElementById('autoplay-toggle') ? document.getElementById('autoplay-toggle').checked : true;
+
       DrillUI.player(el, {
         base: BASE, target: TARGET, topic: topic, concept: c,
-        onAllDone: function () {
-          el.insertAdjacentHTML('beforeend',
-            '<div class="mt-4 text-center"><a href="/learn?base=' + BASE + '&target=' + TARGET +
-            '" class="text-xs text-slate-400 hover:text-white">← Về lộ trình</a></div>');
+        autoplay: autoPlayChecked,
+        onAllDone: function (done, total) {
+          var hasNext = currentConceptIdx + 1 < CONCEPTS.length;
+          if (hasNext) {
+            var nextIdx = currentConceptIdx + 1;
+            var nextC = CONCEPTS[nextIdx];
+            var cd = 2;
+            el.innerHTML =
+              '<div class="text-center p-6 w-full">' +
+              '<div class="text-2xl font-bold text-emerald-400 mb-2">🎉 Hoàn thành: ' + (c.en || c.id) + '!</div>' +
+              '<p class="text-xs text-slate-400 mb-4">Đã luyện xong các thì &amp; dạng câu (' + (total || 9) + ' câu).</p>' +
+              '<div class="bg-slate-950 border border-slate-800 rounded-xl p-4 max-w-sm mx-auto mb-5 text-left">' +
+              '  <div class="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Từ tiếp theo trong lộ trình:</div>' +
+              '  <div class="text-base font-bold text-white">' + (nextC.en || nextC.id) + ' <span class="text-xs text-slate-400 font-normal">(' + nextC.gloss + ')</span></div>' +
+              '  <div id="countdown-label" class="text-xs text-emerald-400 mt-2">Tự động chuyển sau <span id="cd-sec">' + cd + '</span>s...</div>' +
+              '</div>' +
+              '<div class="flex justify-center gap-3">' +
+              '  <button id="go-next-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-lg text-sm transition">Tiếp tục từ này &rarr; (Enter)</button>' +
+              '  <a href="/learn?base=' + BASE + '&target=' + TARGET + '" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-lg text-sm transition">Nghỉ / Lộ trình</a>' +
+              '</div>' +
+              '</div>';
+
+            var doNext = function () {
+              if (autoNextTimer) { clearInterval(autoNextTimer); autoNextTimer = null; }
+              document.removeEventListener('keydown', onCelebrateKey);
+              openDrills(nextC, nextIdx);
+            };
+
+            var onCelebrateKey = function (e) {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                doNext();
+              }
+            };
+            document.addEventListener('keydown', onCelebrateKey);
+
+            var nextBtn = document.getElementById('go-next-btn');
+            if (nextBtn) nextBtn.onclick = doNext;
+
+            autoNextTimer = setInterval(function () {
+              cd--;
+              var secEl = document.getElementById('cd-sec');
+              if (secEl) secEl.textContent = cd;
+              if (cd <= 0) {
+                doNext();
+              }
+            }, 1000);
+          } else {
+            el.innerHTML =
+              '<div class="text-center p-6 w-full">' +
+              '<div class="text-2xl font-bold text-emerald-400 mb-2">🎉 Xuất sắc!</div>' +
+              '<p class="text-sm text-slate-300 mb-4">Bạn đã hoàn thành tất cả từ vựng trong danh sách này.</p>' +
+              '<a href="/learn?base=' + BASE + '&target=' + TARGET + '" class="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-2.5 rounded-lg text-sm transition">← Về lộ trình</a>' +
+              '</div>';
+          }
         }
       });
     }
@@ -91,14 +168,18 @@
     </div>
   </header>
   <main class="flex-1 max-w-3xl w-full mx-auto px-4 py-6">
-    <div class="flex items-center gap-3 mb-4 text-xs">
+    <div class="flex items-center gap-3 mb-4 text-xs flex-wrap">
       <span class="text-slate-500">Chủ đề:</span>
       <select id="topic-select" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-emerald-500">
         {% for t in topics %}
         <option value="{{ t }}" {% if t == topic %}selected{% endif %}>{{ t }}</option>
         {% endfor %}
       </select>
-      <span class="text-slate-600">câu LLM theo chủ đề; thiếu LLM thì dùng demo offline</span>
+      <span class="text-slate-600 hidden sm:inline">câu LLM theo chủ đề</span>
+      <label class="flex items-center gap-1.5 text-slate-400 ml-auto cursor-pointer select-none">
+        <input type="checkbox" id="autoplay-toggle" class="accent-emerald-500" checked>
+        <span>🔊 Tự động phát âm</span>
+      </label>
     </div>
     <div class="flex gap-4">
       <aside class="w-56 shrink-0">
