@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Học từ</title>
+  <!-- M3.4: PWA offline -->
+  <meta name="theme-color" content="#020617">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #020617; color: #e2e8f0; }
+    header, main { max-width: 32rem; margin: 0 auto; padding: 1rem; }
+    header { display: flex; justify-content: space-between; align-items: center; }
+    h1 { font-size: 1.1rem; margin: 0; }
+    select, button, input { font: inherit; }
+    select, input {
+      background: #0f172a; color: #e2e8f0;
+      border: 1px solid #334155; border-radius: 0.6rem;
+      padding: 0.55rem 0.7rem; width: 100%;
+    }
+    button { border: 0; border-radius: 0.7rem; padding: 0.75rem 0.8rem; font-weight: 700; }
+    .card {
+      background: #0f172a; border: 1px solid #1e293b;
+      border-radius: 1rem; padding: 1.2rem; min-height: 14rem;
+      /* M3.2: allow vertical page scroll but let the card own horizontal swipes */
+      touch-action: pan-y;
+      user-select: none; -webkit-user-select: none;
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+    .card.swiping { transition: none; }
+    .target { font-size: 2rem; font-weight: 800; }
+    /* M2.2b: phonetic lines */
+    .ro  { color: #818cf8; font-size: 1rem; margin-top: 0.25rem; }
+    .ipa { color: #64748b; font-size: 0.9rem;  margin-top: 0.1rem; }
+    .base { color: #6ee7b7; font-size: 1.3rem; margin-top: 0.8rem; }
+    .ex   { color: #94a3b8; font-size: 0.95rem; margin-top: 0.7rem; }
+    .row  { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-top: 0.8rem; }
+    .hard { background: #4c0519; color: #fda4af; }
+    .ok   { background: #451a03; color: #fcd34d; }
+    .good { background: #064e3b; color: #6ee7b7; }
+    .ghost{ background: #1e293b; color: #cbd5e1; }
+    /* M2.3: fill-blank + conjugate buttons */
+    .fill-btn{ background: #172a3d; color: #60a5fa; }
+    .conj-btn{ background: #0f3624; color: #86efac; }
+    .clear   { background: transparent; border: 1px solid #334155; color: #64748b; font-weight: 400; }
+    .muted   { color: #64748b; font-size: 0.8rem; }
+    .hidden  { display: none; }
+    /* Drill / fill / conjugate panels */
+    .panel {
+      margin-top: 1rem; background: #0f172a;
+      border: 1px solid #1e293b; border-radius: 0.8rem; padding: 0.9rem;
+    }
+    .panel-note      { font-size: 0.85rem; margin-top: 0.4rem; color: #64748b; }
+    .panel-note.ok   { color: #6ee7b7; }
+    .panel-note.bad  { color: #fda4af; }
+    .fill-blank      { color: #60a5fa; font-weight: 700; letter-spacing: 0.05em; }
+    .conj-opt        { display: block; margin: 0.35rem 0; font-size: 0.95rem; cursor: pointer; }
+    .conj-opt input  { margin-right: 0.4rem; }
+    #boot { padding: 2rem 1rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="boot">Đang mở kho từ offline…</div>
+  <div id="back-hint" class="hidden" style="position:fixed;left:50%;bottom:2rem;transform:translateX(-50%);
+    background:#4c0519;color:#fecaca;padding:0.6rem 1rem;border-radius:0.7rem;font-size:0.9rem;z-index:50"></div>
+
+  <header class="hidden" id="top">
+    <h1>Học từ</h1>
+    <div style="display:flex;gap:0.4rem">
+      <select id="base"></select>
+      <select id="target"></select>
+    </div>
+  </header>
+
+  <main class="hidden" id="app">
+    <p class="muted" id="progress"></p>
+    <div class="card" id="card"></div>
+
+    <!-- SRS grade buttons -->
+    <div class="row">
+      <button class="hard" id="b1">Chưa</button>
+      <button class="ok"   id="b2">Tạm</button>
+      <button class="good" id="b3">Nhớ</button>
+    </div>
+
+    <!-- Basic actions -->
+    <div class="row">
+      <button class="ghost" id="flip">Lật</button>
+      <button class="ghost" id="speak">Nghe</button>
+      <button class="ghost" id="listen">Câu</button>
+    </div>
+
+    <!-- M2.3: active-production buttons -->
+    <div class="row">
+      <button class="fill-btn" id="fillbtn">Điền</button>
+      <button class="conj-btn" id="conjbtn">Chia</button>
+      <button class="clear"    id="clearbtn">✕</button>
+    </div>
+
+    <!-- M2.2a: listen & type / M2.1: mic ASR -->
+    <div id="drill" class="hidden panel">
+      <div style="display:flex;gap:0.4rem;align-items:center">
+        <button class="clear" id="mic" style="flex:0 0 auto;white-space:nowrap">🎤 Mic</button>
+        <input id="typed" placeholder="Gõ lại câu vừa nghe" style="flex:1">
+      </div>
+      <p class="panel-note" id="drill-note"></p>
+    </div>
+
+    <!-- M2.3a: fill-blank -->
+    <div id="fillbox" class="hidden panel">
+      <p id="fill-sent" style="font-size:0.95rem;margin-bottom:0.5rem"></p>
+      <input id="fill-input" placeholder="Gõ từ còn thiếu">
+      <p class="panel-note" id="fill-note"></p>
+    </div>
+
+    <!-- M2.3b: conjugate (pick the correct grammar form) -->
+    <div id="conjbox" class="hidden panel">
+      <p id="conj-prompt" style="font-size:0.95rem;margin-bottom:0.5rem"></p>
+      <div id="conj-opts"></div>
+      <p class="panel-note" id="conj-note"></p>
+    </div>
+  </main>
+
+  <script src="srs-store.js"></script>
+  <script src="asr-mobile.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

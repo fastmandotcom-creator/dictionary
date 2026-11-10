@@ -23,3 +23,8 @@ secrets/
 pytest-of-admin/
 .agnes/
 .venv-filter/
+# --- generated release distribution (APKs go to GitHub Releases, not git) ---
+dist/
+# --- generated mobile data (regenerate: python3 -m dict_factory.export_mobile + sync) ---
+mobile/www/data/
+mobile/android/app/src/main/assets/public/data/
