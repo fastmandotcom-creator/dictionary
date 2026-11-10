@@ -27,6 +27,7 @@
   var LITE = !!(window.location && /[?&]lite=1/.test(window.location.search || ""));
   var drillsReady = null;
   function dataBase() { return LITE ? "data/lite" : "data"; }
+  function fmt(n) { try { return Number(n).toLocaleString("vi-VN"); } catch (e) { return String(n); } }
 
   // ---------------- utilities ----------------
   function pad(n) { return String(n).padStart(2, "0"); }
@@ -139,8 +140,8 @@
   function renderHome() {
     var c = srsCounts();
     var total = concepts.length;
-    $("stat-learned").textContent = c.total;
-    $("stat-total").textContent = total;
+    $("stat-learned").textContent = fmt(c.total);
+    $("stat-total").textContent = fmt(total);
     var pct = total ? Math.min(100, Math.round((c.total / total) * 100)) : 0;
     $("learned-bar").style.width = pct + "%";
     $("stat-today").textContent = String(todayGrades());
@@ -236,7 +237,6 @@
       var ipa = (learning.ipa && learning.ipa[id]) || "";
 
       card.innerHTML =
-        '<div class="card-pos">' + (idx + 1) + " / " + queue.length + "</div>" +
         '<div class="target">' + word + "</div>" +
         (ro  ? '<div class="ro">'  + ro  + "</div>" : "") +
         (ipa ? '<div class="ipa">' + ipa + "</div>" : "") +
@@ -261,9 +261,9 @@
         '<div style="font-weight:800;font-size:1.25rem;margin-top:0.5rem">Buổi học xong!</div>' +
         '<p class="muted" style="margin-top:0.5rem">' +
           "Chấm " + sessionStats.learned + " từ · đúng " + sessionStats.correct + " trong phần luyện<br>" +
-          "Tổng tiến bộ: " + c.total + " / " + concepts.length + " từ (chuỗi " + streakDays() + " ngày)</p>" +
+          "Tổng tiến bộ: " + fmt(c.total) + " / " + fmt(concepts.length) + " từ (chuỗi " + streakDays() + " ngày)</p>" +
         '</div>';
-    $("progress").textContent = "Hoàn tất buổi · " + c.total + "/" + concepts.length + " từ";
+    $("progress").textContent = "Hoàn tất buổi · " + fmt(c.total) + "/" + fmt(concepts.length) + " từ";
   }
 
   function grade(kind) {
