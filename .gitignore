@@ -28,3 +28,8 @@ dist/
 # --- generated mobile data (regenerate: python3 -m dict_factory.export_mobile + sync) ---
 mobile/www/data/
 mobile/android/app/src/main/assets/public/data/
+# --- E2E toolchain (large downloaded browsers + temp profiles) ---
+.e2e/browsers/
+.e2e/tmp/
+.e2e/home*/
+.e2e/avdhome/
