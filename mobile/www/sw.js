@@ -9,7 +9,7 @@
  * Registered in index.html:
  *   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
  */
-const CACHE = 'dict-learn-v2'; // v2: add update.js + version.json to the shell
+const CACHE = 'dict-learn-v3'; // v3: add tts.js (native TTS bridge) to the shell
 
 // Core app shell (always cached; revalidated on each navigate)
 const SHELL = [
@@ -17,6 +17,7 @@ const SHELL = [
   'app.js',
   'srs-store.js',
   'asr-mobile.js',
+  'tts.js',
   'update.js',
   'manifest.json',
   'version.json',

@@ -91,7 +91,10 @@
   }
 
   function speak(text, lang) {
-    if (!text || !window.speechSynthesis || !soundOn) return;
+    if (!text || !soundOn) return;
+    // Native bridge on Android (window.TTS from tts.js), Web Speech on the web.
+    if (window.TTS) { window.TTS.speak(text, lang); return; }
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
     var u = new SpeechSynthesisUtterance(text);
     u.lang = lang === "zh" ? "zh-CN" : lang === "pt" ? "pt-BR" : lang;
     speechSynthesis.cancel();

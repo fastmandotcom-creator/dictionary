@@ -106,7 +106,7 @@ async function main() {
   // load SrsStore + MicAsr + app.js into the sandbox (they attach to window)
   const sandbox = win; // use win itself as the context so bare globals resolve
   vm.createContext(sandbox);
-  ['srs-store.js', 'asr-mobile.js', 'app.js'].forEach((f) => {
+  ['srs-store.js', 'asr-mobile.js', 'tts.js', 'app.js'].forEach((f) => {
     vm.runInContext(fs.readFileSync(path.join(WWW, f), 'utf8'), sandbox, { filename: f });
   });
 

@@ -2,4 +2,8 @@ include ':app'
 include ':capacitor-cordova-android-plugins'
 project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')
 
+// Local native TTS plugin (ported from duosub-study's Android TextToSpeech + Google web fallback).
+include ':dictlearn-tts'
+project(':dictlearn-tts').projectDir = new File('./dictlearn-tts/')
+
 apply from: 'capacitor.settings.gradle'

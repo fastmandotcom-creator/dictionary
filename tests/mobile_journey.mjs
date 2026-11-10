@@ -125,7 +125,7 @@ function buildSandbox(storage, { ghRelease } = {}) {
   };
   win.window = win; win.globalThis = win;
   vm.createContext(win);
-  ['srs-store.js', 'asr-mobile.js', 'update.js', 'app.js'].forEach((f) => {
+  ['srs-store.js', 'asr-mobile.js', 'tts.js', 'update.js', 'app.js'].forEach((f) => {
     vm.runInContext(fs.readFileSync(path.join(WWW, f), 'utf8'), win, { filename: f });
   });
   return { win, els };

@@ -1,0 +1,4 @@
+-keep class com.dict.learn.tts.** { *; }
+-keep class com.getcapacitor.** { *; }
+-dontwarn com.dict.learn.tts.**
+-dontwarn com.getcapacitor.**

@@ -50,3 +50,5 @@ mobile/www/sql-wasm.wasm
 .e2e/render_screens.py
 .e2e/app_preview.html
 .e2e/preview_data.json
+.e2e/ref/
+.e2e/e2e_file.cjs
