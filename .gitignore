@@ -8,3 +8,17 @@ __pycache__/
 .DS_Store
 node_modules/
 .DS_Store
+# --- release signing (keystore stays out of git — catastrophic if leaked) ---
+mobile/android/app/*.jks
+mobile/android/app/*.keystore
+# --- release build outputs ---
+mobile/android/app/build/outputs/apk/release/
+
+# --- secrets (live gateway key MUST stay out of a public repo) ---
+secrets/
+!secrets/.gitkeep
+# --- build/tooling state ---
+.gradle-home/
+.pytest_cache/
+pytest-of-admin/
+.agnes/
