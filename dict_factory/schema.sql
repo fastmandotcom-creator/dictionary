@@ -29,6 +29,14 @@ CREATE TABLE IF NOT EXISTS phonetics_text (
   prompt_v TEXT NOT NULL DEFAULT 'v1',
   PRIMARY KEY (concept_id, lang)
 );
+CREATE TABLE IF NOT EXISTS aligned_examples (
+  concept_id TEXT NOT NULL REFERENCES concepts(id),
+  lang TEXT NOT NULL,
+  sentence TEXT NOT NULL,
+  prompt_v TEXT NOT NULL DEFAULT 'v1',
+  PRIMARY KEY (concept_id, lang)
+);
+CREATE INDEX IF NOT EXISTS idx_aligned_examples_lookup ON aligned_examples(concept_id);
 CREATE TABLE IF NOT EXISTS examples_bilingual (
   concept_id TEXT NOT NULL REFERENCES concepts(id),
   lang_target TEXT NOT NULL,

@@ -47,6 +47,19 @@ def main() -> None:
     drills_cmd.add_argument("--dry-run", action="store_true", help="print the prompt, do not call the LLM")
     web_cmd = sub.add_parser("web")
     web_cmd.add_argument("--port", type=int, default=8000)
+    offline = sub.add_parser(
+        "offline-fill",
+        help="LLM-filled learn-data plane (aligned/phonetics/drills) with per-model "
+        "backoff + deterministic drills fallback; resumable via shard progress DB.",
+    )
+    offline.add_argument("--what", choices=["aligned", "phonetics", "drills"], default="drills")
+    offline.add_argument("--workers", type=int, default=8)
+    offline.add_argument("--limit", type=int, default=0, help="only process the first N missing concepts")
+    offline.add_argument("--patience", type=float, default=1800.0, help="per-shard seconds before offline fallback")
+    offline.add_argument("--concurrency", type=int, default=0, help="override per-model concurrency cap")
+    offline.add_argument("--no-fallback", action="store_true", help="disable the deterministic drills fallback")
+    offline.add_argument("--resume-failed", action="store_true", help="only re-plan shards marked failed")
+    offline.add_argument("--replay-raw", action="store_true", help="re-parse saved raw responses, no LLM calls, then exit")
     args = parser.parse_args()
     if args.cmd == "syllabus":
         generate_syllabus(target=args.target, batch_size=args.batch_size)
@@ -179,6 +192,30 @@ def main() -> None:
         import uvicorn
         from dict_factory.web_server import app
         uvicorn.run(app, host="127.0.0.1", port=args.port)
+    elif args.cmd == "offline-fill":
+        import threading
+
+        import dict_factory.offline_fill as offline_fill
+
+        offline_fill._reset_scheduler()
+        offline_fill.PATIENCE_SECONDS = args.patience
+        offline_fill.FALLBACK_DRILLS = not args.no_fallback
+        if args.concurrency > 0:
+            offline_fill._CCS = {m[0]: args.concurrency for m in offline_fill.MODELS}
+            offline_fill._SEMAPHORES = {m[0]: threading.Semaphore(args.concurrency) for m in offline_fill.MODELS}
+        if args.replay_raw:
+            recovered = offline_fill.replay_raw()
+            for kind in offline_fill.KINDS:
+                print(f"offline-fill raw-replay {kind}: recovered {recovered.get(kind, 0)} concepts", flush=True)
+            print(f"offline-fill raw-replay total: {sum(recovered.values())}", flush=True)
+        else:
+            written = offline_fill.run(
+                args.what,
+                workers=args.workers,
+                limit=args.limit,
+                resume_failed=args.resume_failed,
+            )
+            print(f"offline-fill {args.what}: wrote {written} concept rows", flush=True)
 
 
 if __name__ == "__main__":

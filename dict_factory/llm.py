@@ -42,6 +42,56 @@ def _strip_fences(text: str) -> str:
     return text.strip()
 
 
+def call_chat_text(
+    system: str,
+    user: str,
+    *,
+    retries: int = 3,
+    backoff: float = 1.5,
+    timeout: float = 120.0,
+    temperature: float = 0.2,
+    max_tokens: int = 65536,
+    model: str | None = None,
+    client_retries: int = 2,
+) -> str:
+    """Run one chat completion and return the raw response text.
+
+    ``client_retries`` maps to the OpenAI client's ``max_retries``. The
+    offline-fill scheduler passes 0 so a rate-limited provider fails fast
+    instead of the SDK silently retrying and burning wall time inside the
+    per-model backoff loop.
+    """
+    cfg = llm_config()
+    if cfg is None:
+        raise RuntimeError("LLM is not configured (LEXICON_LLM_BASE_URL/API_KEY/MODEL).")
+
+    from openai import OpenAI
+
+    client = OpenAI(base_url=cfg["base_url"], api_key=cfg["api_key"], max_retries=client_retries)
+    last_error: Exception | None = None
+    attempt = 0
+    while attempt <= retries:
+        try:
+            response = client.chat.completions.create(
+                model=model or cfg["model"],
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                temperature=temperature,
+                timeout=timeout,
+                max_tokens=max_tokens,
+            )
+            return _strip_fences(response.choices[0].message.content or "").strip()
+        except Exception as exc:
+            last_error = exc
+            attempt += 1
+            if attempt > retries:
+                break
+            time.sleep(backoff * (2 ** (attempt - 1)) * (0.7 + 0.6 * random.random()))
+    raise RuntimeError(f"LLM call failed after {retries + 1} attempts: {last_error}")
+
+
 def call_chat_json(
     system: str,
     user: str,
