@@ -2,6 +2,25 @@
 
 LLM-native CONCEPT → EXPRESSION warehouse. Compiles down to the extension `lexicon-core.db` schema.
 
+## Mobile App (Android)
+
+End users download the signed APK from [GitHub Releases](https://github.com/fastmandotcom-creator/dictionary/releases)
+(`dict-learn-v1.0.0-android.apk` + `.sha256`). Install on Android 7.0+
+("install from unknown sources"; grant Microphone only for pronunciation
+checks). Everything is offline: 12k-word dataset, drill / fill-blank /
+conjugate modes, IPA + romanization, spaced repetition in IndexedDB.
+
+Rebuild + republish the APK (after data updates):
+
+```bash
+python3 -m dict_factory.export_mobile   # out/mobile/www
+bash scripts/sync_mobile_data.sh        # -> mobile/www/data
+bash scripts/build_release_apk.sh       # -> mobile/android/app/build/.../app-release.apk
+bash scripts/package_release_apk.sh     # -> dist/dict-learn-vX.apk + .sha256 + RELEASE_NOTES.md
+```
+
+Then attach the three `dist/` files to a GitHub Release (see below).
+
 ## Pipeline (data plane)
 
 ```bash
