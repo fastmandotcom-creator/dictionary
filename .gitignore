@@ -33,3 +33,8 @@ mobile/android/app/src/main/assets/public/data/
 .e2e/tmp/
 .e2e/home*/
 .e2e/avdhome/
+.e2e/app_preview.html
+.e2e/preview_data.json
+.e2e/package.json
+.e2e/package-lock.json
+.e2e/mini_route.cjs
