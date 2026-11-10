@@ -32,12 +32,27 @@ export GRADLE_USER_HOME
 mkdir -p "$GRADLE_USER_HOME" "$PWD/.tmp"
 export TMPDIR="${TMPDIR:-$PWD/.tmp}"
 
+# --- emit version.json for the in-app auto-update module --------------------
+# Single source of truth is build.gradle's versionName; regenerate the bundled
+# meta each build so update.js always knows the APK's own version.
+VNAME="$(grep -o 'versionName "[0-9.]*"' mobile/android/app/build.gradle | head -1 | sed 's/versionName "//;s/"//')"
+VCODE="$(grep -o 'versionCode [0-9]*' mobile/android/app/build.gradle | head -1 | awk '{print $2}')"
+printf '{\n  "version": "%s",\n  "versionCode": %s,\n  "channel": "https://github.com/fastmandotcom-creator/dictionary/releases"\n}\n' \
+  "${VNAME:-0.0.0}" "${VCODE:-0}" > mobile/www/version.json
+echo "version.json: v${VNAME} (code ${VCODE})"
+
 # --- sync web assets into the Android project (data/ now ships ro/ipa) ------
 cd mobile
-if command -v npx >/dev/null 2>&1 && [ -d node_modules/@capacitor/cli ]; then
+# Prefer the local Capacitor binary (fast, offline); npx can hang checking
+# the registry. Fall back to a manual mirror if neither is present.
+if [ -x node_modules/.bin/cap ]; then
+  node_modules/.bin/cap copy android || echo "warn: cap copy failed; using existing android assets"
+elif [ -d node_modules/@capacitor/cli ]; then
   npx cap copy android || echo "warn: cap copy failed; using existing android assets"
 else
-  echo "warn: Capacitor CLI not available; skipping asset copy"
+  echo "warn: Capacitor CLI not available; using existing android assets"
+  rm -rf android/app/src/main/assets/public
+  cp -R www android/app/src/main/assets/public
 fi
 cd android
 

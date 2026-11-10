@@ -1,5 +1,13 @@
 {
   "appId": "com.dict.learn",
   "appName": "Hoc Tu",
-  "webDir": "www"
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#0B1220"
+  },
+  "plugins": {
+    "Browser": {
+      "presentation": "fullscreen"
+    }
+  }
 }

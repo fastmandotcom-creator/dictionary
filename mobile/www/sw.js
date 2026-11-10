@@ -9,7 +9,7 @@
  * Registered in index.html:
  *   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
  */
-const CACHE = 'dict-learn-v1';
+const CACHE = 'dict-learn-v2'; // v2: add update.js + version.json to the shell
 
 // Core app shell (always cached; revalidated on each navigate)
 const SHELL = [
@@ -17,7 +17,9 @@ const SHELL = [
   'app.js',
   'srs-store.js',
   'asr-mobile.js',
+  'update.js',
   'manifest.json',
+  'version.json',
 ];
 
 // Data files (fetched once; cached permanently within this app version)

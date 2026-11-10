@@ -185,6 +185,9 @@
     }
     .slim { display: block; width: 100%; background: var(--accent); color: #fff;
       font-weight: 700; border-radius: 0.7rem; min-height: 2.9rem; margin-bottom: 0.5rem; }
+    .slim:disabled { opacity: 0.5; }
+    .row-flex { display: flex; gap: 0.5rem; align-items: center; }
+    .row-flex .slim { flex: 1; margin-bottom: 0; }
     .panel-note { font-size: 0.9rem; color: var(--sub); margin: 0.4rem 0 0; }
     .panel-note.ok  { color: var(--good-fg); font-weight: 700; }
     .panel-note.bad { color: var(--bad-fg); font-weight: 700; }
@@ -195,6 +198,44 @@
     }
     .conj-opt input { margin-right: 0.5rem; transform: scale(1.2); }
     .conj-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+
+    /* ---------- settings + update (auto-update ON by default) ---------- */
+    .settings-card {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 1rem; padding: 0.2rem 1rem;
+    }
+    .setting-row {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 0.7rem; padding: 0.8rem 0;
+    }
+    .setting-row + .setting-row { border-top: 1px solid var(--line); }
+    .setting-row b { font-size: 0.98rem; }
+    .setting-row .muted { margin-top: 0.15rem; font-size: 0.8rem; }
+    .slim2 { min-height: 2.4rem; font-size: 0.85rem; padding: 0.3rem 0.7rem; }
+    /* iOS-style toggle */
+    input[type="checkbox"].switch {
+      appearance: none; -webkit-appearance: none; position: relative;
+      width: 2.9rem; height: 1.6rem; border-radius: 99px;
+      background: var(--line); cursor: pointer; transition: background 0.15s ease;
+      flex: 0 0 auto;
+    }
+    input[type="checkbox"].switch:checked { background: var(--accent); }
+    input[type="checkbox"].switch::after {
+      content: ""; position: absolute; top: 0.15rem; left: 0.15rem;
+      width: 1.3rem; height: 1.3rem; border-radius: 50%;
+      background: #fff; transition: transform 0.15s ease;
+    }
+    input[type="checkbox"].switch:checked::after { transform: translateX(1.3rem); }
+    .update-banner {
+      background: var(--accent-soft); border: 1px solid var(--accent);
+      border-radius: 1rem; padding: 0.9rem 1rem; margin-bottom: 1rem;
+      display: flex; flex-direction: column; gap: 0.6rem;
+    }
+    .update-banner .ub-title { font-weight: 800; }
+    .update-banner .ub-notes { color: var(--sub); font-size: 0.85rem; }
+    .update-banner .ub-row { display: flex; gap: 0.5rem; }
+    .update-banner .primary { flex: 1; margin: 0; min-height: 2.8rem; font-size: 1rem; }
+    .update-banner .ghost { flex: 0 0 auto; }
 
     /* ---------- toast / back hint ---------- */
     #toast, #back-hint {
@@ -228,6 +269,7 @@
       </div>
       <button id="sndbtn" class="iconbtn" aria-label="Bật/tắt âm thanh" title="Âm thanh">🔊</button>
       <button id="thmbtn" class="iconbtn" aria-label="Đổi giao diện" title="Giao diện">◐</button>
+      <button id="setbtn" class="iconbtn" aria-label="Cài đặt" title="Cài đặt">⚙</button>
     </div>
   </header>
 
@@ -270,6 +312,28 @@
           <option value="25">25 từ</option>
           <option value="50">50 từ</option>
         </select>
+      </div>
+
+      <!-- update banner (auto-update ON by default) -->
+      <div id="update-banner" class="update-banner hidden"></div>
+
+      <!-- settings: auto-update + about -->
+      <div class="sec-title">Cài đặt</div>
+      <div class="settings-card">
+        <label class="setting-row">
+          <div>
+            <b>Tự động cập nhật</b>
+            <p class="muted">Tự kiểm tra bản APK mới mỗi ngày · cài đè giữ nguyên tiến độ học</p>
+          </div>
+          <input type="checkbox" id="autoupd" checked>
+        </label>
+        <div class="setting-row">
+          <div>
+            <b>Bản hiện tại</b>
+            <p class="muted" id="verline">v…</p>
+          </div>
+          <button id="checkupd" class="ghost slim2">Kiểm tra ngay</button>
+        </div>
       </div>
     </section>
 
@@ -326,6 +390,7 @@
 
   <script src="srs-store.js"></script>
   <script src="asr-mobile.js"></script>
+  <script src="update.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
