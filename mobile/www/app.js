@@ -20,6 +20,14 @@
   var sessionDone = false;
   var sessionStats = { learned: 0, correct: 0, practice: 0 };
 
+  // Demo mode (?lite=1) + lazy drill-pack loading. The full drills.json is
+  // the heaviest payload (~23 MB); the app boots on concepts+langs so the
+  // first card shows fast, and practice panels show a friendly notice until
+  // the pack lands. E2E + quick demos use the bundled lite subset.
+  var LITE = !!(window.location && /[?&]lite=1/.test(window.location.search || ""));
+  var drillsReady = null;
+  function dataBase() { return LITE ? "data/lite" : "data"; }
+
   // ---------------- utilities ----------------
   function pad(n) { return String(n).padStart(2, "0"); }
   function todayISO() {
@@ -271,6 +279,17 @@
   }
 
   // ---------------- panels ----------------
+  function ensureStudyVisible() {
+    // Practice buttons live on the Home screen but their panels render in the
+    // Study section. If Home is currently showing, switch to Study first so
+    // the panel the user just asked for is actually visible.
+    var home = $("home"), study = $("study");
+    if (home && study && !home.classList.contains("hidden")) {
+      home.classList.add("hidden");
+      study.classList.remove("hidden");
+    }
+  }
+
   function hidePanels() {
     if (micListening) { try { window.MicAsr && MicAsr.stop(); } catch (e) {} micListening = false; }
     var micBtn = $("mic");
@@ -290,20 +309,23 @@
 
   // ---------------- M2.2a listen & write ----------------
   function showListen() {
-    var id = ensurePracticeConcept();
-    openPanel("drill");
-    var rows = drills[id] || [];
-    var note = $("drill-note");
-    if (!rows.length) {
-      note.textContent = "Từ này chưa có câu công sở offline — thử một từ khác.";
+    withDrills("listen", function () {
+      var id = ensurePracticeConcept();
+      ensureStudyVisible();
+      openPanel("drill");
+      var rows = drills[id] || [];
+      var note = $("drill-note");
+      if (!rows.length) {
+        note.textContent = "Từ này chưa có câu công sở offline — thử một từ khác.";
+        note.className = "panel-note";
+        return;
+      }
+      drill = rows[0];
+      $("typed").value = "";
+      note.textContent = "Nghe câu rồi gõ lại chính xác (không cần hoa/thấp).";
       note.className = "panel-note";
-      return;
-    }
-    drill = rows[0];
-    $("typed").value = "";
-    note.textContent = "Nghe câu rồi gõ lại chính xác (không cần hoa/thấp).";
-    note.className = "panel-note";
-    speak(drill.s, "en");
+      speak(drill.s, "en");
+    });
   }
   function checkTyped() {
     if (!drill) return;
@@ -354,26 +376,29 @@
 
   // ---------------- M2.3a fill-blank ----------------
   function showFill() {
-    var id = ensurePracticeConcept();
-    openPanel("fillbox");
-    var rows = (drills[id] || []).filter(function (r) { return r.s && r.sf; });
-    var note = $("fill-note");
-    if (!rows.length) {
-      note.textContent = "Từ này chưa có câu để điền — thử một từ khác.";
+    withDrills("fill", function () {
+      var id = ensurePracticeConcept();
+      ensureStudyVisible();
+      openPanel("fillbox");
+      var rows = (drills[id] || []).filter(function (r) { return r.s && r.sf; });
+      var note = $("fill-note");
+      if (!rows.length) {
+        note.textContent = "Từ này chưa có câu để điền — thử một từ khác.";
+        note.className = "panel-note";
+        return;
+      }
+      var row = rows[Math.floor(Math.random() * rows.length)];
+      var sf = row.sf;
+      var re = new RegExp(sf.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      if (!re.test(row.s)) { showListen(); return; }
+      var blanked = row.s.replace(re, "____");
+      fill = { row: row, answer: sf };
+      $("fill-sent").textContent = blanked;
+      $("fill-input").value = "";
+      note.textContent = "Nghe câu rồi gõ từ còn thiếu (vị trí gạch ngang).";
       note.className = "panel-note";
-      return;
-    }
-    var row = rows[Math.floor(Math.random() * rows.length)];
-    var sf = row.sf;
-    var re = new RegExp(sf.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    if (!re.test(row.s)) { showListen(); return; }
-    var blanked = row.s.replace(re, "____");
-    fill = { row: row, answer: sf };
-    $("fill-sent").textContent = blanked;
-    $("fill-input").value = "";
-    note.textContent = "Nghe câu rồi gõ từ còn thiếu (vị trí gạch ngang).";
-    note.className = "panel-note";
-    speak(row.s, "en");
+      speak(row.s, "en");
+    });
   }
   function checkFill() {
     if (!fill) return;
@@ -388,35 +413,39 @@
 
   // ---------------- M2.3b conjugate ----------------
   function showConjugate() {
-    var id = ensurePracticeConcept();
-    openPanel("conjbox");
-    var rows = drills[id] || [];
-    var note = $("conj-note");
-    var byPol = {};
-    rows.forEach(function (r) { if (r.t && r.p) (byPol[r.p] = byPol[r.p] || []).push(r); });
+    withDrills("conj", function () {
 
-    var targetPol = null;
-    ['affirmative', 'negative', 'question'].forEach(function (p) {
-      if (targetPol || !byPol[p]) return;
-      var tenses = {};
-      byPol[p].forEach(function (r) { tenses[r.t] = 1; });
-      if (Object.keys(tenses).length > 1) targetPol = p;
+      var id = ensurePracticeConcept();
+      ensureStudyVisible();
+      openPanel("conjbox");
+      var rows = drills[id] || [];
+      var note = $("conj-note");
+      var byPol = {};
+      rows.forEach(function (r) { if (r.t && r.p) (byPol[r.p] = byPol[r.p] || []).push(r); });
+
+      var targetPol = null;
+      ['affirmative', 'negative', 'question'].forEach(function (p) {
+        if (targetPol || !byPol[p]) return;
+        var tenses = {};
+        byPol[p].forEach(function (r) { tenses[r.t] = 1; });
+        if (Object.keys(tenses).length > 1) targetPol = p;
+      });
+      if (targetPol) {
+        $("conj-prompt").textContent = "Chọn câu ở dạng HIỆN TẠI (present simple):";
+        buildConjOptions(rows, function (r) { return r.p === targetPol; }, "present_simple");
+        return;
+      }
+      var qRows = rows.filter(function (r) { return r.p === "question"; });
+      if (qRows.length) {
+        $("conj-prompt").textContent = "Chọn câu là CÂU HỎI:";
+        buildConjOptions(rows, function () { return true; }, "question");
+        return;
+      }
+      $("conj-prompt").textContent = "";
+      note.textContent = "Từ này chưa có các dạng chia để luyện — thử từ khác.";
+      note.className = "panel-note";
+      $("conj-opts").innerHTML = "";
     });
-    if (targetPol) {
-      $("conj-prompt").textContent = "Chọn câu ở dạng HIỆN TẠI (present simple):";
-      buildConjOptions(rows, function (r) { return r.p === targetPol; }, "present_simple");
-      return;
-    }
-    var qRows = rows.filter(function (r) { return r.p === "question"; });
-    if (qRows.length) {
-      $("conj-prompt").textContent = "Chọn câu là CÂU HỎI:";
-      buildConjOptions(rows, function () { return true; }, "question");
-      return;
-    }
-    $("conj-prompt").textContent = "";
-    note.textContent = "Từ này chưa có các dạng chia để luyện — thử từ khác.";
-    note.className = "panel-note";
-    $("conj-opts").innerHTML = "";
   }
 
   function buildConjOptions(allRows, filterFn, correctKey) {
@@ -467,14 +496,16 @@
 
   // ---------------- boot ----------------
   function boot() {
+    // Fast path: concepts + langs are small; the card shows immediately.
+    // The heavy drills pack is loaded in the background so practice buttons
+    // never block first paint.
+    var db = dataBase();
     return Promise.all([
-      fetch("data/concepts.json").then(function (r) { return r.json(); }),
-      fetch("data/langs.json").then(function (r) { return r.json(); }),
-      fetch("data/drills.json").then(function (r) { return r.json(); })
+      fetch(db + "/concepts.json").then(function (r) { return r.json(); }),
+      fetch(db + "/langs.json").then(function (r) { return r.json(); })
     ]).then(function (parts) {
       concepts = parts[0];
       langs = parts[1];
-      drills = parts[2];
       ["base", "target"].forEach(function (idn) {
         $(idn).innerHTML = langs.map(function (l) {
           return '<option value="' + l.code + '">' + l.native + "</option>";
@@ -482,12 +513,14 @@
       });
       $("base").value = "vi";
       $("target").value = "en";
-      // theme
       applyTheme(localStorage.getItem("dictlearn_theme") || "auto");
-      // session length
       var sl = $("sessionlen");
       if (sl) sl.value = localStorage.getItem("dictlearn_session") || "10";
-      // auto-typing prevention: start on Home
+      // background load of the drill pack (non-blocking)
+      drillsReady = fetch(db + "/drills.json")
+        .then(function (r) { return r.json(); })
+        .then(function (d) { drills = d; })
+        .catch(function () {});
       return loadSrs().then(function () {
         $("boot").classList.add("hidden");
         $("top").classList.remove("hidden");
@@ -495,9 +528,18 @@
         renderHome();
         showHome();
         buildQueue();
-        // pre-render the first card so study + practice-from-home work instantly
         return render();
       });
+    });
+  }
+
+  // Await the drill pack before a practice panel that needs it. If it hasn't
+  // landed yet, show a friendly "loading" note instead of a blank panel.
+  function withDrills(kind, fn) {
+    return drillsReady.then(fn, function () {
+      var note = $(kind === "listen" ? "drill-note" : kind === "fill" ? "fill-note" : "conj-note");
+      if (note) { note.textContent = "Đang tải bộ câu luyện…"; note.className = "panel-note"; }
+      return null;
     });
   }
 
@@ -530,7 +572,8 @@
       toast(soundOn ? "Đã bật âm thanh" : "Đã tắt âm thanh");
     };
     $("thmbtn").onclick = function () {
-      var cur = document.documentElement.getAttribute("data-theme");
+      var cur;
+      try { cur = localStorage.getItem("dictlearn_theme") || "auto"; } catch (e) { cur = "auto"; }
       var next = cur === "dark" ? "light" : cur === "light" ? "auto" : "dark";
       try { localStorage.setItem("dictlearn_theme", next); } catch (e) {}
       applyTheme(next);
