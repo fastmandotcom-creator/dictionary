@@ -22,3 +22,4 @@ secrets/
 .pytest_cache/
 pytest-of-admin/
 .agnes/
+.venv-filter/
