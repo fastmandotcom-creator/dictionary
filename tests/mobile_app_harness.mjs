@@ -50,7 +50,11 @@ class El {
 const IDS = ['boot','top','app','progress','card','base','target','b1','b2','b3',
   'flip','speak','listen','fillbtn','conjbtn','clearbtn','mic',
   'drill','typed','drill-note','fillbox','fill-sent','fill-input','fill-note',
-  'conjbox','conj-prompt','conj-opts','conj-note','back-hint'];
+  'conjbox','conj-prompt','conj-opts','conj-note','back-hint',
+  // v1.1
+  'home','study','onboard','onboardok','startbtn','homebtn','swipehint',
+  'stat-learned','stat-total','stat-today','stat-streak','learned-bar',
+  'sessionlen','sndbtn','thmbtn','toast','playdrill','drillcheck','fillcheck'];
 
 function makeDoc() {
   const els = {};
@@ -64,6 +68,7 @@ function makeDoc() {
     createElement: (tag) => new El(tag),
     createTextNode: (t) => ({ nodeValue: t }),
     querySelector: () => null,
+    querySelectorAll: () => [],
     addEventListener: () => {},
     removeEventListener: () => {},
     activeElement: null,

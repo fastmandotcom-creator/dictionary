@@ -3,127 +3,325 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Học từ</title>
-  <!-- M3.4: PWA offline -->
-  <meta name="theme-color" content="#020617">
+  <title>Học từ · dict-learn</title>
+  <!-- PWA offline -->
+  <meta name="theme-color" content="#0B1220">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" card="black-translucent">
   <link rel="manifest" href="manifest.json">
   <style>
-    :root { color-scheme: dark; }
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, sans-serif; background: #020617; color: #e2e8f0; }
-    header, main { max-width: 32rem; margin: 0 auto; padding: 1rem; }
-    header { display: flex; justify-content: space-between; align-items: center; }
-    h1 { font-size: 1.1rem; margin: 0; }
-    select, button, input { font: inherit; }
-    select, input {
-      background: #0f172a; color: #e2e8f0;
-      border: 1px solid #334155; border-radius: 0.6rem;
-      padding: 0.55rem 0.7rem; width: 100%;
+    :root {
+      --bg:#0B1220; --card:#131C2E; --line:#26334D; --text:#EAF0FA; --sub:#8FA0BC;
+      --accent:#6C8CFF; --accent-soft:#1B2745;
+      --good:#1F7A4D; --good-fg:#7CE3AE; --warn:#4A3413; --warn-fg:#FFD27A; --bad:#4A1622; --bad-fg:#FF9AA8;
+      color-scheme: dark;
     }
-    button { border: 0; border-radius: 0.7rem; padding: 0.75rem 0.8rem; font-weight: 700; }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg:#F2F5FB; --card:#FFFFFF; --line:#D9E1F0; --text:#10192B; --sub:#5A6A85;
+        --accent:#3B5BDB; --accent-soft:#E4EAFE;
+        --good:#E2F6EC; --good-fg:#0E7A46; --warn:#FFF3D6; --warn-fg:#8A5A00; --bad:#FFE3E8; --bad-fg:#B3243B;
+        color-scheme: light;
+      }
+    }
+    html[data-theme="dark"] {
+      --bg:#0B1220; --card:#131C2E; --line:#26334D; --text:#EAF0FA; --sub:#8FA0BC;
+      --accent:#6C8CFF; --accent-soft:#1B2745;
+      --good:#1F7A4D; --good-fg:#7CE3AE; --warn:#4A3413; --warn-fg:#FFD27A; --bad:#4A1622; --bad-fg:#FF9AA8;
+      color-scheme: dark;
+    }
+    html[data-theme="light"] {
+      --bg:#F2F5FB; --card:#FFFFFF; --line:#D9E1F0; --text:#10192B; --sub:#5A6A85;
+      --accent:#3B5BDB; --accent-soft:#E4EAFE;
+      --good:#E2F6EC; --good-fg:#0E7A46; --warn:#FFF3D6; --warn-fg:#8A5A00; --bad:#FFE3E8; --bad-fg:#B3243B;
+      color-scheme: light;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text);
+      font-size: 16px; line-height: 1.45;
+    }
+    header, main { max-width: 30rem; margin: 0 auto; padding: 0.9rem 1rem calc(1rem + env(safe-area-inset-bottom)); }
+    select, button, input { font: inherit; color: var(--text); }
+    button { cursor: pointer; border: 0; }
+    .hidden { display: none !important; }
+    .muted { color: var(--sub); font-size: 0.85rem; }
+
+    /* ---------- header ---------- */
+    #top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+    .brand { font-weight: 800; font-size: 1.05rem; letter-spacing: -0.01em; }
+    .brand span { color: var(--accent); }
+    .header-actions { display: flex; gap: 0.35rem; align-items: center; }
+    .iconbtn {
+      background: var(--card); border: 1px solid var(--line); border-radius: 0.7rem;
+      min-width: 2.4rem; min-height: 2.4rem; font-size: 1rem; padding: 0.2rem 0.45rem;
+    }
+    .langrow { display: flex; gap: 0.35rem; }
+    .langrow select {
+      width: auto; background: var(--card); border: 1px solid var(--line);
+      border-radius: 0.7rem; padding: 0.45rem 0.6rem; min-height: 2.4rem;
+    }
+
+    /* ---------- boot ---------- */
+    #boot { min-height: 70vh; display: flex; flex-direction: column; gap: 0.8rem;
+      align-items: center; justify-content: center; text-align: center; padding: 1rem; }
+    #boot .logo { font-size: 2.4rem; font-weight: 800; }
+    #boot .logo span { color: var(--accent); }
+    .spinner {
+      width: 2rem; height: 2rem; border-radius: 50%;
+      border: 3px solid var(--line); border-top-color: var(--accent);
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ---------- screens ---------- */
+    .screen { animation: fadein 0.18s ease; }
+    @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    /* ---------- home ---------- */
+    .stat-card {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 1rem; padding: 1rem; margin-bottom: 1rem;
+    }
+    .stat-num { font-size: 2.2rem; font-weight: 800; line-height: 1.1; }
+    .stat-sub { color: var(--sub); font-size: 0.9rem; }
+    .bar { height: 0.45rem; background: var(--line); border-radius: 99px; margin: 0.8rem 0; overflow: hidden; }
+    .bar > div { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.4s ease; min-width: 2px; }
+    .chips { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .chip {
+      background: var(--accent-soft); color: var(--text);
+      border-radius: 99px; padding: 0.35rem 0.8rem; font-size: 0.85rem;
+    }
+    .chip b { color: var(--accent); }
+
+    .primary {
+      display: block; width: 100%; background: var(--accent); color: #fff;
+      font-size: 1.1rem; font-weight: 800; border-radius: 0.9rem;
+      min-height: 3.2rem; margin-bottom: 1rem;
+    }
+    .primary:active { transform: scale(0.99); }
+
+    .sec-title { font-size: 0.8rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--sub); margin: 1.1rem 0 0.5rem; }
+    .practice-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; }
+    .practice-row button {
+      background: var(--card); border: 1px solid var(--line); color: var(--text);
+      border-radius: 0.8rem; min-height: 4.2rem; font-weight: 700; font-size: 0.95rem;
+      display: flex; flex-direction: column; gap: 0.2rem; align-items: center; justify-content: center;
+    }
+    .practice-row button:active { background: var(--accent-soft); }
+    .home-row2 { display: flex; gap: 0.5rem; margin-top: 0.6rem; align-items: center; }
+    .home-row2 .muted { flex: 1; }
+    .home-row2 select {
+      background: var(--card); border: 1px solid var(--line); border-radius: 0.6rem;
+      padding: 0.4rem 0.5rem; width: auto;
+    }
+
+    .onboard {
+      background: var(--accent-soft); border: 1px solid var(--accent);
+      border-radius: 0.9rem; padding: 0.9rem 1rem; margin-bottom: 1rem;
+      font-size: 0.92rem;
+    }
+    .onboard ol { margin: 0.5rem 0 0.7rem; padding-left: 1.2rem; }
+    .onboard li { margin: 0.25rem 0; }
+    .onboard .ghost { width: 100%; }
+
+    /* ---------- study ---------- */
+    .study-top { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+    #progress { flex: 1; }
+    .hint {
+      background: var(--accent-soft); color: var(--text); border: 1px solid var(--accent);
+      border-radius: 0.7rem; padding: 0.55rem 0.8rem; font-size: 0.85rem; margin-bottom: 0.6rem;
+    }
     .card {
-      background: #0f172a; border: 1px solid #1e293b;
-      border-radius: 1rem; padding: 1.2rem; min-height: 14rem;
-      /* M3.2: allow vertical page scroll but let the card own horizontal swipes */
-      touch-action: pan-y;
-      user-select: none; -webkit-user-select: none;
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 1.1rem; padding: 1.2rem; min-height: 13rem;
+      touch-action: pan-y; user-select: none; -webkit-user-select: none;
       transition: transform 0.12s ease, opacity 0.12s ease;
     }
     .card.swiping { transition: none; }
-    .target { font-size: 2rem; font-weight: 800; }
-    /* M2.2b: phonetic lines */
-    .ro  { color: #818cf8; font-size: 1rem; margin-top: 0.25rem; }
-    .ipa { color: #64748b; font-size: 0.9rem;  margin-top: 0.1rem; }
-    .base { color: #6ee7b7; font-size: 1.3rem; margin-top: 0.8rem; }
-    .ex   { color: #94a3b8; font-size: 0.95rem; margin-top: 0.7rem; }
-    .row  { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-top: 0.8rem; }
-    .hard { background: #4c0519; color: #fda4af; }
-    .ok   { background: #451a03; color: #fcd34d; }
-    .good { background: #064e3b; color: #6ee7b7; }
-    .ghost{ background: #1e293b; color: #cbd5e1; }
-    /* M2.3: fill-blank + conjugate buttons */
-    .fill-btn{ background: #172a3d; color: #60a5fa; }
-    .conj-btn{ background: #0f3624; color: #86efac; }
-    .clear   { background: transparent; border: 1px solid #334155; color: #64748b; font-weight: 400; }
-    .muted   { color: #64748b; font-size: 0.8rem; }
-    .hidden  { display: none; }
-    /* Drill / fill / conjugate panels */
-    .panel {
-      margin-top: 1rem; background: #0f172a;
-      border: 1px solid #1e293b; border-radius: 0.8rem; padding: 0.9rem;
+    .card-pos { font-size: 0.8rem; color: var(--sub); font-weight: 700; }
+    .target { font-size: 2.1rem; font-weight: 800; margin-top: 0.2rem; letter-spacing: -0.01em; }
+    .ro  { color: var(--accent); font-size: 1.05rem; margin-top: 0.3rem; }
+    .ipa { color: var(--sub); font-size: 0.95rem; margin-top: 0.1rem; }
+    .base { color: var(--good-fg); font-size: 1.35rem; font-weight: 700; margin-top: 0.8rem; }
+    .ex   { color: var(--sub); font-size: 0.95rem; margin-top: 0.7rem; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.8rem; }
+    .row2 .ghost { min-height: 3rem; font-weight: 700; }
+    .ghost {
+      background: var(--card); border: 1px solid var(--line); color: var(--text);
+      border-radius: 0.8rem; padding: 0.6rem 0.8rem;
     }
-    .panel-note      { font-size: 0.85rem; margin-top: 0.4rem; color: #64748b; }
-    .panel-note.ok   { color: #6ee7b7; }
-    .panel-note.bad  { color: #fda4af; }
-    .fill-blank      { color: #60a5fa; font-weight: 700; letter-spacing: 0.05em; }
-    .conj-opt        { display: block; margin: 0.35rem 0; font-size: 0.95rem; cursor: pointer; }
-    .conj-opt input  { margin-right: 0.4rem; }
-    #boot { padding: 2rem 1rem; text-align: center; }
+    .ghost:active { background: var(--accent-soft); }
+
+    .grade-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-top: 0.8rem;
+      position: sticky; bottom: 0; background: var(--bg); padding-bottom: 0.4rem; }
+    .grade-row button {
+      border-radius: 0.9rem; min-height: 4rem; display: flex; flex-direction: column;
+      gap: 0.15rem; align-items: center; justify-content: center; font-weight: 800; font-size: 1rem;
+    }
+    .grade-row .sub { font-size: 0.72rem; font-weight: 500; opacity: 0.85; }
+    .hard { background: var(--bad);  color: var(--bad-fg); }
+    .ok   { background: var(--warn); color: var(--warn-fg); }
+    .good { background: var(--good); color: var(--good-fg); }
+
+    /* ---------- practice panels ---------- */
+    .panel {
+      margin-top: 0.9rem; background: var(--card);
+      border: 1px solid var(--line); border-radius: 1rem; padding: 1rem;
+    }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+    .panel-head b { font-size: 1.02rem; }
+    .clear {
+      background: transparent; border: 1px solid var(--line); color: var(--sub);
+      border-radius: 0.6rem; min-width: 2.6rem; min-height: 2.6rem; font-size: 1.1rem;
+    }
+    .panel input[type="text"] {
+      width: 100%; background: var(--bg); border: 1px solid var(--line);
+      border-radius: 0.7rem; padding: 0.8rem 0.9rem; font-size: 1.05rem; margin: 0.6rem 0;
+    }
+    .slim { display: block; width: 100%; background: var(--accent); color: #fff;
+      font-weight: 700; border-radius: 0.7rem; min-height: 2.9rem; margin-bottom: 0.5rem; }
+    .panel-note { font-size: 0.9rem; color: var(--sub); margin: 0.4rem 0 0; }
+    .panel-note.ok  { color: var(--good-fg); font-weight: 700; }
+    .panel-note.bad { color: var(--bad-fg); font-weight: 700; }
+    .conj-opt {
+      display: block; border: 1px solid var(--line); background: var(--bg);
+      border-radius: 0.7rem; padding: 0.85rem; margin: 0.5rem 0;
+      font-size: 1rem; cursor: pointer;
+    }
+    .conj-opt input { margin-right: 0.5rem; transform: scale(1.2); }
+    .conj-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+
+    /* ---------- toast / back hint ---------- */
+    #toast, #back-hint {
+      position: fixed; left: 50%; bottom: calc(1.4rem + env(safe-area-inset-bottom));
+      transform: translateX(-50%); z-index: 60;
+      background: var(--card); border: 1px solid var(--line); color: var(--text);
+      padding: 0.7rem 1.1rem; border-radius: 0.8rem; font-size: 0.95rem; max-width: 90%;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    }
+    #back-hint { background: var(--bad); border-color: var(--bad); color: var(--bad-fg); }
+    #toast.ok  { background: var(--good); color: var(--good-fg); border-color: var(--good); }
+    #toast.bad { background: var(--bad);  color: var(--bad-fg);  border-color: var(--bad); }
   </style>
 </head>
 <body>
-  <div id="boot">Đang mở kho từ offline…</div>
-  <div id="back-hint" class="hidden" style="position:fixed;left:50%;bottom:2rem;transform:translateX(-50%);
-    background:#4c0519;color:#fecaca;padding:0.6rem 1rem;border-radius:0.7rem;font-size:0.9rem;z-index:50"></div>
+  <div id="boot">
+    <div class="logo">dict<span>·</span>learn</div>
+    <div class="spinner"></div>
+    <p class="muted">Đang tải kho từ offline (12.000 từ)…</p>
+  </div>
 
-  <header class="hidden" id="top">
-    <h1>Học từ</h1>
-    <div style="display:flex;gap:0.4rem">
-      <select id="base"></select>
-      <select id="target"></select>
+  <div id="back-hint" class="hidden">Nhấn lần nữa để thoát.</div>
+  <div id="toast" class="hidden"></div>
+
+  <header id="top" class="hidden">
+    <div class="brand">dict<span>·</span>learn</div>
+    <div class="header-actions">
+      <div class="langrow">
+        <select id="base" aria-label="Ngôn ngữ gốc"></select>
+        <select id="target" aria-label="Ngôn ngữ học"></select>
+      </div>
+      <button id="sndbtn" class="iconbtn" aria-label="Bật/tắt âm thanh" title="Âm thanh">🔊</button>
+      <button id="thmbtn" class="iconbtn" aria-label="Đổi giao diện" title="Giao diện">◐</button>
     </div>
   </header>
 
-  <main class="hidden" id="app">
-    <p class="muted" id="progress"></p>
-    <div class="card" id="card"></div>
-
-    <!-- SRS grade buttons -->
-    <div class="row">
-      <button class="hard" id="b1">Chưa</button>
-      <button class="ok"   id="b2">Tạm</button>
-      <button class="good" id="b3">Nhớ</button>
-    </div>
-
-    <!-- Basic actions -->
-    <div class="row">
-      <button class="ghost" id="flip">Lật</button>
-      <button class="ghost" id="speak">Nghe</button>
-      <button class="ghost" id="listen">Câu</button>
-    </div>
-
-    <!-- M2.3: active-production buttons -->
-    <div class="row">
-      <button class="fill-btn" id="fillbtn">Điền</button>
-      <button class="conj-btn" id="conjbtn">Chia</button>
-      <button class="clear"    id="clearbtn">✕</button>
-    </div>
-
-    <!-- M2.2a: listen & type / M2.1: mic ASR -->
-    <div id="drill" class="hidden panel">
-      <div style="display:flex;gap:0.4rem;align-items:center">
-        <button class="clear" id="mic" style="flex:0 0 auto;white-space:nowrap">🎤 Mic</button>
-        <input id="typed" placeholder="Gõ lại câu vừa nghe" style="flex:1">
+  <main id="app" class="hidden">
+    <!-- ================= HOME ================= -->
+    <section id="home" class="screen">
+      <div id="onboard" class="onboard hidden">
+        <b>3 bước học mỗi ngày</b>
+        <ol>
+          <li><b>Xem & nghe</b> từ mới (app tự đọc phát âm).</li>
+          <li>Đủ tự tin? Chấm điểm: <b>Chưa nhớ / Mờ hồ / Đã nhớ</b> — app tự hẹn lặp lại.</li>
+          <li>Quẹt card: <b>→ phải = Đã nhớ</b>, ← trái = Chưa nhớ, ↓ = Mờ hồ.</li>
+        </ol>
+        <button id="onboardok" class="ghost">Bắt đầu</button>
       </div>
-      <p class="panel-note" id="drill-note"></p>
-    </div>
 
-    <!-- M2.3a: fill-blank -->
-    <div id="fillbox" class="hidden panel">
-      <p id="fill-sent" style="font-size:0.95rem;margin-bottom:0.5rem"></p>
-      <input id="fill-input" placeholder="Gõ từ còn thiếu">
-      <p class="panel-note" id="fill-note"></p>
-    </div>
+      <div class="stat-card">
+        <div class="stat-num" id="stat-learned">0</div>
+        <div class="stat-sub">/ <span id="stat-total">0</span> từ đã được chấm điểm</div>
+        <div class="bar"><div id="learned-bar" style="width:0%"></div></div>
+        <div class="chips">
+          <span class="chip">Hôm nay · <b id="stat-today">0</b> từ</span>
+          <span class="chip">Chuỗi · <b id="stat-streak">0</b> ngày</span>
+        </div>
+      </div>
 
-    <!-- M2.3b: conjugate (pick the correct grammar form) -->
-    <div id="conjbox" class="hidden panel">
-      <p id="conj-prompt" style="font-size:0.95rem;margin-bottom:0.5rem"></p>
-      <div id="conj-opts"></div>
-      <p class="panel-note" id="conj-note"></p>
-    </div>
+      <button id="startbtn" class="primary">Học tiếp ngay →</button>
+
+      <div class="sec-title">Luyện kỹ năng · từ đang học</div>
+      <div class="practice-row">
+        <button id="listen">🎧<span>Nghe & ghi</span></button>
+        <button id="fillbtn">✏️<span>Điền khuyết</span></button>
+        <button id="conjbtn">🧩<span>Chia dạng</span></button>
+      </div>
+
+      <div class="home-row2">
+        <span class="muted">Mỗi buổi học</span>
+        <select id="sessionlen">
+          <option value="10">10 từ</option>
+          <option value="25">25 từ</option>
+          <option value="50">50 từ</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- ================= STUDY ================= -->
+    <section id="study" class="screen hidden">
+      <div class="study-top">
+        <button id="homebtn" class="ghost">←</button>
+        <p class="muted" id="progress"></p>
+      </div>
+      <div id="swipehint" class="hint hidden">Quẹt card: → Đã nhớ · ← Chưa nhớ · ↓ Mờ hồ</div>
+
+      <div class="card" id="card"></div>
+
+      <div class="row2">
+        <button class="ghost" id="flip">👀 Hiện nghĩa</button>
+        <button class="ghost" id="speak">🔊 Nghe từ</button>
+      </div>
+
+      <div class="grade-row">
+        <button class="hard" id="b1">Chưa nhớ<span class="sub">lặp lại sau 1 ngày</span></button>
+        <button class="ok"   id="b2">Mờ hồ<span class="sub">lặp lại sau 3 ngày</span></button>
+        <button class="good" id="b3">Đã nhớ<span class="sub">gặp lại sau 7 ngày</span></button>
+      </div>
+
+      <!-- ============ practice panels (one open at a time) ============ -->
+      <div id="drill" class="panel hidden">
+        <div class="panel-head"><b>🎧 Nghe & ghi</b><button id="clearbtn" class="clear" aria-label="Đóng">✕</button></div>
+        <p class="muted">Nghe câu rồi gõ lại đúng · hoặc dùng mic.</p>
+        <div class="row2">
+          <button class="ghost" id="playdrill">🔊 Nghe câu</button>
+          <button class="ghost" id="mic">🎤 Mic</button>
+        </div>
+        <input id="typed" type="text" placeholder="Gõ lại câu vừa nghe…" autocomplete="off" autocapitalize="sentences">
+        <button id="drillcheck" class="slim">Kiểm tra</button>
+        <p class="panel-note" id="drill-note"></p>
+      </div>
+
+      <div id="fillbox" class="panel hidden">
+        <div class="panel-head"><b>✏️ Điền khuyết</b><button class="clear close-panel" aria-label="Đóng">✕</button></div>
+        <p id="fill-sent" style="font-size:1.05rem;margin-bottom:0.4rem"></p>
+        <input id="fill-input" type="text" placeholder="Gõ từ còn thiếu…" autocomplete="off" autocapitalize="off">
+        <button id="fillcheck" class="slim">Kiểm tra</button>
+        <p class="panel-note" id="fill-note"></p>
+      </div>
+
+      <div id="conjbox" class="panel hidden">
+        <div class="panel-head"><b>🧩 Chia dạng</b><button class="clear close-panel" aria-label="Đóng">✕</button></div>
+        <p id="conj-prompt" style="font-weight:700;margin-bottom:0.4rem"></p>
+        <div id="conj-opts"></div>
+        <p class="panel-note" id="conj-note"></p>
+      </div>
+    </section>
   </main>
 
   <script src="srs-store.js"></script>
