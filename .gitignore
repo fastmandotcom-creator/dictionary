@@ -52,3 +52,4 @@ mobile/www/sql-wasm.wasm
 .e2e/preview_data.json
 .e2e/ref/
 .e2e/e2e_file.cjs
+.tmp/

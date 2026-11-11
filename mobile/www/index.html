@@ -238,6 +238,17 @@
     .update-banner .ub-row { display: flex; gap: 0.5rem; }
     .update-banner .primary { flex: 1; margin: 0; min-height: 2.8rem; font-size: 1rem; }
     .update-banner .ghost { flex: 0 0 auto; }
+    .update-banner .ub-progress {
+      height: 0.5rem; background: var(--line); border-radius: 999px;
+      overflow: hidden;
+    }
+    .update-banner .ub-progress[style] { }
+    .update-banner .ub-progress div {
+      height: 100%; background: var(--accent); border-radius: 999px;
+      transition: width 0.2s ease;
+    }
+    .update-banner.is-security { border-color: var(--warn); }
+    .update-banner.is-security .ub-title { color: var(--warn-fg, var(--text)); }
 
     /* ---------- toast / back hint ---------- */
     #toast, #back-hint {

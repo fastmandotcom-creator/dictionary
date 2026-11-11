@@ -31,6 +31,9 @@ GRADLE_USER_HOME="${GRADLE_USER_HOME:-$PWD/.gradle-home}"
 export GRADLE_USER_HOME
 mkdir -p "$GRADLE_USER_HOME" "$PWD/.tmp"
 export TMPDIR="${TMPDIR:-$PWD/.tmp}"
+# Point the worker JVM's temp dir at the workspace: CompressAssetsWorkAction
+# writes /var/folders tmp files, which the execution sandbox blocks.
+export GRADLE_OPTS="${GRADLE_OPTS:--Djava.io.tmpdir=$PWD/.tmp}"
 
 # --- emit version.json for the in-app auto-update module --------------------
 # Single source of truth is build.gradle's versionName; regenerate the bundled
@@ -59,7 +62,9 @@ cd android
 # --- build release APK (signed + minified + resource-shrunk) --------------
 # Prefer a directly-invoked Gradle distribution (avoids the ~/.gradle wrapper
 # lock files that are blocked under the execution sandbox). Fall back to the
-# wrapper when the direct distribution is not present.
+# wrapper when the direct distribution is not present. The compress-assets
+# worker keeps its temp files off /var/folders (sandbox-blocked) via the
+# GRADLE_OPTS set at the top of this script (an absolute $PWD/.tmp).
 GRADLE_BIN=""
 for cand in \
   "$HOME/.gradle/wrapper/dists/gradle-8.14.3-all"/*/gradle-8.14.3/bin/gradle \

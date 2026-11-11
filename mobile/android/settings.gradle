@@ -6,4 +6,9 @@ project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor
 include ':dictlearn-tts'
 project(':dictlearn-tts').projectDir = new File('./dictlearn-tts/')
 
+// Local native safe-update plugin (ported from duosub-study's update/AppUpdater.kt:
+// GitHub host allowlist, SHA-256, 150 MB cap, PackageInstaller self-update).
+include ':dictlearn-update'
+project(':dictlearn-update').projectDir = new File('./dictlearn-update/')
+
 apply from: 'capacitor.settings.gradle'

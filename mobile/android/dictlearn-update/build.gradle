@@ -1,0 +1,39 @@
+// Local native plugin: safe download + verify + install of a newer dict-learn APK
+// (ported from duosub-study's update/AppUpdater.kt: GitHub host allowlist,
+// 150 MB cap, SHA-256, PackageInstaller self-update, result receiver).
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace = "com.dict.learn.update"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    lintOptions {
+        abortOnError = false
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(':capacitor-android')
+    implementation "androidx.appcompat:appcompat:" + rootProject.ext.androidxAppCompatVersion
+}

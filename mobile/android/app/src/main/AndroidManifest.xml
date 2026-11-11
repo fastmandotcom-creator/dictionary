@@ -24,6 +24,13 @@
 
         </activity>
 
+        <!-- Reports the result of the PackageInstaller self-update session (v1.5,
+             ported from duosub-study's AppUpdateReceiver). -->
+        <receiver
+            android:name="com.dict.learn.update.DictUpdatePlugin$DictUpdateReceiver"
+            android:exported="false"
+            android:enabled="true" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -38,6 +45,9 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Self-update: Android 11+ requires this to install the downloaded APK
+         via PackageInstaller (v1.5, duosub-study's AppUpdater pattern). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- M2.1: microphone for in-app ASR (dictate drill answers offline).
          Audio is processed on-device and never leaves the app. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />

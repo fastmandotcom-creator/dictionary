@@ -9,7 +9,7 @@
  * Registered in index.html:
  *   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
  */
-const CACHE = 'dict-learn-v3'; // v3: add tts.js (native TTS bridge) to the shell
+const CACHE = 'dict-learn-v4'; // v4: duosub-style auto-update (update-info.json, host allowlist, reminder policy, native install)
 
 // Core app shell (always cached; revalidated on each navigate)
 const SHELL = [
