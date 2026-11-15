@@ -52,14 +52,16 @@
       return resolveNative().available || !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
     },
 
-    speak: function (text, lang) {
+    speak: function (text, lang, opts) {
       var r = resolveNative();
       if (!text || (!r.available && !(window.speechSynthesis && window.SpeechSynthesisUtterance))) {
         TTS._last = { ok: false, result: "unavailable", engine: "none", detail: "no TTS engine" };
         return Promise.resolve(TTS._last);
       }
       if (r.available && r.plugin && r.plugin.speak) {
-        return r.plugin.speak({ text: text, lang: lang || "en" })
+        var req = { text: text, lang: lang || "en" };
+        if (opts && typeof opts.speed === "number") req.speed = opts.speed;
+        return r.plugin.speak(req)
           .then(function (res) {
             var result = (res && res.result) || "unavailable";
             if (result === "cancelled") {
@@ -81,10 +83,10 @@
             return TTS._last;
           })
           .catch(function () {
-            return TTS.speakWeb(text, lang);
+            return TTS.speakWeb(text, lang, opts);
           });
       }
-      return TTS.speakWeb(text, lang);
+      return TTS.speakWeb(text, lang, opts);
     },
 
     cancel: function () {
@@ -125,7 +127,7 @@
       }
     },
 
-    speakWeb: function (text, lang) {
+    speakWeb: function (text, lang, opts) {
       var synth = window.speechSynthesis;
       if (synth && window.SpeechSynthesisUtterance) {
         try {
@@ -144,6 +146,33 @@
         } catch (e) {}
         var u = new window.SpeechSynthesisUtterance(text);
         u.lang = TTS.mapLang(lang);
+        if (opts && typeof opts.speed === "number") u.rate = opts.speed;
+        if (opts && opts.awaitEnd) {
+          return new Promise(function (resolve) {
+            var settled = false;
+            var fallbackMs = Math.min(18000, Math.max(1200, (String(text).length * 95) / Math.max(0.65, u.rate || 1)));
+            var timer = setTimeout(function () { finish("spoken"); }, fallbackMs);
+            function finish(result) {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              TTS._last = {
+                ok: result === "spoken",
+                result: result,
+                engine: "web",
+                detail: "window.speechSynthesis"
+              };
+              resolve(TTS._last);
+            }
+            u.onend = function () { finish("spoken"); };
+            u.onerror = function (ev) {
+              var err = ev && ev.error;
+              finish(err === "canceled" || err === "interrupted" ? "cancelled" : "playback-failed");
+            };
+            try { synth.cancel(); } catch (e) {}
+            synth.speak(u);
+          });
+        }
         try { synth.cancel(); } catch (e) {}
         synth.speak(u);
         TTS._last = { ok: true, result: "spoken", engine: "web", detail: "window.speechSynthesis" };
@@ -161,6 +190,64 @@
         default: return lang;
       }
     }
+  };
+
+  function callNativeAudio(method, args) {
+    var r = resolveNative();
+    if (!r.available || !r.plugin || typeof r.plugin[method] !== "function") {
+      return Promise.resolve({ supported: false, status: "idle" });
+    }
+    try {
+      return Promise.resolve(r.plugin[method](args || {})).catch(function () {
+        return { supported: false, status: "idle" };
+      });
+    } catch (e) {
+      return Promise.resolve({ supported: false, status: "idle" });
+    }
+  }
+
+  function addNativeListener(eventName, fn) {
+    var r = resolveNative();
+    if (!r.available || !r.plugin || typeof r.plugin.addListener !== "function" || typeof fn !== "function") {
+      return function () {};
+    }
+    try {
+      var handle = r.plugin.addListener(eventName, fn);
+      return function () {
+        Promise.resolve(handle).then(function (h) {
+          if (h && typeof h.remove === "function") h.remove();
+        }).catch(function () {});
+      };
+    } catch (e) {
+      return function () {};
+    }
+  }
+
+  TTS.audio = {
+    available: function () {
+      var r = resolveNative();
+      return !!(r.available && r.plugin && typeof r.plugin.startAudioQueue === "function");
+    },
+    ensureNotificationPermission: function () {
+      var r = resolveNative();
+      if (r.available && r.plugin && typeof r.plugin.requestNotificationPermission === "function") {
+        return r.plugin.requestNotificationPermission().catch(function () { return { granted: true }; });
+      }
+      return Promise.resolve({ granted: true, web: true });
+    },
+    startQueue: function (payload) { return callNativeAudio("startAudioQueue", payload); },
+    pause: function () { return callNativeAudio("pauseAudio"); },
+    resume: function () { return callNativeAudio("resumeAudio"); },
+    next: function () { return callNativeAudio("nextAudio"); },
+    prev: function () { return callNativeAudio("prevAudio"); },
+    seek: function (index) { return callNativeAudio("seekAudio", { index: index }); },
+    stop: function () { return callNativeAudio("stopAudio"); },
+    updateConfig: function (cfg) { return callNativeAudio("updateAudioConfig", cfg); },
+    getState: function () { return callNativeAudio("getAudioState"); },
+    prefetch: function (payload) { return callNativeAudio("prefetchAudio", payload); },
+    cancelPrefetch: function () { return callNativeAudio("cancelPrefetch"); },
+    onState: function (fn) { return addNativeListener("audioState", fn); },
+    onPrefetch: function (fn) { return addNativeListener("audioPrefetch", fn); }
   };
 
   window.TTS = TTS;

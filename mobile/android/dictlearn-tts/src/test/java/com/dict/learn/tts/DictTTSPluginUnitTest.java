@@ -1,11 +1,21 @@
 package com.dict.learn.tts;
 
+import com.dict.learn.tts.AudioQueueModels.AudioConfig;
+import com.dict.learn.tts.AudioQueueModels.AudioDrill;
+import com.dict.learn.tts.AudioQueueModels.AudioTrackItem;
+import com.dict.learn.tts.AudioQueueModels.UtteranceStep;
+
 import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.nio.file.Files;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class DictTTSPluginUnitTest {
@@ -75,6 +85,111 @@ public class DictTTSPluginUnitTest {
             assertTrue("expected amplified peak > 25000, got " + peak, peak > 25000);
         } finally {
             f.delete();
+        }
+    }
+
+    @Test
+    public void buildSteps_presetsAndDrills_followCognitiveCadence() {
+        AudioTrackItem track = new AudioTrackItem(
+            "EXCUSE_ME",
+            "excuse me",
+            "xin lỗi",
+            "",
+            "",
+            "Excuse me, can you show me the way?",
+            "Xin lỗi, bạn có thể chỉ đường cho tôi được không?",
+            "en",
+            "vi",
+            Arrays.asList(
+                new AudioDrill("I will say excuse me first.", "Tôi sẽ nói xin lỗi trước."),
+                new AudioDrill("Please say excuse me.", "Vui lòng nói xin lỗi."),
+                new AudioDrill("Extra drill ignored.", "Bị bỏ qua vì giới hạn 2.")
+            )
+        );
+
+        // Default (deep, base_first, targetRepeat=2): meaning -> word x2 -> ex_base -> ex_target x2
+        List<UtteranceStep> deepDefault = AudioQueueModels.buildSteps(track, AudioConfig.defaults());
+        assertEquals(6, deepDefault.size());
+        assertEquals("meaning", deepDefault.get(0).role);
+        assertEquals("vi", deepDefault.get(0).lang);
+        assertEquals("word", deepDefault.get(1).role);
+        assertEquals("en", deepDefault.get(1).lang);
+        assertEquals("repeat", deepDefault.get(2).role);
+        assertEquals("en", deepDefault.get(2).lang);
+        assertEquals("ex_base", deepDefault.get(3).role);
+        assertEquals("vi", deepDefault.get(3).lang);
+        assertEquals("ex_target", deepDefault.get(4).role);
+        assertEquals("en", deepDefault.get(4).lang);
+        assertEquals("ex_target", deepDefault.get(5).role);
+        assertEquals("en", deepDefault.get(5).lang);
+
+        // Deep preset with drills (2 bilingual drills * 3 steps = +6 -> 12 steps total)
+        List<UtteranceStep> deepDrills = AudioQueueModels.buildSteps(track, new AudioConfig("deep", 1.0f, "none", true, false));
+        assertEquals(12, deepDrills.size());
+        assertEquals("drill_base", deepDrills.get(6).role);
+        assertEquals("drill_target", deepDrills.get(7).role);
+        assertEquals("drill_target", deepDrills.get(8).role);
+        assertEquals("drill_target", deepDrills.get(11).role);
+
+        // Quick preset default (base_first, targetRepeat=2): meaning -> word -> repeat
+        List<UtteranceStep> quickDefault = AudioQueueModels.buildSteps(track, new AudioConfig("quick", 1.0f, "none", true, false));
+        assertEquals(3, quickDefault.size());
+        assertEquals("meaning", quickDefault.get(0).role);
+        assertEquals("word", quickDefault.get(1).role);
+        assertEquals("repeat", quickDefault.get(2).role);
+
+        // Configurable setting: base_first + targetRepeat=1
+        List<UtteranceStep> quickSingle = AudioQueueModels.buildSteps(
+            track, new AudioConfig("quick", "base_first", 1, 1.0f, "none", false, false)
+        );
+        assertEquals(2, quickSingle.size());
+        assertEquals("meaning", quickSingle.get(0).role);
+        assertEquals("word", quickSingle.get(1).role);
+
+        // Configurable setting: target_first + targetRepeat=2 (word -> recall -> meaning -> repeat)
+        List<UtteranceStep> targetFirst = AudioQueueModels.buildSteps(
+            track, new AudioConfig("quick", "target_first", 2, 1.0f, "none", false, false)
+        );
+        assertEquals(3, targetFirst.size());
+        assertEquals("word", targetFirst.get(0).role);
+        assertEquals("meaning", targetFirst.get(1).role);
+        assertEquals("repeat", targetFirst.get(2).role);
+
+        // Target-only preset keeps only target-language items repeated 2x by default
+        List<UtteranceStep> targetOnly = AudioQueueModels.buildSteps(track, new AudioConfig("target_only", 1.0f, "none", true, false));
+        for (UtteranceStep s : targetOnly) {
+            assertEquals("en", s.lang);
+        }
+        assertEquals(8, targetOnly.size());
+        assertEquals("word", targetOnly.get(0).role);
+        assertEquals("repeat", targetOnly.get(1).role);
+        assertEquals("ex_target", targetOnly.get(2).role);
+        assertEquals("ex_target", targetOnly.get(3).role);
+    }
+
+    @Test
+    public void trimCacheDir_evictsOldestFilesDownToLimit() throws Exception {
+        File dir = Files.createTempDirectory("dicttts-lru-").toFile();
+        try {
+            File f1 = new File(dir, "old.mp3");
+            File f2 = new File(dir, "mid.mp3");
+            File f3 = new File(dir, "new.mp3");
+            Files.write(f1.toPath(), new byte[100]);
+            Files.write(f2.toPath(), new byte[100]);
+            Files.write(f3.toPath(), new byte[100]);
+            f1.setLastModified(1000L);
+            f2.setLastModified(2000L);
+            f3.setLastModified(3000L);
+
+            int removed = TtsSynthesizer.trimCacheDir(dir, 250L, 200L);
+            assertEquals(1, removed);
+            assertFalse(f1.exists());
+            assertTrue(f2.exists());
+            assertTrue(f3.exists());
+        } finally {
+            File[] files = dir.listFiles();
+            if (files != null) for (File f : files) f.delete();
+            dir.delete();
         }
     }
 }

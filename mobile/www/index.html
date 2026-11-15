@@ -261,6 +261,102 @@
     #back-hint { background: var(--bad); border-color: var(--bad); color: var(--bad-fg); }
     #toast.ok  { background: var(--good); color: var(--good-fg); border-color: var(--good); }
     #toast.bad { background: var(--bad);  color: var(--bad-fg);  border-color: var(--bad); }
+
+    /* ---------- passive audio learning mode ---------- */
+    .audio-entry {
+      width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.7rem;
+      text-align: left; background: var(--card); border: 1px solid var(--accent);
+      border-radius: 0.9rem; padding: 0.85rem 1rem; margin-bottom: 1rem;
+    }
+    .audio-entry:active { background: var(--accent-soft); }
+    .audio-entry .ae-title { font-weight: 800; font-size: 1rem; color: var(--text); }
+    .audio-entry .ae-sub { font-size: 0.8rem; color: var(--sub); margin-top: 0.15rem; }
+    .audio-entry .ae-go {
+      flex: 0 0 auto; background: var(--accent-soft); color: var(--accent);
+      font-weight: 800; font-size: 0.85rem; padding: 0.45rem 0.75rem; border-radius: 99px;
+    }
+
+    .audio-top { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.7rem; }
+    .audio-top #audio-progress { flex: 1; margin: 0; font-size: 0.88rem; }
+    .audio-top select {
+      background: var(--card); border: 1px solid var(--line); border-radius: 0.7rem;
+      padding: 0.4rem 0.55rem; min-height: 2.75rem; font-size: 0.85rem;
+    }
+
+    .audio-hero {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 1.1rem; padding: 1.2rem; margin-bottom: 0.9rem;
+    }
+    .audio-badge {
+      display: inline-block; font-size: 0.75rem; font-weight: 700;
+      padding: 0.25rem 0.65rem; border-radius: 99px;
+      background: var(--accent-soft); color: var(--accent); margin-bottom: 0.6rem;
+    }
+    .audio-badge.is-playing { background: var(--good); color: var(--good-fg); }
+    .audio-word { font-size: 2rem; font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; }
+    .audio-phonetics { color: var(--accent); font-size: 0.95rem; margin-top: 0.25rem; }
+    .audio-meaning {
+      color: var(--good-fg); font-size: 1.25rem; font-weight: 700;
+      margin-top: 0.65rem; padding: 0.35rem 0.5rem; border-radius: 0.5rem;
+      transition: background 0.15s ease;
+    }
+    .audio-ex-box {
+      margin-top: 0.75rem; border-top: 1px solid var(--line); padding-top: 0.7rem;
+      display: flex; flex-direction: column; gap: 0.4rem;
+    }
+    .audio-ex-line {
+      font-size: 0.96rem; color: var(--sub); padding: 0.35rem 0.5rem; border-radius: 0.5rem;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .audio-hl { background: var(--accent-soft) !important; color: var(--text) !important; }
+    .audio-steps { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.85rem; }
+    .audio-step-pill {
+      font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 99px;
+      border: 1px solid var(--line); color: var(--sub);
+    }
+    .audio-step-pill.is-active {
+      border-color: var(--accent); background: var(--accent-soft); color: var(--accent);
+    }
+
+    .audio-transport {
+      display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 0.6rem; margin-bottom: 0.7rem;
+    }
+    .audio-transport button {
+      min-height: 3.6rem; border-radius: 0.95rem; font-weight: 800; font-size: 1rem;
+    }
+    .audio-transport .audio-main-btn {
+      background: var(--accent); color: #fff; font-size: 1.15rem;
+    }
+
+    .audio-actions-row {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.9rem;
+    }
+    .audio-actions-row button {
+      min-height: 2.8rem; font-size: 0.82rem; font-weight: 700; padding: 0.4rem 0.45rem;
+    }
+
+    .audio-cfg-card select {
+      background: var(--bg); border: 1px solid var(--line); border-radius: 0.6rem;
+      padding: 0.45rem 0.55rem; min-height: 2.6rem; font-size: 0.88rem; max-width: 11.5rem;
+    }
+
+    .audio-mini {
+      position: fixed; left: 50%; bottom: calc(0.65rem + env(safe-area-inset-bottom));
+      transform: translateX(-50%); z-index: 45;
+      width: calc(100% - 1.6rem); max-width: 28rem;
+      background: var(--card); border: 1px solid var(--accent); border-radius: 0.95rem;
+      padding: 0.55rem 0.75rem; display: flex; align-items: center; gap: 0.55rem;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.4);
+    }
+    .audio-mini-info { flex: 1; min-width: 0; cursor: pointer; }
+    .audio-mini-title {
+      font-weight: 800; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .audio-mini-sub {
+      font-size: 0.78rem; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .audio-mini .iconbtn { min-width: 2.5rem; min-height: 2.5rem; }
+    body.has-audio-mini main { padding-bottom: calc(5.2rem + env(safe-area-inset-bottom)); }
   </style>
 </head>
 <body>
@@ -310,6 +406,14 @@
       </div>
 
       <button id="startbtn" class="primary">Học tiếp ngay →</button>
+
+      <button id="audiostartbtn" class="audio-entry" type="button">
+        <div class="ae-left">
+          <div class="ae-title">🎧 Nghe thụ động (chạy ngầm)</div>
+          <div class="ae-sub" id="audio-home-sub">Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình</div>
+        </div>
+        <span class="ae-go">Nghe →</span>
+      </button>
 
       <div class="sec-title">Luyện kỹ năng · từ đang học</div>
       <div class="practice-row">
@@ -406,12 +510,153 @@
         <p class="panel-note" id="conj-note"></p>
       </div>
     </section>
+
+    <!-- ================= PASSIVE AUDIO LEARNING ================= -->
+    <section id="audio-screen" class="screen hidden">
+      <div class="audio-top">
+        <button id="audio-homebtn" class="ghost" aria-label="Quay lại">←</button>
+        <p class="muted" id="audio-progress">Chuẩn bị…</p>
+        <select id="audio-sleep" aria-label="Hẹn giờ tắt">
+          <option value="0">⏱ Tắt hẹn giờ</option>
+          <option value="10">⏱ 10 phút</option>
+          <option value="20">⏱ 20 phút</option>
+          <option value="30">⏱ 30 phút</option>
+        </select>
+      </div>
+
+      <div class="audio-hero" id="audio-card">
+        <div class="audio-badge" id="audio-state-badge">Sẵn sàng</div>
+        <div class="audio-word" id="audio-word">—</div>
+        <div class="audio-phonetics" id="audio-phonetics"></div>
+        <div class="audio-meaning" id="audio-meaning"></div>
+        <div class="audio-ex-box">
+          <div class="audio-ex-line" id="audio-ex-target"></div>
+          <div class="audio-ex-line" id="audio-ex-base"></div>
+        </div>
+        <div class="audio-steps" id="audio-steps">
+          <span class="audio-step-pill" data-role="meaning">Nghĩa gốc</span>
+          <span class="audio-step-pill" data-role="word">Từ học</span>
+          <span class="audio-step-pill" data-role="repeat">Đọc lại</span>
+          <span class="audio-step-pill" data-role="ex_base">Dịch ví dụ</span>
+          <span class="audio-step-pill" data-role="ex_target">Ví dụ học</span>
+        </div>
+      </div>
+
+      <div class="audio-transport">
+        <button id="audio-prev" class="ghost" type="button">⏮ Trước</button>
+        <button id="audio-play" class="audio-main-btn" type="button">▶ Nghe</button>
+        <button id="audio-next" class="ghost" type="button">⏭ Tiếp</button>
+      </div>
+
+      <div class="audio-actions-row">
+        <button id="audio-stop" class="ghost" type="button">⏹ Dừng nền</button>
+        <button id="audio-master" class="ghost" type="button">✓ Bỏ qua từ này</button>
+        <button id="audio-prefetch" class="ghost" type="button">⬇ Tải sẵn</button>
+      </div>
+
+      <div class="settings-card audio-cfg-card">
+        <div class="setting-row">
+          <div>
+            <b>Nguồn phát</b>
+            <p class="muted">Chọn danh sách từ tự động</p>
+          </div>
+          <select id="audio-source" aria-label="Nguồn danh sách phát">
+            <option value="due">Ưu tiên cần nhớ</option>
+            <option value="fresh">Từ mới A1→C2</option>
+            <option value="learned">Từ đã học</option>
+            <option value="mix">Nghe trộn</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div>
+            <b>Nhịp đọc</b>
+            <p class="muted">Từ đơn hay kèm ví dụ song ngữ</p>
+          </div>
+          <select id="audio-preset" aria-label="Nhịp đọc">
+            <option value="deep">Học sâu (Từ &amp; Ví dụ)</option>
+            <option value="quick">Ôn nhanh (Chỉ từ &amp; Nghĩa)</option>
+            <option value="target_only">Nghe chìm (Chỉ tiếng học)</option>
+          </select>
+        </div>
+        <div class="setting-row" id="audio-order-row">
+          <div>
+            <b>Thứ tự ngôn ngữ</b>
+            <p class="muted">Nghe hiểu nghĩa trước hay thử nhớ trước</p>
+          </div>
+          <select id="audio-order" aria-label="Thứ tự ngôn ngữ">
+            <option value="base_first">Gốc trước → Tiếng học</option>
+            <option value="target_first">Tiếng học → Tiếng gốc</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div>
+            <b>Lặp tiếng đang học</b>
+            <p class="muted">Số lần đọc cho mỗi từ/câu cần học</p>
+          </div>
+          <select id="audio-target-repeat" aria-label="Số lần đọc tiếng học">
+            <option value="2" selected>2 lần (Mặc định)</option>
+            <option value="1">1 lần</option>
+            <option value="3">3 lần</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div>
+            <b>Tốc độ &amp; lặp</b>
+            <p class="muted">Giữ cao độ tự nhiên</p>
+          </div>
+          <div class="row-flex">
+            <select id="audio-speed" aria-label="Tốc độ">
+              <option value="0.85">0.85x</option>
+              <option value="1">1.0x</option>
+              <option value="1.15">1.15x</option>
+            </select>
+            <select id="audio-repeat" aria-label="Lặp">
+              <option value="none">1 lượt</option>
+              <option value="one">Lặp 1 từ</option>
+              <option value="all">Lặp DS</option>
+            </select>
+          </div>
+        </div>
+        <label class="setting-row" id="audio-drills-row">
+          <div>
+            <b>Thêm câu công sở</b>
+            <p class="muted">Đọc thêm 1–2 câu tình huống EN↔VI</p>
+          </div>
+          <input type="checkbox" id="audio-drills" class="switch">
+        </label>
+        <label class="setting-row">
+          <div>
+            <b>Ưu tiên giọng Offline</b>
+            <p class="muted">Dùng giọng trong máy trước, tiết kiệm 4G</p>
+          </div>
+          <input type="checkbox" id="audio-offline" class="switch">
+        </label>
+        <label class="setting-row">
+          <div>
+            <b>Đưa từ mới vào ôn ngày mai</b>
+            <p class="muted">Chỉ xếp lịch cho từ chưa học, không ghi đè thẻ cũ</p>
+          </div>
+          <input type="checkbox" id="audio-autostage" class="switch">
+        </label>
+      </div>
+      <p class="panel-note" id="audio-note" style="margin-top:0.6rem"></p>
+    </section>
+
+    <div id="audio-mini" class="audio-mini hidden">
+      <div class="audio-mini-info" id="audio-mini-open">
+        <div class="audio-mini-title" id="audio-mini-title">🎧 Đang phát nền</div>
+        <div class="audio-mini-sub" id="audio-mini-sub">—</div>
+      </div>
+      <button id="audio-mini-toggle" class="iconbtn" type="button" aria-label="Phát hoặc tạm dừng">⏸</button>
+      <button id="audio-mini-stop" class="iconbtn" type="button" aria-label="Dừng phát nền">✕</button>
+    </div>
   </main>
 
   <script src="cap-bridge.js"></script>
   <script src="srs-store.js"></script>
   <script src="asr-mobile.js"></script>
   <script src="tts.js"></script>
+  <script src="audio-player.js"></script>
   <script src="update.js"></script>
   <script src="app.js"></script>
 </body>

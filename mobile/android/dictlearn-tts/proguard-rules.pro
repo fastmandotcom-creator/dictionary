@@ -1,4 +1,6 @@
 -keep class com.dict.learn.tts.** { *; }
+-keep class androidx.media.** { *; }
 -keep class com.getcapacitor.** { *; }
 -dontwarn com.dict.learn.tts.**
+-dontwarn androidx.media.**
 -dontwarn com.getcapacitor.**

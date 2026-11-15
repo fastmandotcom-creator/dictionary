@@ -9,7 +9,7 @@
  * Registered in index.html:
  *   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
  */
-const CACHE = 'dict-learn-v6'; // v6: Capacitor 8 native-bridge fix + IndexedDB unwrap + hardened DictTTSPlugin
+const CACHE = 'dict-learn-v8'; // v8: Passive Audio base_first + targetRepeat 2x default & settings
 
 // Core app shell (always cached; revalidated on each navigate)
 const SHELL = [
@@ -19,6 +19,7 @@ const SHELL = [
   'srs-store.js',
   'asr-mobile.js',
   'tts.js',
+  'audio-player.js',
   'update.js',
   'manifest.json',
   'version.json',
