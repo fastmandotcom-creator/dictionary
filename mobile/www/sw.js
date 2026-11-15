@@ -9,7 +9,7 @@
  * Registered in index.html:
  *   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
  */
-const CACHE = 'dict-learn-v8'; // v8: Passive Audio base_first + targetRepeat 2x default & settings
+const CACHE = 'dict-learn-v9'; // v9: v2.0.0 Adaptive SRS + CEFR A1-C2 + Quick Search + Multilingual Practice
 
 // Core app shell (always cached; revalidated on each navigate)
 const SHELL = [

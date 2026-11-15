@@ -1,25 +1,30 @@
-/* dict-learn v1.1 — two-screen flow (Home dashboard + Study)
+/* dict-learn v2.0 — Adaptive SRS, CEFR A1-C2 curriculum, offline dictionary
+ * search, multilingual active practice, and Passive Audio Learning.
  *
- * DOM contract (tests/mobile_app_harness.mjs) is preserved: every legacy id
- * (boot/top/app/progress/card/base/target/b1..b3/flip/speak/listen/mic/typed/
- * drill/drill-note/fillbox/fill-sent/fill-input/fill-note/conjbox/conj-prompt/
- * conj-opts/conj-note/back-hint) still exists and behaves the same, plus the
- * v1.1 additions (home/study/onboard/sessionlen/startbtn/homebtn/stat-ids,
- * toast/sndbtn/thmbtn/playdrill/close-panel).
+ * DOM contract (tests/mobile_app_harness.mjs & tests/mobile_journey.mjs) is
+ * preserved: every legacy / v1.x id still exists and behaves compatibly, and
+ * all v2.0 DOM additions are null-guarded.
  */
 (function () {
   var INTERVALS = { hard: 1, ok: 3, good: 7 };
-  var INTERVAL_LABEL = { hard: "1", ok: "3", good: "7" };
-  var concepts = [], langs = [], drills = {}, cache = {}, queue = [], idx = 0;
+  var concepts = [], conceptRank = {}, langs = [], drills = {}, cache = {}, queue = [], idx = 0;
 
-  // active-production state
-  var drill = null;        // current listen&write row
-  var fill = null;         // { row, blank, answer }
-  var conj = null;         // { targetKey, correct, options }
+  // active-production & session state
+  var drill = null;        // { s, h, lang }
+  var fill = null;         // { row, blank, answer, lang }
+  var conj = null;         // { targetKey, correct, options, lang }
   var soundOn = true;
   var wantSettings = false;
   var sessionDone = false;
-  var sessionStats = { learned: 0, correct: 0, practice: 0 };
+  var sessionStats = { learned: 0, remembered: 0, correct: 0, practice: 0 };
+  var requeued = {};
+  var sessionHardIds = [];
+  var undoStack = [];
+  var cefrLevel = "all";
+  var searchIndexKey = "";
+  var searchIndexList = [];
+  var cardExTarget = "";
+  var cardExLang = "en";
   var audioStats = null;
   var audioPreviewTracks = [];
   var audioPreviewIndex = 0;
@@ -33,8 +38,15 @@
   var drillsReady = null;
   function dataBase() { return LITE ? "data/lite" : "data"; }
   function fmt(n) { try { return Number(n).toLocaleString("vi-VN"); } catch (e) { return String(n); } }
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
 
-  // ---------------- utilities ----------------
+  // ---------------- utilities & CEFR ----------------
   function pad(n) { return String(n).padStart(2, "0"); }
   function todayISO() {
     var d = new Date();
@@ -52,6 +64,36 @@
   function sessionLen() {
     var el = $("sessionlen");
     return el ? parseInt(el.value || "10", 10) : 10;
+  }
+  function cefrOf(id) {
+    var r = conceptRank[id];
+    if (r === undefined) return "A1";
+    if (r < 2000) return "A1";
+    if (r < 4000) return "A2";
+    if (r < 6000) return "B1";
+    if (r < 8000) return "B2";
+    if (r < 10000) return "C1";
+    return "C2";
+  }
+  function inCefrFilter(id, level) {
+    var lv = level || cefrLevel || "all";
+    return lv === "all" || cefrOf(id) === lv;
+  }
+  function foldText(s) {
+    var str = String(s || "").toLowerCase();
+    if (str.normalize) {
+      str = str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    }
+    return str.replace(/đ/g, "d").replace(/\s+/g, " ").trim();
+  }
+  function normalizeAnswer(s) {
+    return String(s || "")
+      .replace(/[’‘]/g, "'")
+      .replace(/[“”]/g, '"')
+      .replace(/[.,!?;:"()\[\]¡¿。、！？…—–]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
   }
 
   function toast(msg, kind) {
@@ -137,17 +179,80 @@
     }
   }
 
-  // ---------------- queue & home stats ----------------
+  // ---------------- Adaptive SM-2 Lite SRS & home stats ----------------
+  function computeNextSrs(prev, kind) {
+    var hasReps = !!(prev && ((prev.reps != null && prev.reps >= 1) || (prev.reps == null && (prev.grade === "ok" || prev.grade === "good"))));
+    var prevIv = prev ? (prev.interval || INTERVALS[prev.grade] || 3) : 0;
+    var prevReps = prev ? (prev.reps != null ? prev.reps : (prev.grade === "hard" ? 0 : 1)) : 0;
+    var prevEase = prev && prev.ease ? prev.ease : (prev ? 2.2 : 2.3);
+    var prevLapses = prev && prev.lapses ? prev.lapses : 0;
+
+    var interval, reps, ease, lapses;
+    if (!hasReps) {
+      if (kind === "hard") {
+        interval = 1; reps = 0;
+        ease = Math.max(1.3, +(prev ? (prevEase - 0.1) : 2.0).toFixed(2));
+        lapses = prevLapses + 1;
+      } else if (kind === "ok") {
+        interval = 3; reps = 1;
+        ease = prev && prev.ease ? prev.ease : 2.1;
+        lapses = prevLapses;
+      } else {
+        interval = 7; reps = 1;
+        ease = prev && prev.ease ? prev.ease : 2.3;
+        lapses = prevLapses;
+      }
+    } else {
+      if (kind === "hard") {
+        interval = 1; reps = 0;
+        ease = Math.max(1.3, +(prevEase - 0.2).toFixed(2));
+        lapses = prevLapses + 1;
+      } else if (kind === "ok") {
+        interval = Math.min(180, Math.max(3, Math.round(prevIv * 1.4)));
+        reps = prevReps + 1;
+        ease = Math.max(1.3, +(prevEase - 0.05).toFixed(2));
+        lapses = prevLapses;
+      } else {
+        interval = Math.min(365, Math.max(7, Math.round(prevIv * prevEase)));
+        reps = prevReps + 1;
+        ease = Math.min(2.8, +(prevEase + 0.1).toFixed(2));
+        lapses = prevLapses;
+      }
+    }
+    return {
+      grade: kind,
+      due: iso(interval),
+      last: todayISO(),
+      interval: interval,
+      reps: reps,
+      ease: ease,
+      lapses: lapses
+    };
+  }
+
+  function srsStatusBadge(rec) {
+    if (!rec) return { text: "Mới", cls: "" };
+    var iv = rec.interval || INTERVALS[rec.grade] || 1;
+    if (iv >= 14 || (rec.reps != null && rec.reps >= 2)) {
+      return { text: "Thuộc · " + iv + "n", cls: "is-good" };
+    }
+    if (rec.grade === "hard") return { text: "Cần ôn · " + iv + "n", cls: "is-bad" };
+    return { text: "Đang học · " + iv + "n", cls: "is-warn" };
+  }
+
   function srsCounts() {
     var srs = readSrs();
-    var today = todayISO(), due = 0, total = 0;
+    var today = todayISO(), due = 0, total = 0, mastered = 0, learning = 0;
     Object.keys(srs).forEach(function (id) {
       total++;
       var rec = srs[id];
-      if (rec && rec.due && rec.due <= today) due++;
-      if (rec && rec.last && String(rec.last).slice(0, 10) === today) {}
+      if (!rec) return;
+      if (rec.due && rec.due <= today) due++;
+      var iv = rec.interval || INTERVALS[rec.grade] || 1;
+      if (iv >= 14 || (rec.reps != null && rec.reps >= 2)) mastered++;
+      else learning++;
     });
-    return { total: total, due: due };
+    return { total: total, due: due, mastered: mastered, learning: learning };
   }
 
   function todayGrades() {
@@ -176,6 +281,27 @@
     }
   }
 
+  function syncCefrUI() {
+    var sum = $("cefr-summary");
+    if (sum) {
+      if (cefrLevel === "all") {
+        sum.textContent = "Tất cả A1–C2 (" + fmt(concepts.length) + " từ)";
+      } else {
+        var cnt = 0;
+        for (var i = 0; i < concepts.length; i++) if (cefrOf(concepts[i]) === cefrLevel) cnt++;
+        sum.textContent = "Cấp " + cefrLevel + " · " + fmt(cnt) + " từ";
+      }
+    }
+    var box = $("cefr-filter");
+    if (box && box.querySelectorAll) {
+      var btns = box.querySelectorAll(".cefr-pill");
+      for (var k = 0; k < btns.length; k++) {
+        var lv = btns[k].getAttribute("data-level") || "all";
+        btns[k].classList.toggle("is-active", lv === cefrLevel);
+      }
+    }
+  }
+
   function renderHome() {
     var c = srsCounts();
     var total = concepts.length;
@@ -183,16 +309,35 @@
     $("stat-total").textContent = fmt(total);
     var pct = total ? Math.min(100, Math.round((c.total / total) * 100)) : 0;
     $("learned-bar").style.width = pct + "%";
-    $("stat-today").textContent = String(todayGrades());
+    var todayN = todayGrades();
+    $("stat-today").textContent = String(todayN);
     $("stat-streak").textContent = String(streakDays());
 
+    if ($("stat-learning")) $("stat-learning").textContent = fmt(c.learning);
+    if ($("stat-mastered")) $("stat-mastered").textContent = fmt(c.mastered);
+    if ($("stat-due")) $("stat-due").textContent = fmt(c.due);
+
+    var passiveToday = audioStats ? Object.keys(audioStats.todayHeardIds || {}).length : 0;
+    var goalTarget = sessionLen();
+    var goalDone = todayN + passiveToday;
+    var goalPct = goalTarget ? Math.min(100, Math.round((goalDone / goalTarget) * 100)) : 0;
+    if ($("daily-goal-text")) {
+      $("daily-goal-text").textContent = goalDone >= goalTarget
+        ? ("🎉 Đạt mục tiêu hôm nay (" + goalDone + " / " + goalTarget + ")")
+        : ("Mục tiêu hôm nay: " + goalDone + " / " + goalTarget + " từ");
+    }
+    if ($("daily-goal-bar")) $("daily-goal-bar").style.width = goalPct + "%";
+
+    syncCefrUI();
+
+    var lvTag = cefrLevel !== "all" ? (" [" + cefrLevel + "]") : "";
     var sb = $("startbtn");
     if (c.due > 0) {
-      sb.textContent = "Học " + c.due + " từ đến hạn →";
+      sb.textContent = "Học " + c.due + " từ đến hạn" + lvTag + " →";
     } else if (c.total === 0) {
-      sb.textContent = "Bắt đầu học " + sessionLen() + " từ mới →";
+      sb.textContent = "Bắt đầu học " + sessionLen() + " từ mới" + lvTag + " →";
     } else {
-      sb.textContent = "Học " + sessionLen() + " từ tiếp theo →";
+      sb.textContent = "Học " + sessionLen() + " từ tiếp theo" + lvTag + " →";
     }
 
     // onboarding only for brand-new users
@@ -220,29 +365,77 @@
     }
   }
 
-  function buildQueue() {
+  function buildQueue(customIds) {
     sessionDone = false;
-    sessionStats = { learned: 0, correct: 0, practice: 0 };
+    sessionStats = { learned: 0, remembered: 0, correct: 0, practice: 0 };
+    requeued = {};
+    sessionHardIds = [];
+    undoStack = [];
+    if (customIds && customIds.length) {
+      queue = customIds.slice();
+      idx = 0;
+      updateProgress();
+      return;
+    }
     var srs = readSrs();
     var t = todayISO();
     var due = [], fresh = [];
     for (var i = 0; i < concepts.length; i++) {
-      var rec = srs[concepts[i]];
-      if (rec && rec.due && rec.due <= t) due.push(concepts[i]);
-      else if (!rec) fresh.push(concepts[i]);
+      var cid = concepts[i];
+      if (!inCefrFilter(cid)) continue;
+      var rec = srs[cid];
+      if (rec && rec.due && rec.due <= t) due.push(cid);
+      else if (!rec) fresh.push(cid);
     }
     queue = due.concat(fresh);
+    if (!queue.length && cefrLevel !== "all") {
+      // If selected CEFR band has nothing due/fresh, allow reviewing words from that band
+      var bandAll = [];
+      for (var j = 0; j < concepts.length; j++) if (inCefrFilter(concepts[j])) bandAll.push(concepts[j]);
+      queue = bandAll;
+    }
     queue = queue.slice(0, Math.max(sessionLen(), due.length));
     if (!queue.length) queue = concepts.slice(0, sessionLen());
     idx = 0;
     updateProgress();
   }
 
+  function openConceptInStudy(id) {
+    if (!id) return Promise.resolve();
+    sessionDone = false;
+    if (!queue.length || idx >= queue.length) {
+      buildQueue();
+    }
+    var cur = queue.slice(idx);
+    var existingAt = cur.indexOf(id);
+    if (existingAt > 0) {
+      cur.splice(existingAt, 1);
+      cur.unshift(id);
+      queue = queue.slice(0, idx).concat(cur);
+    } else if (existingAt === -1) {
+      queue.splice(idx, 0, id);
+    }
+    showStudy();
+    return Promise.resolve();
+  }
+
   function updateProgress() {
     var c = srsCounts();
+    var totalQ = Math.max(1, queue.length);
+    var shownIdx = Math.min(idx + 1, totalQ);
     $("progress").textContent =
-      (idx + 1) + " / " + queue.length +
+      shownIdx + " / " + queue.length +
       (c.due ? " · " + c.due + " từ đến hạn" : "");
+    var bar = $("study-bar");
+    if (bar) {
+      var pct = sessionDone ? 100 : Math.min(100, Math.round((idx / totalQ) * 100));
+      bar.style.width = pct + "%";
+    }
+    var undoBtn = $("undobtn");
+    if (undoBtn) {
+      undoBtn.disabled = !undoStack.length;
+      undoBtn.classList.toggle("hidden", !undoStack.length);
+    }
     var h = $("swipehint");
     if (h) h.classList.toggle("hidden", !c.due && c.total !== 0);
   }
@@ -283,18 +476,39 @@
     });
   }
 
-  // ---------------- card render ----------------
+  // ---------------- card render & adaptive UI ----------------
   function ensurePracticeConcept() {
     // practice buttons may be pressed from Home, where the current card
     // dataset can be empty — pin it to the first study-queue concept.
     if (!$("card").dataset.id) {
-      var srs = readSrs();
       for (var i = 0; i < concepts.length; i++) {
         if (drills[concepts[i]] && drills[concepts[i]].length) { $("card").dataset.id = concepts[i]; break; }
       }
       if (!$("card").dataset.id) $("card").dataset.id = concepts[0];
     }
     return $("card").dataset.id;
+  }
+
+  function updateGradeButtonHints(id) {
+    var rec = readSrs()[id] || null;
+    var hardNext = computeNextSrs(rec, "hard");
+    var okNext = computeNextSrs(rec, "ok");
+    var goodNext = computeNextSrs(rec, "good");
+    if ($("b1-sub")) {
+      $("b1-sub").textContent = (!requeued[id] && queue.length - idx > 1)
+        ? ("ôn cuối buổi · " + hardNext.interval + " ngày")
+        : ("lặp lại sau " + hardNext.interval + " ngày");
+    }
+    if ($("b2-sub")) $("b2-sub").textContent = "lặp lại sau " + okNext.interval + " ngày";
+    if ($("b3-sub")) $("b3-sub").textContent = "gặp lại sau " + goodNext.interval + " ngày";
+  }
+
+  function flipCard() {
+    if (sessionDone) return;
+    var b = $("base-text"), e = $("ex"), tc = $("tap-cue");
+    if (b) b.classList.toggle("hidden");
+    if (e) e.classList.toggle("hidden");
+    if (tc && b) tc.classList.toggle("hidden", !b.classList.contains("hidden"));
   }
 
   function render() {
@@ -310,20 +524,46 @@
       var learning = pair[1];
       var word = (learning.w && learning.w[id]) || id;
       var card = $("card");
+      if (card.dataset && card.dataset.done) delete card.dataset.done;
       card.dataset.id = id;
       card.dataset.word = word;
 
       var ro = (learning.ro && learning.ro[id]) || "";
       var ipa = (learning.ipa && learning.ipa[id]) || "";
+      var meaning = (known.w && known.w[id]) || "";
+      var exT = (learning.e && learning.e[id]) || "";
+      var exB = (known.e && known.e[id]) || "";
+      cardExTarget = exT;
+      cardExLang = target();
+
+      var rec = readSrs()[id];
+      var badge = srsStatusBadge(rec);
+      var level = cefrOf(id);
+
+      var exHtml = '<div class="ex hidden" id="ex">';
+      if (exT || exB) {
+        exHtml += '<div class="ex-row"><div class="ex-text">' +
+          (exT ? '<div class="ex-target-line">' + esc(exT) + "</div>" : "") +
+          (exB ? '<div class="ex-base-line">' + esc(exB) + "</div>" : "") +
+          "</div>" +
+          (exT ? '<button type="button" class="ex-speak-btn" data-ex-speak="1">🔊 Ví dụ</button>' : "") +
+          "</div>";
+      }
+      exHtml += "</div>";
 
       card.innerHTML =
-        '<div class="target">' + word + "</div>" +
-        (ro  ? '<div class="ro">'  + ro  + "</div>" : "") +
-        (ipa ? '<div class="ipa">' + ipa + "</div>" : "") +
-        '<div class="base hidden" id="base-text">' + ((known.w && known.w[id]) || "") + "</div>" +
-        '<div class="ex hidden" id="ex">' + ((learning.e && learning.e[id]) || "") +
-        ((known.e && known.e[id]) ? "<br>" + known.e[id] : "") + "</div>";
+        '<div class="card-meta">' +
+          '<span class="badge-mini">' + esc(level) + "</span>" +
+          '<span class="badge-mini ' + badge.cls + '">' + esc(badge.text) + "</span>" +
+        "</div>" +
+        '<div class="target">' + esc(word) + "</div>" +
+        (ro  ? '<div class="ro">'  + esc(ro)  + "</div>" : "") +
+        (ipa ? '<div class="ipa">' + esc(ipa) + "</div>" : "") +
+        '<div class="base hidden" id="base-text">' + esc(meaning) + "</div>" +
+        exHtml +
+        '<div class="tap-cue" id="tap-cue">Chạm thẻ để xem nghĩa</div>';
 
+      updateGradeButtonHints(id);
       updateProgress();
       var studyEl = $("study");
       if (studyEl && !studyEl.classList.contains("hidden")) {
@@ -338,26 +578,72 @@
     sessionDone = true;
     var c = srsCounts();
     card.dataset.done = "1";
+    cardExTarget = "";
+    var hardBtnHtml = sessionHardIds.length
+      ? ('<button type="button" class="primary" data-done-act="hard">🔥 Ôn lại ' + sessionHardIds.length + " từ chưa nhớ</button>")
+      : "";
     card.innerHTML =
-      '<div style="text-align:center;padding:1.4rem 0">' +
+      '<div style="text-align:center;padding:1.1rem 0">' +
         '<div style="font-size:2.6rem">🎉</div>' +
-        '<div style="font-weight:800;font-size:1.25rem;margin-top:0.5rem">Buổi học xong!</div>' +
-        '<p class="muted" style="margin-top:0.5rem">' +
-          "Chấm " + sessionStats.learned + " từ · đúng " + sessionStats.correct + " trong phần luyện<br>" +
+        '<div style="font-weight:800;font-size:1.25rem;margin-top:0.45rem">Buổi học xong!</div>' +
+        '<p class="muted" style="margin-top:0.45rem">' +
+          "Chấm <b>" + sessionStats.learned + "</b> từ · nhớ tốt <b>" + (sessionStats.remembered || 0) + "</b> · luyện đúng <b>" + sessionStats.correct + "</b><br>" +
           "Tổng tiến bộ: " + fmt(c.total) + " / " + fmt(concepts.length) + " từ (chuỗi " + streakDays() + " ngày)</p>" +
-        '</div>';
+        '<div class="done-actions">' +
+          hardBtnHtml +
+          '<button type="button" class="' + (sessionHardIds.length ? "ghost" : "primary") + '" data-done-act="next">Học ' + sessionLen() + " từ tiếp theo →</button>" +
+          '<button type="button" class="ghost" data-done-act="home">← Về trang chủ</button>' +
+        "</div>" +
+      "</div>";
     $("progress").textContent = "Hoàn tất buổi · " + fmt(c.total) + "/" + fmt(concepts.length) + " từ";
+    if ($("study-bar")) $("study-bar").style.width = "100%";
+    if ($("undobtn")) $("undobtn").classList.toggle("hidden", !undoStack.length);
   }
 
   function grade(kind) {
     var id = $("card").dataset.id;
     if (!id || sessionDone) return;
     var store = readSrs();
-    store[id] = { grade: kind, due: iso(INTERVALS[kind]), last: todayISO() };
+    undoStack.push({
+      id: id,
+      prevEntry: store[id] ? Object.assign({}, store[id]) : null,
+      prevIdx: idx,
+      prevQueueLen: queue.length,
+      hadRequeued: !!requeued[id],
+      prevHard: sessionHardIds.slice(),
+      prevStats: Object.assign({}, sessionStats)
+    });
+    if (undoStack.length > 30) undoStack.shift();
+
+    store[id] = computeNextSrs(store[id], kind);
     sessionStats.learned++;
+    if (kind === "good" || kind === "ok") sessionStats.remembered = (sessionStats.remembered || 0) + 1;
+    if (kind === "hard") {
+      if (sessionHardIds.indexOf(id) === -1) sessionHardIds.push(id);
+      if (!requeued[id] && queue.length - idx > 1) {
+        requeued[id] = true;
+        queue.push(id);
+      }
+    }
     persistSrs();
     idx += 1;
-    if (idx >= queue.length) buildQueue();
+    render();
+  }
+
+  function undoGrade() {
+    if (!undoStack.length) return;
+    var snap = undoStack.pop();
+    var store = readSrs();
+    if (snap.prevEntry) store[snap.id] = snap.prevEntry;
+    else delete store[snap.id];
+    queue.length = snap.prevQueueLen;
+    idx = snap.prevIdx;
+    requeued[snap.id] = snap.hadRequeued;
+    sessionHardIds = snap.prevHard;
+    sessionStats = snap.prevStats;
+    sessionDone = false;
+    persistSrs();
+    toast("↩ Đã hoàn tác thẻ trước");
     render();
   }
 
@@ -390,33 +676,83 @@
     if (p) { var inp = p.querySelector('input[type="text"]'); if (inp && inp.focus) setTimeout(function(){ try { inp.focus(); } catch (e) {} }, 60); }
   }
 
+  // ---------------- practice helpers (all 35 languages + drills.json) ----------------
+  function practiceLang() { return target(); }
+
+  function answerMismatchHint(typed, expected) {
+    var a = normalizeAnswer(typed).split(" ").filter(Boolean);
+    var b = normalizeAnswer(expected).split(" ").filter(Boolean);
+    if (b.length <= 1) return "";
+    for (var i = 0; i < Math.min(a.length, b.length); i++) {
+      if (a[i] !== b[i]) return ' · lệch từ "' + a[i] + '" → "' + b[i] + '"';
+    }
+    if (a.length < b.length) return " · còn thiếu " + (b.length - a.length) + " từ";
+    return "";
+  }
+
+  function loadPracticePairData(id) {
+    return Promise.all([loadLang(base()), loadLang(target())]).then(function (pair) {
+      var known = pair[0] || {}, learning = pair[1] || {};
+      var word = (learning.w && learning.w[id]) || "";
+      var exT = (learning.e && learning.e[id]) || "";
+      var exB = (known.e && known.e[id]) || "";
+      var mean = (known.w && known.w[id]) || "";
+      return {
+        id: id,
+        lang: target(),
+        known: known,
+        learning: learning,
+        word: word,
+        sentence: exT || word,
+        hint: exB || mean
+      };
+    });
+  }
+
   // ---------------- M2.2a listen & write ----------------
   function showListen() {
-    withDrills("listen", function () {
+    var lang = practiceLang();
+    var ready = (lang === "en") ? withDrills("listen", function () {}) : Promise.resolve();
+    return ready.then(function () {
       var id = ensurePracticeConcept();
       ensureStudyVisible();
       openPanel("drill");
-      var rows = drills[id] || [];
+      var rows = (lang === "en") ? (drills[id] || []) : [];
       var note = $("drill-note");
-      if (!rows.length) {
-        note.textContent = "Từ này chưa có câu công sở offline — thử một từ khác.";
+      if (rows.length) {
+        drill = { s: rows[0].s, h: rows[0].h, lang: "en" };
+        $("typed").value = "";
+        note.textContent = "Nghe câu rồi gõ lại chính xác (không cần hoa/thấp).";
         note.className = "panel-note";
+        speak(drill.s, "en");
         return;
       }
-      drill = rows[0];
-      $("typed").value = "";
-      note.textContent = "Nghe câu rồi gõ lại chính xác (không cần hoa/thấp).";
-      note.className = "panel-note";
-      speak(drill.s, "en");
+      return loadPracticePairData(id).then(function (d) {
+        if (!d.sentence) {
+          note.textContent = "Từ này chưa có câu ví dụ offline — thử một từ khác.";
+          note.className = "panel-note";
+          return;
+        }
+        drill = { s: d.sentence, h: d.hint, lang: d.lang };
+        $("typed").value = "";
+        note.textContent = "Nghe câu rồi gõ lại chính xác" + (d.hint ? " · Gợi ý: " + d.hint : "");
+        note.className = "panel-note";
+        speak(drill.s, d.lang);
+      });
     });
   }
+
   function checkTyped() {
     if (!drill) return;
-    var typed = $("typed").value.trim().toLowerCase();
-    if (!typed) return;
-    var ok = typed === String(drill.s).trim().toLowerCase();
+    var raw = $("typed").value.trim();
+    if (!raw) return;
+    var ok = raw.toLowerCase() === String(drill.s).trim().toLowerCase() ||
+      normalizeAnswer(raw) === normalizeAnswer(drill.s);
     var note = $("drill-note");
-    note.textContent = ok ? "✅ Đúng. Ghi nhớ tốt!" : ("Đáp án: " + drill.s + (drill.h ? " · " + drill.h : ""));
+    var extra = ok ? "" : answerMismatchHint(raw, drill.s);
+    note.textContent = ok
+      ? ("✅ Đúng. Ghi nhớ tốt!" + (drill.h ? " (" + drill.h + ")" : ""))
+      : ("Đáp án: " + drill.s + extra + (drill.h ? " · " + drill.h : ""));
     note.className = "panel-note " + (ok ? "ok" : "bad");
     sessionStats.correct += ok ? 1 : 0;
   }
@@ -458,51 +794,149 @@
   }
 
   // ---------------- M2.3a fill-blank ----------------
+  function pickBlankTarget(sentence, word) {
+    if (!sentence) return null;
+    if (word && word.length >= 2) {
+      var escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      var boundaryRe = new RegExp("(^|[^\\p{L}\\p{N}])(" + escaped + ")(?=[^\\p{L}\\p{N}]|$)", "iu");
+      var bm;
+      try { bm = sentence.match(boundaryRe); } catch (e) { bm = null; }
+      if (bm && bm[2]) return bm[2];
+      var subRe = new RegExp(escaped, "i");
+      if (subRe.test(sentence) && sentence.length > word.length + 2) return word;
+    }
+    var parts = sentence.split(/\s+/).filter(Boolean);
+    if (parts.length < 3) return null;
+    var best = "";
+    for (var i = 0; i < parts.length; i++) {
+      var clean = parts[i].replace(/^[.,!?;:"'“”‘’()\[\]]+|[.,!?;:"'“”‘’()\[\]]+$/g, "");
+      if (clean.length > best.length) best = clean;
+    }
+    return best.length >= 3 ? best : null;
+  }
+
   function showFill() {
-    withDrills("fill", function () {
+    var lang = practiceLang();
+    var ready = (lang === "en") ? withDrills("fill", function () {}) : Promise.resolve();
+    return ready.then(function () {
       var id = ensurePracticeConcept();
       ensureStudyVisible();
       openPanel("fillbox");
-      var rows = (drills[id] || []).filter(function (r) { return r.s && r.sf; });
+      var rows = (lang === "en") ? (drills[id] || []).filter(function (r) { return r.s && r.sf; }) : [];
       var note = $("fill-note");
-      if (!rows.length) {
-        note.textContent = "Từ này chưa có câu để điền — thử một từ khác.";
+      if (rows.length) {
+        var row = rows[Math.floor(Math.random() * rows.length)];
+        var sf = row.sf;
+        var re = new RegExp(sf.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+        if (!re.test(row.s)) { showListen(); return; }
+        var blanked = row.s.replace(re, "____");
+        fill = { row: row, answer: sf, lang: "en" };
+        $("fill-sent").textContent = blanked;
+        $("fill-input").value = "";
+        note.textContent = "Nghe câu rồi gõ từ còn thiếu (vị trí gạch ngang)." + (row.h ? " · " + row.h : "");
         note.className = "panel-note";
+        speak(row.s, "en");
         return;
       }
-      var row = rows[Math.floor(Math.random() * rows.length)];
-      var sf = row.sf;
-      var re = new RegExp(sf.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      if (!re.test(row.s)) { showListen(); return; }
-      var blanked = row.s.replace(re, "____");
-      fill = { row: row, answer: sf };
-      $("fill-sent").textContent = blanked;
-      $("fill-input").value = "";
-      note.textContent = "Nghe câu rồi gõ từ còn thiếu (vị trí gạch ngang).";
-      note.className = "panel-note";
-      speak(row.s, "en");
+      return loadPracticePairData(id).then(function (d) {
+        var token = pickBlankTarget(d.sentence, d.word);
+        if (!token || d.sentence === d.word) { showListen(); return; }
+        var re2 = new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+        if (!re2.test(d.sentence)) { showListen(); return; }
+        var blanked2 = d.sentence.replace(re2, "____");
+        fill = { row: { s: d.sentence, h: d.hint }, answer: token, lang: d.lang };
+        $("fill-sent").textContent = blanked2;
+        $("fill-input").value = "";
+        note.textContent = "Nghe câu rồi điền từ còn thiếu" + (d.hint ? " · Nghĩa: " + d.hint : "");
+        note.className = "panel-note";
+        speak(d.sentence, d.lang);
+      });
     });
   }
+
   function checkFill() {
     if (!fill) return;
-    var typed = $("fill-input").value.trim().toLowerCase();
-    if (!typed) return;
-    var ok = typed === fill.answer.toLowerCase();
+    var raw = $("fill-input").value.trim();
+    if (!raw) return;
+    var ok = raw.toLowerCase() === fill.answer.toLowerCase() ||
+      normalizeAnswer(raw) === normalizeAnswer(fill.answer);
     var note = $("fill-note");
-    note.textContent = ok ? "✅ Đúng: " + fill.answer : ("Đáp án: " + fill.answer);
+    note.textContent = ok
+      ? ("✅ Đúng: " + fill.answer + (fill.row && fill.row.h ? " (" + fill.row.h + ")" : ""))
+      : ("Đáp án: " + fill.answer + (fill.row && fill.row.h ? " · " + fill.row.h : ""));
     note.className = "panel-note " + (ok ? "ok" : "bad");
     sessionStats.correct += ok ? 1 : 0;
   }
 
-  // ---------------- M2.3b conjugate ----------------
-  function showConjugate() {
-    withDrills("conj", function () {
+  // ---------------- M2.3b conjugate + multilingual context quiz ----------------
+  function renderConjChoices(choices, winner, lang) {
+    conj = { correct: winner, lang: lang };
+    var box = $("conj-opts");
+    box.innerHTML = "";
+    var note = $("conj-note");
+    note.textContent = "Chọn 1 đáp án đúng bên dưới:";
+    note.className = "panel-note";
+    choices.forEach(function (r) {
+      var label = document.createElement("label");
+      label.className = "conj-opt";
+      var inp = document.createElement("input");
+      inp.type = "radio";
+      inp.name = "conj";
+      inp.value = r.s;
+      inp.addEventListener("change", function () {
+        var ok = (inp.value === conj.correct.s);
+        var nn = $("conj-note");
+        nn.textContent = ok ? ("✅ Đúng: " + conj.correct.s) : ("Đáp án: " + conj.correct.s + (conj.correct.h ? " · " + conj.correct.h : ""));
+        nn.className = "panel-note " + (ok ? "ok" : "bad");
+        sessionStats.correct += ok ? 1 : 0;
+        if (ok) speak(conj.correct.s, lang);
+      });
+      label.appendChild(inp);
+      label.appendChild(document.createTextNode(" " + r.s));
+      box.appendChild(label);
+    });
+  }
 
+  function showContextQuiz(id) {
+    return loadPracticePairData(id).then(function (d) {
+      var note = $("conj-note");
+      if (!d.sentence || !d.hint) {
+        $("conj-prompt").textContent = "";
+        note.textContent = "Từ này chưa đủ dữ liệu trắc nghiệm — thử Nghe & ghi nhé.";
+        note.className = "panel-note";
+        $("conj-opts").innerHTML = "";
+        return;
+      }
+      var rank = conceptRank[id] || 0;
+      var distractors = [];
+      var seenS = {};
+      seenS[d.sentence] = 1;
+      for (var step = 3; step < concepts.length && distractors.length < 2; step += 7) {
+        var candId = concepts[(rank + step) % concepts.length];
+        var candS = (d.learning.e && d.learning.e[candId]) || (d.learning.w && d.learning.w[candId]) || "";
+        if (candS && !seenS[candS]) {
+          seenS[candS] = 1;
+          distractors.push({ s: candS, h: (d.known.e && d.known.e[candId]) || "" });
+        }
+      }
+      if (!distractors.length) { showListen(); return; }
+      var winner = { s: d.sentence, h: d.hint };
+      var choices = [winner].concat(distractors);
+      choices.sort(function () { return Math.random() - 0.5; });
+      $("conj-prompt").textContent = 'Chọn câu khớp với nghĩa: "' + d.hint + '"';
+      renderConjChoices(choices, winner, d.lang);
+      speak(winner.s, d.lang);
+    });
+  }
+
+  function showConjugate() {
+    var lang = practiceLang();
+    var ready = (lang === "en") ? withDrills("conj", function () {}) : Promise.resolve();
+    return ready.then(function () {
       var id = ensurePracticeConcept();
       ensureStudyVisible();
       openPanel("conjbox");
-      var rows = drills[id] || [];
-      var note = $("conj-note");
+      var rows = (lang === "en") ? (drills[id] || []) : [];
       var byPol = {};
       rows.forEach(function (r) { if (r.t && r.p) (byPol[r.p] = byPol[r.p] || []).push(r); });
 
@@ -524,10 +958,7 @@
         buildConjOptions(rows, function () { return true; }, "question");
         return;
       }
-      $("conj-prompt").textContent = "";
-      note.textContent = "Từ này chưa có các dạng chia để luyện — thử từ khác.";
-      note.className = "panel-note";
-      $("conj-opts").innerHTML = "";
+      return showContextQuiz(id);
     });
   }
 
@@ -550,31 +981,89 @@
     var distractors = opts.filter(function (r) { return r !== winner; }).slice(0, 2);
     var choices = [winner].concat(distractors);
     choices.sort(function () { return Math.random() - 0.5; });
-    conj = { correct: winner };
-    var box = $("conj-opts");
-    box.innerHTML = "";
-    var note = $("conj-note");
-    note.textContent = "Đúng: " + winner.s + " · Sai: sẽ hiện đáp án.";
-    note.className = "panel-note";
-    choices.forEach(function (r) {
-      var label = document.createElement("label");
-      label.className = "conj-opt";
-      var inp = document.createElement("input");
-      inp.type = "radio";
-      inp.name = "conj";
-      inp.value = r.s;
-      inp.addEventListener("change", function () {
-        var ok = (inp.value === conj.correct.s);
-        var nn = $("conj-note");
-        nn.textContent = ok ? "✅ Đúng." : ("Đáp án: " + conj.correct.s + (conj.correct.h ? " · " + conj.correct.h : ""));
-        nn.className = "panel-note " + (ok ? "ok" : "bad");
-        sessionStats.correct += ok ? 1 : 0;
-      });
-      label.appendChild(inp);
-      label.appendChild(document.createTextNode(" " + r.s));
-      box.appendChild(label);
-    });
+    renderConjChoices(choices, winner, "en");
     speak(winner.s, "en");
+  }
+
+  // ---------------- offline dictionary quick search ----------------
+  function ensureSearchIndex() {
+    var key = base() + "_" + target();
+    if (searchIndexKey === key && searchIndexList.length) {
+      return Promise.resolve(searchIndexList);
+    }
+    return Promise.all([loadLang(base()), loadLang(target())]).then(function (pair) {
+      var known = pair[0] || {}, learning = pair[1] || {};
+      var kw = known.w || {}, lw = learning.w || {}, lro = learning.ro || {};
+      var arr = [];
+      for (var i = 0; i < concepts.length; i++) {
+        var id = concepts[i];
+        var w = lw[id] || "";
+        var m = kw[id] || "";
+        var ro = lro[id] || "";
+        if (!w && !m) continue;
+        arr.push({
+          id: id,
+          w: w,
+          m: m,
+          ro: ro,
+          wf: foldText(w),
+          mf: foldText(m),
+          rf: ro ? foldText(ro) : ""
+        });
+      }
+      searchIndexKey = key;
+      searchIndexList = arr;
+      return arr;
+    });
+  }
+
+  function searchDict(query) {
+    var box = $("dict-results"), clr = $("dict-clear");
+    var q = foldText(query);
+    if (clr) clr.classList.toggle("hidden", !query || !query.trim());
+    if (!box) return Promise.resolve([]);
+    if (!q) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return Promise.resolve([]);
+    }
+    return ensureSearchIndex().then(function (arr) {
+      var srs = readSrs();
+      var prefix = [], sub = [];
+      for (var i = 0; i < arr.length; i++) {
+        var it = arr[i];
+        if (it.wf.indexOf(q) === 0 || it.mf.indexOf(q) === 0) {
+          prefix.push(it);
+          if (prefix.length >= 12) break;
+        } else if (it.wf.indexOf(q) !== -1 || it.mf.indexOf(q) !== -1 || (it.rf && it.rf.indexOf(q) !== -1)) {
+          if (sub.length < 12) sub.push(it);
+        }
+      }
+      var hits = prefix.concat(sub).slice(0, 12);
+      if (!hits.length) {
+        box.innerHTML = '<div class="search-empty">Không tìm thấy từ phù hợp với "' + esc(query.trim()) + '"</div>';
+        box.classList.remove("hidden");
+        return hits;
+      }
+      box.innerHTML = hits.map(function (it) {
+        var badge = srsStatusBadge(srs[it.id]);
+        var lv = cefrOf(it.id);
+        return '<div class="search-item">' +
+          '<div class="search-main">' +
+            '<div><span class="search-w">' + esc(it.w || it.id) + "</span>" +
+              (it.ro ? '<span class="search-ph">' + esc(it.ro) + "</span>" : "") + "</div>" +
+            '<div class="search-m">' + esc(it.m) + "</div>" +
+            '<div class="search-badges"><span class="badge-mini">' + esc(lv) + '</span><span class="badge-mini ' + badge.cls + '">' + esc(badge.text) + "</span></div>" +
+          "</div>" +
+          '<div class="search-btns">' +
+            '<button type="button" data-search-speak="' + esc(it.w || "") + '" aria-label="Nghe">🔊</button>' +
+            '<button type="button" class="act" data-search-study="' + esc(it.id) + '">Học</button>' +
+          "</div>" +
+        "</div>";
+      }).join("");
+      box.classList.remove("hidden");
+      return hits;
+    });
   }
 
   // ---------------- boot ----------------
@@ -587,8 +1076,10 @@
       fetch(db + "/concepts.json").then(function (r) { return r.json(); }),
       fetch(db + "/langs.json").then(function (r) { return r.json(); })
     ]).then(function (parts) {
-      concepts = parts[0];
-      langs = parts[1];
+      concepts = parts[0] || [];
+      conceptRank = {};
+      for (var i = 0; i < concepts.length; i++) conceptRank[concepts[i]] = i;
+      langs = parts[1] || [];
       ["base", "target"].forEach(function (idn) {
         $(idn).innerHTML = langs.map(function (l) {
           return '<option value="' + l.code + '">' + l.native + "</option>";
@@ -599,6 +1090,7 @@
       applyTheme(localStorage.getItem("dictlearn_theme") || "auto");
       var sl = $("sessionlen");
       if (sl) sl.value = localStorage.getItem("dictlearn_session") || "10";
+      try { cefrLevel = localStorage.getItem("dictlearn_cefr_level") || "all"; } catch (e) { cefrLevel = "all"; }
       // background load of the drill pack (non-blocking)
       drillsReady = fetch(db + "/drills.json")
         .then(function (r) { return r.json(); })
@@ -621,6 +1113,7 @@
   // Await the drill pack before a practice panel that needs it. If it hasn't
   // landed yet, show a friendly "loading" note instead of a blank panel.
   function withDrills(kind, fn) {
+    if (!drillsReady) return Promise.resolve().then(fn);
     return drillsReady.then(fn, function () {
       var note = $(kind === "listen" ? "drill-note" : kind === "fill" ? "fill-note" : "conj-note");
       if (note) { note.textContent = "Đang tải bộ câu luyện…"; note.className = "panel-note"; }
@@ -716,6 +1209,7 @@
         srs: readSrs(),
         mastered: (audioStats && audioStats.mastered) || {},
         source: prefs.source || "due",
+        levelFilter: cefrLevel || "all",
         baseLang: base(),
         targetLang: target(),
         limit: prefs.limit || 30,
@@ -810,11 +1304,13 @@
     } : null);
 
     var badge = $("audio-state-badge");
+    var cefrBadge = $("audio-cefr-badge");
     var prog = $("audio-progress");
     var playBtn = $("audio-play");
 
     if (!view) {
       if (badge) { badge.textContent = "Trống"; badge.classList.remove("is-playing"); }
+      if (cefrBadge) cefrBadge.classList.add("hidden");
       if (prog) prog.textContent = "Chưa có từ phù hợp";
       if ($("audio-word")) $("audio-word").textContent = "—";
       if ($("audio-phonetics")) $("audio-phonetics").textContent = "";
@@ -823,6 +1319,13 @@
       if ($("audio-ex-base")) $("audio-ex-base").textContent = "";
       if (playBtn) playBtn.textContent = "▶ Nghe";
       return;
+    }
+
+    if (cefrBadge && view.conceptId) {
+      cefrBadge.textContent = cefrOf(view.conceptId);
+      cefrBadge.classList.remove("hidden");
+    } else if (cefrBadge) {
+      cefrBadge.classList.add("hidden");
     }
 
     var roleLbl = audioRoleLabel(view.stepRole);
@@ -1137,14 +1640,81 @@
   }
 
   // ---------------- wiring ----------------
+  function findAttrTarget(node, root, attrName) {
+    var cur = node;
+    var depth = 0;
+    while (cur && cur !== root && depth < 5) {
+      if (typeof cur.getAttribute === "function") {
+        var val = cur.getAttribute(attrName);
+        if (val != null) return val;
+      }
+      cur = cur.parentNode || null;
+      depth++;
+    }
+    return null;
+  }
+
   function wire() {
     // home
     $("startbtn").onclick = function () { showStudy(); if (idx >= queue.length || sessionDone) { buildQueue(); render(); } };
     $("homebtn").onclick = showHome;
+    if ($("undobtn")) $("undobtn").onclick = undoGrade;
     $("onboardok").onclick = function () {
       try { localStorage.setItem("dictlearn_onboard_" + pairKey(), "1"); } catch (e) {}
       $("onboard").classList.add("hidden");
     };
+    if ($("setbtn")) {
+      $("setbtn").onclick = function () {
+        showHome();
+        var sc = $("settings-card");
+        if (sc) {
+          if (sc.scrollIntoView) sc.scrollIntoView({ behavior: "smooth", block: "center" });
+          if (sc.classList) {
+            sc.classList.add("flash-highlight");
+            setTimeout(function () { sc.classList.remove("flash-highlight"); }, 1200);
+          }
+        }
+      };
+    }
+
+    // CEFR filter pills
+    if ($("cefr-filter")) {
+      $("cefr-filter").addEventListener("click", function (e) {
+        var lv = findAttrTarget(e && e.target, $("cefr-filter"), "data-level");
+        if (!lv) return;
+        cefrLevel = lv;
+        try { localStorage.setItem("dictlearn_cefr_level", lv); } catch (err) {}
+        audioPreviewTracks = [];
+        audioPreviewIndex = 0;
+        buildQueue();
+        renderHome();
+        if (!$("study").classList.contains("hidden")) render();
+      });
+    }
+
+    // Offline dictionary search
+    var ds = $("dict-search");
+    if (ds) {
+      ds.addEventListener("input", function () { searchDict(ds.value); });
+    }
+    if ($("dict-clear")) {
+      $("dict-clear").onclick = function () {
+        if ($("dict-search")) $("dict-search").value = "";
+        searchDict("");
+      };
+    }
+    if ($("dict-results")) {
+      $("dict-results").addEventListener("click", function (e) {
+        var sp = findAttrTarget(e && e.target, $("dict-results"), "data-search-speak");
+        if (sp !== null) {
+          speak(sp, target(), true);
+          return;
+        }
+        var cid = findAttrTarget(e && e.target, $("dict-results"), "data-search-study");
+        if (cid) openConceptInStudy(cid);
+      });
+    }
+
     wireAudio();
     // lang / session / prefs
     var onPairChange = function () {
@@ -1153,6 +1723,12 @@
         : Promise.resolve();
       audioPreviewTracks = [];
       audioPreviewIndex = 0;
+      searchIndexKey = "";
+      searchIndexList = [];
+      if ($("dict-search") && $("dict-search").value) {
+        $("dict-search").value = "";
+        searchDict("");
+      }
       stopAudio.then(function () { return loadSrs(); })
         .then(function () { return loadAudioStats(); })
         .then(function () {
@@ -1169,6 +1745,7 @@
     $("sessionlen").onchange = function () {
       try { localStorage.setItem("dictlearn_session", $("sessionlen").value); } catch (e) {}
       buildQueue();
+      renderHome();
       if (!$("study").classList.contains("hidden")) render();
     };
     $("sndbtn").onclick = function () {
@@ -1192,11 +1769,7 @@
     $("b2").onclick = function () { grade("ok"); };
     $("b3").onclick = function () { grade("good"); };
     // basic card actions
-    $("flip").onclick = function () {
-      var b = $("base-text"), e = $("ex");
-      if (b) b.classList.toggle("hidden");
-      if (e) e.classList.toggle("hidden");
-    };
+    $("flip").onclick = flipCard;
     // duosub's openSpeechSettings pattern: tapping "Nghe từ" speaks the word;
     // when the device has no voice for the language it toasts a hint and the
     // NEXT tap opens the system TTS settings to install the missing voices.
@@ -1220,12 +1793,16 @@
         }
       });
     };
-    // practice
+    // practice (from Home + Study shortcuts)
     $("listen").onclick = showListen;
+    if ($("study-listen")) $("study-listen").onclick = showListen;
     $("mic").onclick = toggleMic;
-    $("playdrill").onclick = function () { if (drill) speak(drill.s, "en", true); };
+    $("playdrill").onclick = function () { if (drill) speak(drill.s, drill.lang || target(), true); };
     $("fillbtn").onclick = showFill;
+    if ($("study-fill")) $("study-fill").onclick = showFill;
+    if ($("playfill")) $("playfill").onclick = function () { if (fill && fill.row) speak(fill.row.s, fill.lang || target(), true); };
     $("conjbtn").onclick = showConjugate;
+    if ($("study-conj")) $("study-conj").onclick = showConjugate;
     $("clearbtn").onclick = hidePanels;
     document.querySelectorAll(".close-panel").forEach(function (b) { b.onclick = hidePanels; });
     // inputs
@@ -1274,11 +1851,12 @@
     };
     if (ttsbtn) ttsbtn.onclick = runTtsTest;
 
-    // --- M3.2 swipe gestures (Anki-style) ---
+    // --- M3.2 swipe gestures + tap-to-flip + interactive example audio ---
     var card = $("card");
-    var startX = 0, startY = 0, swiping = false;
+    var startX = 0, startY = 0, swiping = false, suppressCardClickUntil = 0;
     card.addEventListener("pointerdown", function (e) {
       if (sessionDone) return;
+      if (e && e.target && (findAttrTarget(e.target, card, "data-ex-speak") || findAttrTarget(e.target, card, "data-done-act"))) return;
       startX = e.clientX; startY = e.clientY; swiping = true;
       card.classList.add("swiping");
       try { card.setPointerCapture(e.pointerId); } catch (err) {}
@@ -1297,6 +1875,7 @@
       card.style.opacity = "";
       var dx = e.clientX - startX, dy = e.clientY - startY;
       var TH = 80;
+      if (Math.abs(dx) >= 12 || Math.abs(dy) >= 12) suppressCardClickUntil = Date.now() + 260;
       if (sessionDone) return;
       if (dx > TH && Math.abs(dx) > Math.abs(dy)) grade("good");
       else if (dx < -TH && Math.abs(dx) > Math.abs(dy)) grade("hard");
@@ -1307,6 +1886,28 @@
       card.classList.remove("swiping");
       card.style.transform = "";
       card.style.opacity = "";
+    });
+    card.addEventListener("click", function (e) {
+      var doneAct = findAttrTarget(e && e.target, card, "data-done-act");
+      if (doneAct) {
+        if (doneAct === "hard" && sessionHardIds.length) {
+          buildQueue(sessionHardIds.slice());
+          render();
+        } else if (doneAct === "next") {
+          buildQueue();
+          render();
+        } else if (doneAct === "home") {
+          showHome();
+        }
+        return;
+      }
+      if (findAttrTarget(e && e.target, card, "data-ex-speak")) {
+        if (cardExTarget) speak(cardExTarget, cardExLang || target(), true);
+        return;
+      }
+      if (!sessionDone && Date.now() > suppressCardClickUntil) {
+        flipCard();
+      }
     });
 
     // --- M3.3 Android back press ---

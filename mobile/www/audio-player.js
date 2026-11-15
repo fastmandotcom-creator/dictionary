@@ -87,6 +87,16 @@
     return out;
   }
 
+  function cefrForIndex(idx) {
+    var r = Number(idx);
+    if (!isFinite(r) || r < 2000) return "A1";
+    if (r < 4000) return "A2";
+    if (r < 6000) return "B1";
+    if (r < 8000) return "B2";
+    if (r < 10000) return "C1";
+    return "C2";
+  }
+
   /** Pure playlist builder across any language pair + optional EN-VI drills. */
   function buildPlaylist(opts) {
     opts = opts || {};
@@ -97,26 +107,37 @@
     var srs = opts.srs || {};
     var mastered = opts.mastered || {};
     var source = opts.source || "due";
+    var levelFilter = opts.levelFilter || "all";
     var baseLang = opts.baseLang || "vi";
     var targetLang = opts.targetLang || "en";
     var limit = Math.max(5, Math.min(200, Number(opts.limit) || 30));
     var today = opts.today || todayISO();
     var attachDrills = (baseLang === "vi" && targetLang === "en");
 
+    var rankById = {};
     var due = [], hard = [], okList = [], goodList = [], fresh = [];
-    for (var i = 0; i < concepts.length; i++) {
-      var cid = concepts[i];
-      if (mastered[cid]) continue;
-      if (!targetData.w || !targetData.w[cid]) continue;
-      var rec = srs[cid];
-      if (!rec) {
-        fresh.push(cid);
-      } else {
-        if (rec.due && rec.due <= today) due.push(cid);
-        if (rec.grade === "hard") hard.push(cid);
-        else if (rec.grade === "ok") okList.push(cid);
-        else goodList.push(cid);
+    function collect(applyLevel) {
+      due = []; hard = []; okList = []; goodList = []; fresh = [];
+      for (var i = 0; i < concepts.length; i++) {
+        var cid = concepts[i];
+        rankById[cid] = i;
+        if (mastered[cid]) continue;
+        if (!targetData.w || !targetData.w[cid]) continue;
+        if (applyLevel && levelFilter && levelFilter !== "all" && cefrForIndex(i) !== levelFilter) continue;
+        var rec = srs[cid];
+        if (!rec) {
+          fresh.push(cid);
+        } else {
+          if (rec.due && rec.due <= today) due.push(cid);
+          if (rec.grade === "hard") hard.push(cid);
+          else if (rec.grade === "ok") okList.push(cid);
+          else goodList.push(cid);
+        }
       }
+    }
+    collect(true);
+    if (levelFilter && levelFilter !== "all" && !due.length && !hard.length && !okList.length && !goodList.length && !fresh.length) {
+      collect(false);
     }
 
     var seen = {};
@@ -168,6 +189,7 @@
     return ordered.map(function (id) {
       return {
         id: id,
+        level: cefrForIndex(rankById[id] || 0),
         word: String((targetData.w && targetData.w[id]) || id),
         meaning: String((baseData.w && baseData.w[id]) || ""),
         ro: String((targetData.ro && targetData.ro[id]) || ""),
@@ -577,6 +599,7 @@
 
   var AudioPlayer = {
     DEFAULT_PREFS: DEFAULT_PREFS,
+    cefrForIndex: cefrForIndex,
     buildPlaylist: buildPlaylist,
     buildSteps: buildSteps,
     isCleanDrillRow: isCleanDrillRow,

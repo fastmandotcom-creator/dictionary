@@ -87,16 +87,84 @@
       background: var(--card); border: 1px solid var(--line);
       border-radius: 1rem; padding: 1rem; margin-bottom: 1rem;
     }
+    .stat-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
     .stat-num { font-size: 2.2rem; font-weight: 800; line-height: 1.1; }
     .stat-sub { color: var(--sub); font-size: 0.9rem; }
-    .bar { height: 0.45rem; background: var(--line); border-radius: 99px; margin: 0.8rem 0; overflow: hidden; }
+    .stat-goal { margin-top: 0.25rem; }
+    .stat-goal-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; color: var(--sub); }
+    .stat-goal-row b { color: var(--good-fg); }
+    .bar { height: 0.45rem; background: var(--line); border-radius: 99px; margin: 0.65rem 0; overflow: hidden; }
+    .bar.bar-sm { height: 0.32rem; margin: 0.35rem 0 0.7rem; }
     .bar > div { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.4s ease; min-width: 2px; }
-    .chips { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .bar-good > div { background: var(--good-fg); }
+    .chips { display: flex; gap: 0.45rem; flex-wrap: wrap; }
     .chip {
       background: var(--accent-soft); color: var(--text);
-      border-radius: 99px; padding: 0.35rem 0.8rem; font-size: 0.85rem;
+      border-radius: 99px; padding: 0.32rem 0.72rem; font-size: 0.82rem;
     }
     .chip b { color: var(--accent); }
+    .chip.is-good b { color: var(--good-fg); }
+    .chip.is-warn b { color: var(--warn-fg); }
+
+    /* ---------- search & CEFR filter ---------- */
+    .search-box {
+      position: relative; display: flex; align-items: center; gap: 0.4rem;
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 0.9rem; padding: 0.25rem 0.45rem 0.25rem 0.85rem;
+      margin-bottom: 0.6rem;
+    }
+    .search-box:focus-within { border-color: var(--accent); }
+    .search-box input {
+      flex: 1; background: transparent; border: 0; outline: 0;
+      min-height: 2.65rem; font-size: 0.96rem; min-width: 0;
+    }
+    .search-clear {
+      background: transparent; color: var(--sub); border-radius: 0.6rem;
+      min-width: 2.3rem; min-height: 2.3rem; font-size: 0.95rem;
+    }
+    .search-results {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 0.9rem; margin-bottom: 0.9rem; overflow: hidden;
+    }
+    .search-item {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+      padding: 0.7rem 0.85rem;
+    }
+    .search-item + .search-item { border-top: 1px solid var(--line); }
+    .search-main { flex: 1; min-width: 0; }
+    .search-w { font-weight: 800; font-size: 1rem; color: var(--text); }
+    .search-ph { color: var(--accent); font-size: 0.8rem; margin-left: 0.35rem; font-weight: 500; }
+    .search-m { color: var(--sub); font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .search-badges { display: flex; gap: 0.35rem; align-items: center; margin-top: 0.2rem; }
+    .search-btns { display: flex; gap: 0.35rem; flex: 0 0 auto; }
+    .search-btns button {
+      background: var(--accent-soft); color: var(--text); border-radius: 0.65rem;
+      min-height: 2.4rem; padding: 0.25rem 0.55rem; font-size: 0.82rem; font-weight: 700;
+    }
+    .search-btns button.act { background: var(--accent); color: #fff; }
+    .search-empty { padding: 0.85rem; text-align: center; color: var(--sub); font-size: 0.88rem; }
+
+    .cefr-pills {
+      display: flex; gap: 0.38rem; overflow-x: auto; padding-bottom: 0.2rem; margin-bottom: 0.4rem;
+      scrollbar-width: none;
+    }
+    .cefr-pills::-webkit-scrollbar { display: none; }
+    .cefr-pill {
+      flex: 0 0 auto; background: var(--card); border: 1px solid var(--line); color: var(--sub);
+      border-radius: 99px; padding: 0.35rem 0.75rem; font-size: 0.82rem; font-weight: 700;
+      min-height: 2.2rem;
+    }
+    .cefr-pill.is-active {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .badge-mini {
+      display: inline-block; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.02em;
+      padding: 0.14rem 0.48rem; border-radius: 99px;
+      background: var(--accent-soft); color: var(--accent);
+    }
+    .badge-mini.is-good { background: var(--good); color: var(--good-fg); }
+    .badge-mini.is-warn { background: var(--warn); color: var(--warn-fg); }
+    .badge-mini.is-bad  { background: var(--bad);  color: var(--bad-fg); }
 
     .primary {
       display: block; width: 100%; background: var(--accent); color: #fff;
@@ -132,34 +200,56 @@
     .onboard .ghost { width: 100%; }
 
     /* ---------- study ---------- */
-    .study-top { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
-    #progress { flex: 1; }
+    .study-top { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem; }
+    #progress { flex: 1; margin: 0; font-size: 0.88rem; }
+    .undo-btn { padding: 0.42rem 0.68rem; font-size: 0.8rem; font-weight: 700; min-height: 2.35rem; }
+    .undo-btn:disabled { opacity: 0.4; cursor: default; }
     .hint {
       background: var(--accent-soft); color: var(--text); border: 1px solid var(--accent);
       border-radius: 0.7rem; padding: 0.55rem 0.8rem; font-size: 0.85rem; margin-bottom: 0.6rem;
     }
     .card {
       background: var(--card); border: 1px solid var(--line);
-      border-radius: 1.1rem; padding: 1.2rem; min-height: 13rem;
+      border-radius: 1.1rem; padding: 1.15rem 1.2rem; min-height: 13rem;
       touch-action: pan-y; user-select: none; -webkit-user-select: none;
-      transition: transform 0.12s ease, opacity 0.12s ease;
+      transition: transform 0.12s ease, opacity 0.12s ease; cursor: pointer;
     }
     .card.swiping { transition: none; }
+    .card-meta { display: flex; justify-content: space-between; align-items: center; gap: 0.4rem; margin-bottom: 0.35rem; }
     .card-pos { font-size: 0.8rem; color: var(--sub); font-weight: 700; }
-    .target { font-size: 2.1rem; font-weight: 800; margin-top: 0.2rem; letter-spacing: -0.01em; }
+    .target { font-size: 2.1rem; font-weight: 800; margin-top: 0.15rem; letter-spacing: -0.01em; line-height: 1.2; }
     .ro  { color: var(--accent); font-size: 1.05rem; margin-top: 0.3rem; }
     .ipa { color: var(--sub); font-size: 0.95rem; margin-top: 0.1rem; }
-    .base { color: var(--good-fg); font-size: 1.35rem; font-weight: 700; margin-top: 0.8rem; }
-    .ex   { color: var(--sub); font-size: 0.95rem; margin-top: 0.7rem; }
-    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.8rem; }
+    .base { color: var(--good-fg); font-size: 1.35rem; font-weight: 700; margin-top: 0.85rem; }
+    .ex {
+      color: var(--sub); font-size: 0.95rem; margin-top: 0.7rem;
+      border-top: 1px solid var(--line); padding-top: 0.65rem;
+    }
+    .ex-row { display: flex; align-items: flex-start; gap: 0.5rem; justify-content: space-between; }
+    .ex-text { flex: 1; min-width: 0; }
+    .ex-target-line { color: var(--text); font-weight: 600; }
+    .ex-base-line { color: var(--sub); margin-top: 0.2rem; }
+    .ex-speak-btn {
+      flex: 0 0 auto; background: var(--accent-soft); color: var(--accent);
+      border-radius: 0.65rem; padding: 0.32rem 0.6rem; font-size: 0.8rem; font-weight: 800;
+      min-height: 2.2rem;
+    }
+    .tap-cue { margin-top: 0.75rem; font-size: 0.78rem; color: var(--sub); opacity: 0.8; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.75rem; }
     .row2 .ghost { min-height: 3rem; font-weight: 700; }
+    .study-practice-row {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.45rem; margin-top: 0.5rem;
+    }
+    .study-practice-row .ghost {
+      font-size: 0.8rem; font-weight: 700; padding: 0.45rem 0.4rem; min-height: 2.45rem;
+    }
     .ghost {
       background: var(--card); border: 1px solid var(--line); color: var(--text);
       border-radius: 0.8rem; padding: 0.6rem 0.8rem;
     }
     .ghost:active { background: var(--accent-soft); }
 
-    .grade-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-top: 0.8rem;
+    .grade-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-top: 0.75rem;
       position: sticky; bottom: 0; background: var(--bg); padding-bottom: 0.4rem; }
     .grade-row button {
       border-radius: 0.9rem; min-height: 4rem; display: flex; flex-direction: column;
@@ -169,6 +259,10 @@
     .hard { background: var(--bad);  color: var(--bad-fg); }
     .ok   { background: var(--warn); color: var(--warn-fg); }
     .good { background: var(--good); color: var(--good-fg); }
+
+    .done-actions { display: flex; flex-direction: column; gap: 0.55rem; margin-top: 1rem; }
+    .done-actions .primary { margin-bottom: 0; min-height: 2.95rem; font-size: 1.02rem; }
+    .done-actions .ghost { width: 100%; font-weight: 700; min-height: 2.8rem; }
 
     /* ---------- practice panels ---------- */
     .panel {
@@ -204,8 +298,9 @@
     /* ---------- settings + update (auto-update ON by default) ---------- */
     .settings-card {
       background: var(--card); border: 1px solid var(--line);
-      border-radius: 1rem; padding: 0.2rem 1rem;
+      border-radius: 1rem; padding: 0.2rem 1rem; transition: border-color 0.25s ease;
     }
+    .settings-card.flash-highlight { border-color: var(--accent); }
     .setting-row {
       display: flex; justify-content: space-between; align-items: center;
       gap: 0.7rem; padding: 0.8rem 0;
@@ -396,12 +491,25 @@
       </div>
 
       <div class="stat-card">
-        <div class="stat-num" id="stat-learned">0</div>
-        <div class="stat-sub">/ <span id="stat-total">0</span> từ đã được chấm điểm</div>
-        <div class="bar"><div id="learned-bar" style="width:0%"></div></div>
-        <div class="chips">
-          <span class="chip">Hôm nay · <b id="stat-today">0</b> từ</span>
+        <div class="stat-head">
+          <div>
+            <div class="stat-num" id="stat-learned">0</div>
+            <div class="stat-sub">/ <span id="stat-total">0</span> từ đã được chấm điểm</div>
+          </div>
           <span class="chip">Chuỗi · <b id="stat-streak">0</b> ngày</span>
+        </div>
+        <div class="bar"><div id="learned-bar" style="width:0%"></div></div>
+        <div class="stat-goal">
+          <div class="stat-goal-row">
+            <span id="daily-goal-text">Mục tiêu hôm nay: 0 / 10</span>
+            <span>Hôm nay · <b id="stat-today">0</b> từ</span>
+          </div>
+          <div class="bar bar-sm bar-good"><div id="daily-goal-bar" style="width:0%"></div></div>
+        </div>
+        <div class="chips">
+          <span class="chip is-warn">Đang học · <b id="stat-learning">0</b></span>
+          <span class="chip is-good">Thuộc vững · <b id="stat-mastered">0</b></span>
+          <span class="chip">Đến hạn · <b id="stat-due">0</b></span>
         </div>
       </div>
 
@@ -414,6 +522,24 @@
         </div>
         <span class="ae-go">Nghe →</span>
       </button>
+
+      <div class="sec-title">Tra từ nhanh (12.000 từ offline)</div>
+      <div class="search-box">
+        <input id="dict-search" type="search" placeholder="🔎 Gõ từ tiếng Việt hoặc ngoại ngữ…" autocomplete="off" autocorrect="off">
+        <button id="dict-clear" class="search-clear hidden" type="button" aria-label="Xóa tìm kiếm">✕</button>
+      </div>
+      <div id="dict-results" class="search-results hidden"></div>
+
+      <div class="sec-title">Cấp độ CEFR (<span id="cefr-summary">Tất cả A1–C2</span>)</div>
+      <div id="cefr-filter" class="cefr-pills" role="tablist" aria-label="Lọc theo cấp độ CEFR">
+        <button class="cefr-pill is-active" type="button" data-level="all">Tất cả</button>
+        <button class="cefr-pill" type="button" data-level="A1">A1 · Cơ bản</button>
+        <button class="cefr-pill" type="button" data-level="A2">A2 · Sơ trung</button>
+        <button class="cefr-pill" type="button" data-level="B1">B1 · Trung cấp</button>
+        <button class="cefr-pill" type="button" data-level="B2">B2 · Trung cao</button>
+        <button class="cefr-pill" type="button" data-level="C1">C1 · Cao cấp</button>
+        <button class="cefr-pill" type="button" data-level="C2">C2 · Thành thạo</button>
+      </div>
 
       <div class="sec-title">Luyện kỹ năng · từ đang học</div>
       <div class="practice-row">
@@ -436,13 +562,13 @@
 
       <!-- settings: auto-update + about -->
       <div class="sec-title">Cài đặt</div>
-      <div class="settings-card">
+      <div id="settings-card" class="settings-card">
         <label class="setting-row">
           <div>
             <b>Tự động cập nhật</b>
             <p class="muted">Tự kiểm tra bản APK mới mỗi ngày · cài đè giữ nguyên tiến độ học</p>
           </div>
-          <input type="checkbox" id="autoupd" checked>
+          <input type="checkbox" id="autoupd" class="switch" checked>
         </label>
         <div class="setting-row">
           <div>
@@ -466,8 +592,10 @@
       <div class="study-top">
         <button id="homebtn" class="ghost">←</button>
         <p class="muted" id="progress"></p>
+        <button id="undobtn" class="ghost undo-btn hidden" type="button" aria-label="Hoàn tác">↩ Hoàn tác</button>
       </div>
-      <div id="swipehint" class="hint hidden">Quẹt card: → Đã nhớ · ← Chưa nhớ · ↓ Mờ hồ</div>
+      <div class="bar bar-sm"><div id="study-bar" style="width:0%"></div></div>
+      <div id="swipehint" class="hint hidden">Quẹt card: → Đã nhớ · ← Chưa nhớ · ↓ Mờ hồ · Chạm thẻ để lật</div>
 
       <div class="card" id="card"></div>
 
@@ -476,10 +604,16 @@
         <button class="ghost" id="speak">🔊 Nghe từ</button>
       </div>
 
+      <div class="study-practice-row" id="study-practice-row">
+        <button class="ghost" id="study-listen" type="button">🎧 Nghe & ghi</button>
+        <button class="ghost" id="study-fill" type="button">✏️ Điền khuyết</button>
+        <button class="ghost" id="study-conj" type="button">🧩 Trắc nghiệm</button>
+      </div>
+
       <div class="grade-row">
-        <button class="hard" id="b1">Chưa nhớ<span class="sub">lặp lại sau 1 ngày</span></button>
-        <button class="ok"   id="b2">Mờ hồ<span class="sub">lặp lại sau 3 ngày</span></button>
-        <button class="good" id="b3">Đã nhớ<span class="sub">gặp lại sau 7 ngày</span></button>
+        <button class="hard" id="b1">Chưa nhớ<span class="sub" id="b1-sub">lặp lại sau 1 ngày</span></button>
+        <button class="ok"   id="b2">Mờ hồ<span class="sub" id="b2-sub">lặp lại sau 3 ngày</span></button>
+        <button class="good" id="b3">Đã nhớ<span class="sub" id="b3-sub">gặp lại sau 7 ngày</span></button>
       </div>
 
       <!-- ============ practice panels (one open at a time) ============ -->
@@ -497,6 +631,9 @@
 
       <div id="fillbox" class="panel hidden">
         <div class="panel-head"><b>✏️ Điền khuyết</b><button class="clear close-panel" aria-label="Đóng">✕</button></div>
+        <div class="row-flex" style="margin-bottom:0.4rem">
+          <button class="ghost slim2" id="playfill" type="button">🔊 Nghe lại câu</button>
+        </div>
         <p id="fill-sent" style="font-size:1.05rem;margin-bottom:0.4rem"></p>
         <input id="fill-input" type="text" placeholder="Gõ từ còn thiếu…" autocomplete="off" autocapitalize="off">
         <button id="fillcheck" class="slim">Kiểm tra</button>
@@ -504,7 +641,7 @@
       </div>
 
       <div id="conjbox" class="panel hidden">
-        <div class="panel-head"><b>🧩 Chia dạng</b><button class="clear close-panel" aria-label="Đóng">✕</button></div>
+        <div class="panel-head"><b>🧩 Trắc nghiệm &amp; Chia dạng</b><button class="clear close-panel" aria-label="Đóng">✕</button></div>
         <p id="conj-prompt" style="font-weight:700;margin-bottom:0.4rem"></p>
         <div id="conj-opts"></div>
         <p class="panel-note" id="conj-note"></p>
@@ -525,7 +662,10 @@
       </div>
 
       <div class="audio-hero" id="audio-card">
-        <div class="audio-badge" id="audio-state-badge">Sẵn sàng</div>
+        <div class="card-meta">
+          <div class="audio-badge" id="audio-state-badge">Sẵn sàng</div>
+          <span class="badge-mini hidden" id="audio-cefr-badge">A1</span>
+        </div>
         <div class="audio-word" id="audio-word">—</div>
         <div class="audio-phonetics" id="audio-phonetics"></div>
         <div class="audio-meaning" id="audio-meaning"></div>

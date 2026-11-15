@@ -233,6 +233,7 @@ async function main() {
       // radio: find the input via children? stub: re-dispatch change on last added input is unsupported;
       // instead assert note exists and prompt text is meaningful
       assert.match(els['conj-prompt'].textContent, /HIỆN TẠI|CÂU HỎI/, 'conj prompt: ' + els['conj-prompt'].textContent);
+      assert.ok(!els['conj-note'].textContent.includes('Đúng:'), 'conj note must not spoil answer before choice');
     }
   }
 
