@@ -9,7 +9,7 @@
  * Registered in index.html:
  *   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
  */
-const CACHE = 'dict-learn-v4'; // v4: duosub-style auto-update (update-info.json, host allowlist, reminder policy, native install)
+const CACHE = 'dict-learn-v5'; // v5: duosub-grade TTS engine (synthesizeToFile) + fixed 'Nghe từ' silent on v1.5.0
 
 // Core app shell (always cached; revalidated on each navigate)
 const SHELL = [
