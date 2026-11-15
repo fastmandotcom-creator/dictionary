@@ -337,12 +337,14 @@
 
     var lvTag = cefrLevel !== "all" ? (" [" + cefrLevel + "]") : "";
     var sb = $("startbtn");
-    if (c.due > 0) {
-      sb.textContent = "Học " + c.due + " từ đến hạn" + lvTag + " →";
-    } else if (c.total === 0) {
+    if (idx > 0 && idx < queue.length && !sessionDone) {
+      sb.textContent = "📖 Học tiếp Bộ #" + batchNum + " (từ " + (idx + 1) + "/" + queue.length + ")" + lvTag + " →";
+    } else if (c.total === 0 && batchNum === 1) {
       sb.textContent = "Bắt đầu học " + sessionLen() + " từ mới" + lvTag + " →";
+    } else if (c.due > 0 && batchNum === 1) {
+      sb.textContent = "📖 Ôn " + c.due + " từ đến hạn (Bộ #1)" + lvTag + " →";
     } else {
-      sb.textContent = "Học " + sessionLen() + " từ tiếp theo" + lvTag + " →";
+      sb.textContent = "📖 Vào học Bộ #" + batchNum + " (" + (queue.length || sessionLen()) + " từ)" + lvTag + " →";
     }
 
     // onboarding only for brand-new users
@@ -370,12 +372,22 @@
   function updateBatchButtons() {
     var n = queue.length || sessionLen();
     var nextN = sessionLen();
-    if ($("session-replay")) $("session-replay").textContent = "🔄 Học lại " + n + " từ này";
-    if ($("session-next-batch")) $("session-next-batch").textContent = "⏭ " + nextN + " từ tiếp theo";
-    if ($("study-replay")) $("study-replay").textContent = "🔄 Học lại " + n + " từ";
-    if ($("study-next-batch")) $("study-next-batch").textContent = "⏭ " + nextN + " từ tiếp";
-    if ($("audio-replay")) $("audio-replay").textContent = "🔄 Nghe lại " + n + " từ";
-    if ($("audio-next-batch")) $("audio-next-batch").textContent = "⏭ " + nextN + " từ tiếp";
+    var nextBatch = batchNum + 1;
+    var active = window.AudioPlayer ? window.AudioPlayer.getState() : null;
+    var audioProgressed = !!(active && active.status !== "idle" && active.index > 0);
+    var studyProgressed = (idx > 0 || sessionDone);
+    if ($("session-replay")) {
+      $("session-replay").textContent = "↺ Đặt lại đầu Bộ #" + batchNum;
+      $("session-replay").disabled = !(studyProgressed || audioProgressed);
+    }
+    if ($("session-next-batch")) $("session-next-batch").textContent = "⏭ Đổi sang Bộ #" + nextBatch + " (" + nextN + " từ kế)";
+    if ($("study-replay")) {
+      $("study-replay").textContent = "↺ Học lại từ 1/" + n;
+      $("study-replay").disabled = !studyProgressed;
+    }
+    if ($("study-next-batch")) $("study-next-batch").textContent = "⏭ Qua Bộ #" + nextBatch + " (" + nextN + " từ)";
+    if ($("audio-replay")) $("audio-replay").textContent = "↺ Nghe lại từ 1/" + n;
+    if ($("audio-next-batch")) $("audio-next-batch").textContent = "⏭ Qua Bộ #" + nextBatch + " (" + nextN + " từ)";
   }
 
   function updateSessionStatus() {
@@ -406,21 +418,14 @@
       sub.textContent = (active.status === "playing" ? "Đang phát: " : "Đang tạm dừng: ") + active.word + posTxt + " · " + (active.meaning || "");
       return;
     }
-    if (!audioStats) {
-      sub.textContent = queue.length
-        ? ("Cùng " + queue.length + " từ của buổi học · phát cả khi tắt màn hình")
-        : "Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình";
-      return;
-    }
-    var heardToday = Object.keys(audioStats.todayHeardIds || {}).length;
+    var heardToday = audioStats ? Object.keys(audioStats.todayHeardIds || {}).length : 0;
     if (queue.length && idx > 0 && idx < queue.length && !sessionDone) {
-      sub.textContent = "Tiếp tục từ vị trí " + (idx + 1) + " / " + queue.length + " · phát ngầm song ngữ";
-    } else if (heardToday > 0) {
-      sub.textContent = "Hôm nay đã nghe " + heardToday + " từ · chạm để nghe tiếp";
+      sub.textContent = "Tiếp tục nghe Bộ #" + batchNum + " từ vị trí " + (idx + 1) + " / " + queue.length;
+    } else if (queue.length) {
+      sub.textContent = "Phát ngầm Bộ #" + batchNum + " (" + queue.length + " từ)" +
+        (heardToday > 0 ? (" · Hôm nay đã nghe " + heardToday + " từ") : " · nghe cả khi tắt màn hình");
     } else {
-      sub.textContent = queue.length
-        ? ("Cùng " + queue.length + " từ của buổi học · phát cả khi tắt màn hình")
-        : "Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình";
+      sub.textContent = "Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình";
     }
   }
 
@@ -564,8 +569,8 @@
     var totalQ = Math.max(1, queue.length);
     var shownIdx = Math.min(idx + 1, totalQ);
     $("progress").textContent =
-      shownIdx + " / " + queue.length +
-      (c.due ? " · " + c.due + " từ đến hạn" : "");
+      shownIdx + " / " + queue.length + " · Bộ #" + batchNum +
+      (c.due ? " · " + c.due + " đến hạn" : "");
     var bar = $("study-bar");
     if (bar) {
       var pct = sessionDone ? 100 : Math.min(100, Math.round((idx / totalQ) * 100));
@@ -578,6 +583,7 @@
     }
     var h = $("swipehint");
     if (h) h.classList.toggle("hidden", !c.due && c.total !== 0);
+    updateBatchButtons();
   }
 
   // ---------------- screens ----------------
@@ -738,8 +744,8 @@
           "Tổng tiến bộ: " + fmt(c.total) + " / " + fmt(concepts.length) + " từ (chuỗi " + streakDays() + " ngày)</p>" +
         '<div class="done-actions">' +
           hardBtnHtml +
-          '<button type="button" class="' + (sessionHardIds.length ? "ghost" : "primary") + '" data-done-act="next">⏭ Học ' + sessionLen() + " từ tiếp theo →</button>" +
-          '<button type="button" class="ghost" data-done-act="replay">🔄 Học lại ' + Math.max(1, queue.length) + " từ vừa rồi</button>" +
+          '<button type="button" class="' + (sessionHardIds.length ? "ghost" : "primary") + '" data-done-act="next">⏭ Học sang Bộ #' + (batchNum + 1) + " (" + sessionLen() + " từ kế) →</button>" +
+          '<button type="button" class="ghost" data-done-act="replay">↺ Học lại Bộ #' + batchNum + " vừa rồi (" + Math.max(1, queue.length) + " từ)</button>" +
           '<button type="button" class="ghost" data-done-act="audio">🎧 Nghe lại buổi học này</button>' +
           '<button type="button" class="ghost" data-done-act="home">← Về trang chủ</button>' +
         "</div>" +
@@ -1650,9 +1656,10 @@
         : "";
       if (isActive) {
         prog.textContent = "Từ " + (view.index + 1) + " / " + (view.total || 1) +
+          " · Bộ #" + batchNum +
           (view.heardCount ? " · Đã nghe " + view.heardCount : "") + sleepTxt;
       } else {
-        prog.textContent = "Danh sách " + view.total + " từ · Vị trí " + (view.index + 1);
+        prog.textContent = "Bộ #" + batchNum + " (" + view.total + " từ) · Vị trí " + (view.index + 1);
       }
     }
 
@@ -1706,7 +1713,7 @@
     if (playBtn) {
       if (view.status === "playing" || view.status === "loading") playBtn.textContent = "⏸ Tạm dừng";
       else if (view.status === "paused") playBtn.textContent = "▶ Tiếp tục";
-      else playBtn.textContent = "▶ Nghe";
+      else playBtn.textContent = "▶ Phát nghe";
     }
 
     var note = $("audio-note");

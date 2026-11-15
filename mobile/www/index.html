@@ -499,18 +499,29 @@
     .audio-adv .setting-row:first-of-type { border-top: 1px solid var(--line); }
 
     /* ---------- batch controls, 4-pillar nav & responsive architecture ---------- */
+    .deck-switcher-wrap {
+      border-top: 1px dashed var(--line);
+      margin-top: 0.7rem; padding-top: 0.6rem;
+    }
+    .deck-switcher-lbl {
+      font-size: 0.74rem; font-weight: 700; color: var(--sub);
+      margin-bottom: 0.35rem; text-transform: uppercase; letter-spacing: 0.04em;
+    }
     .session-batch-row, .study-batch-row, .audio-batch-row {
       display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem;
     }
-    .session-batch-row { margin-top: 0.55rem; }
-    .study-batch-row { margin-top: 0.55rem; }
-    .audio-batch-row { margin-bottom: 0.55rem; }
-    .audio-actions-row { margin-bottom: 0.75rem; }
+    .study-batch-row, .audio-batch-row { margin: 0.25rem 0 0.65rem; }
+    .audio-actions-row { margin-top: 0.55rem; margin-bottom: 0.75rem; }
     .batch-btn {
-      font-size: 0.8rem; font-weight: 700; min-height: 2.6rem;
-      padding: 0.4rem 0.5rem; border-radius: 0.75rem;
+      font-size: 0.78rem; font-weight: 700; min-height: 2.35rem;
+      padding: 0.35rem 0.5rem; border-radius: 0.7rem;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
+    .deck-bar .batch-btn {
+      background: var(--bg); font-size: 0.76rem; color: var(--sub);
+    }
+    .deck-bar .batch-btn:not(:disabled):active { color: var(--text); background: var(--accent-soft); }
+    .batch-btn:disabled { opacity: 0.42; cursor: default; }
 
     .bottom-nav {
       position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
@@ -625,6 +636,39 @@
 
       <div class="home-grid">
         <div class="home-col">
+          <div class="session-hub" id="session-hub">
+            <div class="session-hub-head">
+              <div>
+                <div class="session-hub-title">Hôm nay học gì? (Thẻ ↔ Nghe đồng bộ)</div>
+                <div class="session-hub-sub" id="session-status">Sẵn sàng · chọn số từ cho cả 2 chế độ</div>
+              </div>
+              <select id="sessionlen" aria-label="Số từ mỗi buổi học">
+                <option value="10">10 từ</option>
+                <option value="25">25 từ</option>
+                <option value="50" selected>50 từ</option>
+                <option value="100">100 từ</option>
+              </select>
+            </div>
+
+            <button id="startbtn" class="primary">📖 Vào học Bộ #1 (50 từ) →</button>
+
+            <button id="audiostartbtn" class="audio-entry" type="button">
+              <div class="ae-left">
+                <div class="ae-title">🎧 Nghe Bộ này (chạy ngầm)</div>
+                <div class="ae-sub" id="audio-home-sub">Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình</div>
+              </div>
+              <span class="ae-go">Nghe →</span>
+            </button>
+
+            <div class="deck-switcher-wrap">
+              <div class="deck-switcher-lbl">Đổi bộ từ đang nạp</div>
+              <div class="session-batch-row">
+                <button id="session-replay" class="ghost batch-btn" type="button">↺ Đặt lại đầu Bộ #1</button>
+                <button id="session-next-batch" class="ghost batch-btn" type="button">⏭ Đổi sang Bộ #2 (50 từ kế)</button>
+              </div>
+            </div>
+          </div>
+
           <div class="stat-card">
             <div class="stat-head">
               <div>
@@ -645,36 +689,6 @@
               <span class="chip is-warn">Đang học · <b id="stat-learning">0</b></span>
               <span class="chip is-good">Thuộc vững · <b id="stat-mastered">0</b></span>
               <span class="chip">Đến hạn · <b id="stat-due">0</b></span>
-            </div>
-          </div>
-
-          <div class="session-hub" id="session-hub">
-            <div class="session-hub-head">
-              <div>
-                <div class="session-hub-title">Buổi học đồng bộ (Thẻ ↔ Nghe)</div>
-                <div class="session-hub-sub" id="session-status">Sẵn sàng · chọn số từ cho cả 2 chế độ</div>
-              </div>
-              <select id="sessionlen" aria-label="Số từ mỗi buổi học">
-                <option value="10">10 từ</option>
-                <option value="25">25 từ</option>
-                <option value="50" selected>50 từ</option>
-                <option value="100">100 từ</option>
-              </select>
-            </div>
-
-            <button id="startbtn" class="primary">Học tiếp ngay →</button>
-
-            <button id="audiostartbtn" class="audio-entry" type="button">
-              <div class="ae-left">
-                <div class="ae-title">🎧 Nghe buổi học này (chạy ngầm)</div>
-                <div class="ae-sub" id="audio-home-sub">Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình</div>
-              </div>
-              <span class="ae-go">Nghe →</span>
-            </button>
-
-            <div class="session-batch-row">
-              <button id="session-replay" class="ghost batch-btn" type="button">🔄 Học lại 50 từ này</button>
-              <button id="session-next-batch" class="ghost batch-btn" type="button">⏭ 50 từ tiếp theo</button>
             </div>
           </div>
         </div>
@@ -743,6 +757,10 @@
         <button id="study-to-audio" class="ghost handoff-btn" type="button" title="Chuyển sang nghe từ này">🎧 Nghe tiếp</button>
       </div>
       <div class="bar bar-sm"><div id="study-bar" style="width:0%"></div></div>
+      <div class="study-batch-row deck-bar">
+        <button id="study-replay" class="ghost batch-btn" type="button">↺ Học lại từ 1/50</button>
+        <button id="study-next-batch" class="ghost batch-btn" type="button">⏭ Qua Bộ #2 (50 từ)</button>
+      </div>
       <div id="swipehint" class="hint hidden">Quẹt card: → Đã nhớ · ← Chưa nhớ · ↓ Mờ hồ · Chạm thẻ để lật</div>
 
       <div class="split-layout">
@@ -751,19 +769,14 @@
         </div>
         <div class="split-side">
           <div class="row2">
-            <button class="ghost" id="flip">👀 Hiện nghĩa</button>
-            <button class="ghost" id="speak">🔊 Nghe từ</button>
+            <button class="ghost" id="flip">👀 Lật nghĩa</button>
+            <button class="ghost" id="speak">🔊 Phát âm từ</button>
           </div>
 
           <div class="study-practice-row" id="study-practice-row">
             <button class="ghost" id="study-listen" type="button">🎧 Nghe & ghi</button>
             <button class="ghost" id="study-fill" type="button">✏️ Điền khuyết</button>
             <button class="ghost" id="study-conj" type="button">🧩 Trắc nghiệm</button>
-          </div>
-
-          <div class="study-batch-row">
-            <button id="study-replay" class="ghost batch-btn" type="button">🔄 Học lại 50 từ này</button>
-            <button id="study-next-batch" class="ghost batch-btn" type="button">⏭ 50 từ tiếp</button>
           </div>
 
           <div class="grade-row">
@@ -820,6 +833,11 @@
         </select>
       </div>
 
+      <div class="audio-batch-row deck-bar">
+        <button id="audio-replay" class="ghost batch-btn" type="button">↺ Nghe lại từ 1/50</button>
+        <button id="audio-next-batch" class="ghost batch-btn" type="button">⏭ Qua Bộ #2 (50 từ)</button>
+      </div>
+
       <div class="split-layout">
         <div class="split-main">
           <div class="audio-hero" id="audio-card">
@@ -846,20 +864,15 @@
 
         <div class="split-side">
           <div class="audio-transport">
-            <button id="audio-prev" class="ghost" type="button">⏮ Trước</button>
-            <button id="audio-play" class="audio-main-btn" type="button">▶ Nghe</button>
-            <button id="audio-next" class="ghost" type="button">⏭ Tiếp</button>
+            <button id="audio-prev" class="ghost" type="button">⏮ Từ trước</button>
+            <button id="audio-play" class="audio-main-btn" type="button">▶ Phát nghe</button>
+            <button id="audio-next" class="ghost" type="button">Từ tiếp ⏭</button>
           </div>
 
           <div class="grade-row audio-grade-row" id="audio-grade-row">
             <button class="hard" id="audio-grade-hard" type="button">Chưa nhớ<span class="sub" id="audio-b1-sub">lặp lại 1 ngày</span></button>
             <button class="ok"   id="audio-grade-ok"   type="button">Mờ hồ<span class="sub" id="audio-b2-sub">lặp lại 3 ngày</span></button>
             <button class="good" id="audio-grade-good" type="button">Đã nhớ<span class="sub" id="audio-b3-sub">gặp lại 7 ngày</span></button>
-          </div>
-
-          <div class="audio-batch-row">
-            <button id="audio-replay" class="ghost batch-btn" type="button">🔄 Nghe lại 50 từ này</button>
-            <button id="audio-next-batch" class="ghost batch-btn" type="button">⏭ 50 từ tiếp</button>
           </div>
 
           <div class="audio-actions-row">
@@ -871,19 +884,6 @@
       </div>
 
       <div class="settings-card audio-cfg-card">
-        <div class="setting-row">
-          <div>
-            <b>Nguồn phát</b>
-            <p class="muted">Mặc định đồng bộ 100% cùng buổi học</p>
-          </div>
-          <select id="audio-source" aria-label="Nguồn danh sách phát">
-            <option value="session" selected>Cùng buổi học hiện tại</option>
-            <option value="due">Ưu tiên cần nhớ</option>
-            <option value="fresh">Từ mới A1→C2</option>
-            <option value="learned">Từ đã học</option>
-            <option value="mix">Nghe trộn</option>
-          </select>
-        </div>
         <div class="setting-row">
           <div>
             <b>Nhịp đọc</b>
@@ -914,7 +914,20 @@
           </div>
         </div>
         <details class="audio-adv">
-          <summary>Tùy chỉnh nâng cao (Thứ tự, Lặp từ, Giọng)</summary>
+          <summary>Tùy chỉnh nâng cao (Nguồn phát, Thứ tự, Lặp từ, Giọng)</summary>
+          <div class="setting-row">
+            <div>
+              <b>Nguồn phát</b>
+              <p class="muted">Mặc định đồng bộ 100% cùng buổi học</p>
+            </div>
+            <select id="audio-source" aria-label="Nguồn danh sách phát">
+              <option value="session" selected>Cùng buổi học hiện tại</option>
+              <option value="due">Ưu tiên cần nhớ</option>
+              <option value="fresh">Từ mới A1→C2</option>
+              <option value="learned">Từ đã học</option>
+              <option value="mix">Nghe trộn</option>
+            </select>
+          </div>
           <div class="setting-row" id="audio-order-row">
             <div>
               <b>Thứ tự ngôn ngữ</b>

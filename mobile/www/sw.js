@@ -9,7 +9,7 @@
  * Registered in index.html:
  *   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
  */
-const CACHE = 'dict-learn-v12'; // v12: v2.2.0 Batch Deck Controller, 4-Pillar Bottom Nav & Multi-Device Responsive UI
+const CACHE = 'dict-learn-v13'; // v13: v2.2.1 Clarified Multi-Screen UX & Deck Switcher Controls
 
 // Core app shell (always cached; revalidated on each navigate)
 const SHELL = [
