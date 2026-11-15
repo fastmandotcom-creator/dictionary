@@ -210,6 +210,8 @@
     var blockEnd = scalePause(p.isWordBlock ? 1250 : 1100, p.speed);
     var afterPrimaryCue = scalePause(p.isWordBlock ? 650 : 550, p.speed);
     var recallBeforePrimary = scalePause(p.isWordBlock ? 1050 : 600, p.speed);
+    var pairTarget = p.pairTarget || "";
+    var pairBase = p.pairBase || "";
 
     if (!hasPrimary) {
       for (var i = 0; i < p.repeatCount; i++) {
@@ -217,20 +219,24 @@
           role: i === 0 ? p.targetFirstRole : p.targetRepeatRole,
           text: p.targetText,
           lang: p.targetLang,
-          pauseAfterMs: i < p.repeatCount - 1 ? repeatGap : blockEnd
+          pauseAfterMs: i < p.repeatCount - 1 ? repeatGap : blockEnd,
+          pairTarget: pairTarget,
+          pairBase: pairBase
         });
       }
       return;
     }
 
     if (p.order === "base_first") {
-      out.push({ role: p.primaryRole, text: p.primaryText, lang: p.primaryLang, pauseAfterMs: afterPrimaryCue });
+      out.push({ role: p.primaryRole, text: p.primaryText, lang: p.primaryLang, pauseAfterMs: afterPrimaryCue, pairTarget: pairTarget, pairBase: pairBase });
       for (var j = 0; j < p.repeatCount; j++) {
         out.push({
           role: j === 0 ? p.targetFirstRole : p.targetRepeatRole,
           text: p.targetText,
           lang: p.targetLang,
-          pauseAfterMs: j < p.repeatCount - 1 ? repeatGap : blockEnd
+          pauseAfterMs: j < p.repeatCount - 1 ? repeatGap : blockEnd,
+          pairTarget: pairTarget,
+          pairBase: pairBase
         });
       }
       return;
@@ -238,8 +244,8 @@
 
     // target_first: expose target first, hold recall gap before primary, then anchor on final repeat
     if (p.repeatCount <= 1) {
-      out.push({ role: p.targetFirstRole, text: p.targetText, lang: p.targetLang, pauseAfterMs: recallBeforePrimary });
-      out.push({ role: p.primaryRole, text: p.primaryText, lang: p.primaryLang, pauseAfterMs: blockEnd });
+      out.push({ role: p.targetFirstRole, text: p.targetText, lang: p.targetLang, pauseAfterMs: recallBeforePrimary, pairTarget: pairTarget, pairBase: pairBase });
+      out.push({ role: p.primaryRole, text: p.primaryText, lang: p.primaryLang, pauseAfterMs: blockEnd, pairTarget: pairTarget, pairBase: pairBase });
       return;
     }
 
@@ -249,11 +255,13 @@
         role: k === 0 ? p.targetFirstRole : p.targetRepeatRole,
         text: p.targetText,
         lang: p.targetLang,
-        pauseAfterMs: k < preCount - 1 ? repeatGap : recallBeforePrimary
+        pauseAfterMs: k < preCount - 1 ? repeatGap : recallBeforePrimary,
+        pairTarget: pairTarget,
+        pairBase: pairBase
       });
     }
-    out.push({ role: p.primaryRole, text: p.primaryText, lang: p.primaryLang, pauseAfterMs: scalePause(550, p.speed) });
-    out.push({ role: p.targetRepeatRole, text: p.targetText, lang: p.targetLang, pauseAfterMs: blockEnd });
+    out.push({ role: p.primaryRole, text: p.primaryText, lang: p.primaryLang, pauseAfterMs: scalePause(550, p.speed), pairTarget: pairTarget, pairBase: pairBase });
+    out.push({ role: p.targetRepeatRole, text: p.targetText, lang: p.targetLang, pauseAfterMs: blockEnd, pairTarget: pairTarget, pairBase: pairBase });
   }
 
   /** Pure web step builder matching AudioQueueModels.buildSteps in Java. */
@@ -268,6 +276,8 @@
     var includePrimary = preset !== "target_only";
     var tLang = item.targetLang || "en";
     var bLang = item.baseLang || "vi";
+    var exT = item.exTarget || "";
+    var exB = item.exBase || "";
 
     appendPairSteps(out, {
       primaryText: includePrimary ? item.meaning : "",
@@ -280,31 +290,35 @@
       order: order,
       repeatCount: repeatCount,
       speed: speed,
-      isWordBlock: true
+      isWordBlock: true,
+      pairTarget: exT,
+      pairBase: exB
     });
 
     if (preset === "quick") return out;
 
-    if (item.exTarget) {
+    if (exT) {
       appendPairSteps(out, {
-        primaryText: includePrimary ? item.exBase : "",
+        primaryText: includePrimary ? exB : "",
         primaryRole: "ex_base",
         primaryLang: bLang,
-        targetText: item.exTarget,
+        targetText: exT,
         targetFirstRole: "ex_target",
         targetRepeatRole: "ex_target",
         targetLang: tLang,
         order: order,
         repeatCount: repeatCount,
         speed: speed,
-        isWordBlock: false
+        isWordBlock: false,
+        pairTarget: exT,
+        pairBase: exB
       });
     }
 
     if (cfg.includeDrills && item.drills) {
       for (var d = 0; d < Math.min(2, item.drills.length); d++) {
         var row = item.drills[d];
-        if (row.s && row.s !== item.exTarget) {
+        if (row.s && row.s !== exT) {
           appendPairSteps(out, {
             primaryText: includePrimary ? row.h : "",
             primaryRole: "drill_base",
@@ -316,7 +330,9 @@
             order: order,
             repeatCount: repeatCount,
             speed: speed,
-            isWordBlock: false
+            isWordBlock: false,
+            pairTarget: "💼 " + row.s,
+            pairBase: row.h || ""
           });
         }
       }
@@ -381,6 +397,7 @@
   var unsubNativeState = null;
   var unsubNativePrefetch = null;
   var lastCompletedSeq = 0;
+  var lastHandledOpenSeq = 0;
   var onTrackHeardCb = null;
 
   // Web fallback sequencer state
@@ -413,6 +430,7 @@
     completedSeq: 0,
     lastCompletedConceptId: "",
     error: "",
+    openRequested: false,
     nativeBackend: false
   };
 
@@ -429,16 +447,30 @@
   }
 
   function enrichState(raw) {
-    var s = Object.assign({}, webState, raw || {});
+    var r = raw || {};
+    var conceptChanged = !!(r.conceptId && r.conceptId !== webState.conceptId);
+    var s = Object.assign({}, webState, r);
+    if (conceptChanged) {
+      if (typeof r.ro !== "string") s.ro = "";
+      if (typeof r.ipa !== "string") s.ipa = "";
+      if (typeof r.exTarget !== "string") s.exTarget = "";
+      if (typeof r.exBase !== "string") s.exBase = "";
+    }
     var cur = (s.conceptId && trackById[s.conceptId]) || tracks[s.index] || null;
-    if (cur) {
-      s.ro = cur.ro || "";
-      s.ipa = cur.ipa || "";
-      s.exTarget = cur.exTarget || "";
-      s.exBase = cur.exBase || "";
+    if (cur && (!r.conceptId || cur.id === s.conceptId)) {
+      if (!s.ro) s.ro = cur.ro || "";
+      if (!s.ipa) s.ipa = cur.ipa || "";
+      if (!s.exTarget) s.exTarget = cur.exTarget || "";
+      if (!s.exBase) s.exBase = cur.exBase || "";
       if (!s.word) s.word = cur.word;
       if (!s.meaning) s.meaning = cur.meaning;
     }
+    var openReq = !!r.openRequested;
+    if (typeof r.openSeq === "number" && r.openSeq > lastHandledOpenSeq) {
+      lastHandledOpenSeq = r.openSeq;
+      openReq = true;
+    }
+    s.openRequested = openReq;
     s.nativeBackend = hasNativeAudio();
     return s;
   }
@@ -474,9 +506,13 @@
     try {
       var ms = navigator.mediaSession;
       if (typeof window.MediaMetadata === "function") {
+        var title = snap.word ? (snap.word + (snap.meaning ? " — " + snap.meaning : "")) : "dict-learn";
+        var artist = (snap.exTarget && snap.exBase)
+          ? (snap.exTarget + " — " + snap.exBase)
+          : (snap.exTarget || snap.meaning || "Nghe thụ động");
         ms.metadata = new window.MediaMetadata({
-          title: snap.word || "dict-learn",
-          artist: snap.meaning || "Nghe thụ động",
+          title: title,
+          artist: artist,
           album: snap.total ? ("Từ " + (snap.index + 1) + "/" + snap.total) : "Nghe thụ động"
         });
       }
@@ -546,7 +582,11 @@
         } else {
           curIdx = 0;
           webRunEpoch++;
-          emitState({ status: "paused", index: 0, conceptId: tracks[0].id, word: tracks[0].word, meaning: tracks[0].meaning, stepRole: "", stepText: "", stepLang: "" });
+          emitState({
+            status: "paused", index: 0, conceptId: tracks[0].id, word: tracks[0].word, meaning: tracks[0].meaning,
+            ro: tracks[0].ro || "", ipa: tracks[0].ipa || "", exTarget: tracks[0].exTarget || "", exBase: tracks[0].exBase || "",
+            stepRole: "", stepText: "", stepLang: ""
+          });
           updateWebMediaSession(webState);
           return;
         }
@@ -562,6 +602,10 @@
         conceptId: item.id,
         word: item.word,
         meaning: item.meaning,
+        ro: item.ro || "",
+        ipa: item.ipa || "",
+        exTarget: step.pairTarget || item.exTarget || "",
+        exBase: step.pairBase || item.exBase || "",
         stepRole: step.role,
         stepText: step.text,
         stepLang: step.lang,
@@ -703,7 +747,11 @@
       if (webState.status === "playing") {
         runWebLoop(nextIdx, ep);
       } else {
-        emitState({ index: nextIdx, conceptId: cur.id, word: cur.word, meaning: cur.meaning, stepRole: "", stepText: "" });
+        emitState({
+          index: nextIdx, conceptId: cur.id, word: cur.word, meaning: cur.meaning,
+          ro: cur.ro || "", ipa: cur.ipa || "", exTarget: cur.exTarget || "", exBase: cur.exBase || "",
+          stepRole: "", stepText: ""
+        });
       }
       return Promise.resolve(webState);
     },
@@ -720,7 +768,11 @@
       if (webState.status === "playing") {
         runWebLoop(prevIdx, ep);
       } else {
-        emitState({ index: prevIdx, conceptId: cur.id, word: cur.word, meaning: cur.meaning, stepRole: "", stepText: "" });
+        emitState({
+          index: prevIdx, conceptId: cur.id, word: cur.word, meaning: cur.meaning,
+          ro: cur.ro || "", ipa: cur.ipa || "", exTarget: cur.exTarget || "", exBase: cur.exBase || "",
+          stepRole: "", stepText: ""
+        });
       }
       return Promise.resolve(webState);
     },

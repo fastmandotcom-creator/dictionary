@@ -60,13 +60,38 @@ public class DictTTSPlugin extends Plugin {
     private TtsSynthesizer synthesizer;
     private CallToken activeSpeakToken = null;
     private CallToken activeBatchPrefetchToken = null;
+    private volatile int openAudioSeq = 0;
 
     @Override
     public void load() {
         synthesizer = TtsSynthesizer.getInstance(getContext());
+        if (getActivity() != null) {
+            checkLaunchIntent(getActivity().getIntent());
+        }
         AudioLearningService.setListener(snapshot ->
             main.post(() -> notifyListeners("audioState", snapshotToJS(snapshot)))
         );
+    }
+
+    @Override
+    protected void handleOnNewIntent(Intent intent) {
+        super.handleOnNewIntent(intent);
+        if (checkLaunchIntent(intent)) {
+            main.post(() -> notifyListeners("audioState", snapshotToJS(AudioLearningService.getLatestSnapshot())));
+        }
+    }
+
+    private boolean checkLaunchIntent(Intent intent) {
+        if (intent == null) return false;
+        boolean hasExtra = intent.getBooleanExtra(AudioLearningService.EXTRA_OPEN_AUDIO, false);
+        boolean hasAction = AudioLearningService.ACTION_OPEN_AUDIO.equals(intent.getAction());
+        if (hasExtra || hasAction) {
+            intent.removeExtra(AudioLearningService.EXTRA_OPEN_AUDIO);
+            if (hasAction) intent.setAction(Intent.ACTION_MAIN);
+            openAudioSeq++;
+            return true;
+        }
+        return false;
     }
 
     @PluginMethod
@@ -390,6 +415,11 @@ public class DictTTSPlugin extends Plugin {
         o.put("conceptId", s.conceptId);
         o.put("word", s.word);
         o.put("meaning", s.meaning);
+        o.put("ro", s.romaji);
+        o.put("ipa", s.ipa);
+        o.put("exTarget", s.exTarget);
+        o.put("exBase", s.exBase);
+        o.put("openSeq", openAudioSeq);
         o.put("stepRole", s.stepRole);
         o.put("stepText", s.stepText);
         o.put("stepLang", s.stepLang);

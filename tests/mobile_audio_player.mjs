@@ -481,6 +481,11 @@ async function testNativePluginDelegation() {
         conceptId: t0.id,
         word: t0.word,
         meaning: t0.meaning,
+        ro: t0.ro || '',
+        ipa: t0.ipa || '',
+        exTarget: t0.exTarget || '',
+        exBase: t0.exBase || '',
+        openSeq: 0,
         stepRole: 'word',
         stepText: t0.word,
         stepLang: t0.targetLang,
@@ -512,8 +517,40 @@ async function testNativePluginDelegation() {
   assert.strictEqual(calls[1], 'requestNotificationPermission', 'requests POST_NOTIFICATIONS before starting FGS');
   assert(startCall.payload.tracks.length > 0, 'sent built playlist to native Android service');
   assert.strictEqual(els['audio-word'].textContent, startCall.payload.tracks[0].word, 'UI synced from native audioState event');
+  assert.strictEqual(els['audio-ex-target'].textContent, startCall.payload.tracks[0].exTarget, 'target example visible on initial native event');
+  assert.strictEqual(els['audio-ex-base'].textContent, startCall.payload.tracks[0].exBase, 'base example visible on initial native event');
 
-  // Simulate background completion emitted by AudioLearningService
+  // Return to Home while playing, then simulate tapping Android notification (openSeq advances from 0 -> 1)
+  els['audio-homebtn'].dispatch('click');
+  assert(!els.home.classList.contains('hidden'), 'navigated to Home');
+  assert(!els['audio-mini'].classList.contains('hidden'), 'mini player visible on Home');
+
+  (listeners.audioState || []).forEach((fn) => fn({
+    status: 'playing',
+    index: 0,
+    total: startCall.payload.tracks.length,
+    conceptId: startCall.payload.tracks[0].id,
+    word: startCall.payload.tracks[0].word,
+    meaning: startCall.payload.tracks[0].meaning,
+    ro: startCall.payload.tracks[0].ro || '',
+    ipa: startCall.payload.tracks[0].ipa || '',
+    exTarget: startCall.payload.tracks[0].exTarget || '',
+    exBase: startCall.payload.tracks[0].exBase || '',
+    openSeq: 1,
+    stepRole: 'ex_base',
+    stepText: startCall.payload.tracks[0].exBase,
+    stepLang: 'vi',
+  }));
+  assert(!els['audio-screen'].classList.contains('hidden'), 'notification tap (openSeq=1) jumps straight to #audio-screen');
+  assert(els['audio-mini'].classList.contains('hidden'), 'mini bar hidden again after jumping into #audio-screen');
+  assert.strictEqual(els['audio-ex-target'].textContent, startCall.payload.tracks[0].exTarget, 'example target preserved on ex_base step');
+  assert.strictEqual(els['audio-ex-base'].textContent, startCall.payload.tracks[0].exBase, 'example translation preserved on ex_base step');
+
+  // Verify openSeq=1 is idempotent: going Home again does NOT yank user back on next step with same openSeq=1
+  els['audio-homebtn'].dispatch('click');
+  assert(!els.home.classList.contains('hidden'), 'user can return Home after notification jump');
+
+  // Simulate background completion emitted by AudioLearningService with openSeq unchanged (1)
   emittedSeq++;
   const firstId = startCall.payload.tracks[0].id;
   (listeners.audioState || []).forEach((fn) => fn({
@@ -523,6 +560,11 @@ async function testNativePluginDelegation() {
     conceptId: startCall.payload.tracks[1].id,
     word: startCall.payload.tracks[1].word,
     meaning: startCall.payload.tracks[1].meaning,
+    ro: startCall.payload.tracks[1].ro || '',
+    ipa: startCall.payload.tracks[1].ipa || '',
+    exTarget: startCall.payload.tracks[1].exTarget || '',
+    exBase: startCall.payload.tracks[1].exBase || '',
+    openSeq: 1,
     stepRole: 'ex_target',
     stepText: startCall.payload.tracks[1].exTarget,
     stepLang: 'en',
@@ -530,6 +572,42 @@ async function testNativePluginDelegation() {
     completedSeq: emittedSeq,
     lastCompletedConceptId: firstId,
   }));
+  assert(els['audio-screen'].classList.contains('hidden'), 'unchanged openSeq=1 keeps user on Home');
+
+  // Jump back via second notification tap (openSeq=2)
+  (listeners.audioState || []).forEach((fn) => fn({
+    status: 'playing',
+    index: 1,
+    total: startCall.payload.tracks.length,
+    conceptId: startCall.payload.tracks[1].id,
+    word: startCall.payload.tracks[1].word,
+    meaning: startCall.payload.tracks[1].meaning,
+    openSeq: 2,
+    stepRole: 'meaning',
+    stepText: startCall.payload.tracks[1].meaning,
+    stepLang: 'vi',
+  }));
+  assert(!els['audio-screen'].classList.contains('hidden'), 'second notification tap (openSeq=2) re-opens #audio-screen');
+  await waitFor(() =>
+    els['audio-ex-target'].textContent === startCall.payload.tracks[1].exTarget
+      && els['audio-ex-base'].textContent === startCall.payload.tracks[1].exBase
+  );
+
+  // Simulate step change without re-sending exTarget/exBase (regression test for old DOM-wipe bug)
+  (listeners.audioState || []).forEach((fn) => fn({
+    status: 'playing',
+    index: 1,
+    total: startCall.payload.tracks.length,
+    conceptId: startCall.payload.tracks[1].id,
+    word: startCall.payload.tracks[1].word,
+    meaning: startCall.payload.tracks[1].meaning,
+    openSeq: 2,
+    stepRole: 'word',
+    stepText: startCall.payload.tracks[1].word,
+    stepLang: 'en',
+  }));
+  assert.strictEqual(els['audio-ex-target'].textContent, startCall.payload.tracks[1].exTarget, 'target example NOT wiped on subsequent step transitions');
+  assert.strictEqual(els['audio-ex-base'].textContent, startCall.payload.tracks[1].exBase, 'base example NOT wiped on subsequent step transitions');
 
   await waitFor(() => {
     const raw = storageMap.get('srs_dict_audio_stats_v1_vi_en');
@@ -565,10 +643,80 @@ async function testNativePluginDelegation() {
   console.log('OK  Native Android DictTTS.startAudioQueue & audioState listener delegation');
 }
 
+async function testColdResumeFromNotification() {
+  const listeners = {};
+  const resumePlugin = {
+    speak: () => Promise.resolve({ ok: true, result: 'spoken', engine: 'google' }),
+    cancel: () => Promise.resolve(),
+    diagnose: () => Promise.resolve({ engineCount: 1, engineNames: 'Google', networkOnline: true }),
+    requestNotificationPermission: () => Promise.resolve({ granted: true }),
+    addListener: (eventName, cb) => {
+      (listeners[eventName] = listeners[eventName] || []).push(cb);
+      return Promise.resolve({ remove: () => {} });
+    },
+    startAudioQueue: () => Promise.resolve({ ok: true }),
+    pauseAudio: () => Promise.resolve({ status: 'paused' }),
+    resumeAudio: () => Promise.resolve({ status: 'playing' }),
+    nextAudio: () => Promise.resolve({ status: 'playing' }),
+    prevAudio: () => Promise.resolve({ status: 'playing' }),
+    stopAudio: () => Promise.resolve({ status: 'idle' }),
+    updateAudioConfig: () => Promise.resolve({}),
+    getAudioState: () => Promise.resolve({
+      status: 'playing',
+      index: 0,
+      total: 5,
+      conceptId: 'C_HARD',
+      word: 'excuse me',
+      meaning: 'xin lỗi',
+      openSeq: 1,
+      stepRole: 'meaning',
+      stepText: 'xin lỗi',
+      stepLang: 'vi',
+    }),
+  };
+
+  const { els } = buildSandbox({ capacitorPlugin: resumePlugin });
+  await waitFor(
+    () => els.boot.classList.contains('hidden')
+      && !els['audio-screen'].classList.contains('hidden')
+      && els['audio-ex-target'].textContent === 'Excuse me, sir.'
+      && els['audio-ex-base'].textContent === 'Xin lỗi đã làm phiền.',
+    3000,
+    () => ({
+      audioHidden: els['audio-screen'].classList.contains('hidden'),
+      homeHidden: els.home.classList.contains('hidden'),
+      exT: els['audio-ex-target'].textContent,
+      exB: els['audio-ex-base'].textContent,
+    })
+  );
+  assert(els.home.classList.contains('hidden'), 'cold launch from notification skips #home and shows #audio-screen');
+  assert.strictEqual(els['audio-word'].textContent, 'excuse me');
+  assert.strictEqual(els['audio-meaning'].textContent, 'xin lỗi');
+  assert.strictEqual(els['audio-phonetics'].textContent, '/ɪkˈskjuːz miː/');
+
+  // Transition to next step without tracks cache -> cached bilingual example stays visible
+  (listeners.audioState || []).forEach((fn) => fn({
+    status: 'playing',
+    index: 0,
+    total: 5,
+    conceptId: 'C_HARD',
+    word: 'excuse me',
+    meaning: 'xin lỗi',
+    openSeq: 1,
+    stepRole: 'ex_target',
+    stepText: 'Excuse me, sir.',
+    stepLang: 'en',
+  }));
+  assert.strictEqual(els['audio-ex-target'].textContent, 'Excuse me, sir.');
+  assert.strictEqual(els['audio-ex-base'].textContent, 'Xin lỗi đã làm phiền.');
+  console.log('OK  Cold resume from notification opens #audio-screen with persisted bilingual examples');
+}
+
 async function main() {
   await testPurePlaylistAndSteps();
   await testWebPlaybackUiAndSrsIsolation();
   await testNativePluginDelegation();
+  await testColdResumeFromNotification();
   console.log('\nALL PASSIVE AUDIO PLAYER TESTS PASSED');
 }
 

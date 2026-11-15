@@ -53,6 +53,8 @@ public final class AudioLearningService extends Service {
     public static final String ACTION_NEXT = "com.dict.learn.tts.ACTION_NEXT";
     public static final String ACTION_PREV = "com.dict.learn.tts.ACTION_PREV";
     public static final String ACTION_STOP = "com.dict.learn.tts.ACTION_STOP";
+    public static final String ACTION_OPEN_AUDIO = "com.dict.learn.tts.OPEN_AUDIO";
+    public static final String EXTRA_OPEN_AUDIO = "open_audio";
 
     private static final String CHANNEL_ID = "dictlearn_audio_playback";
     private static final int NOTIFICATION_ID = 4108;
@@ -70,6 +72,10 @@ public final class AudioLearningService extends Service {
         public final String conceptId;
         public final String word;
         public final String meaning;
+        public final String romaji;
+        public final String ipa;
+        public final String exTarget;
+        public final String exBase;
         public final String stepRole;
         public final String stepText;
         public final String stepLang;
@@ -88,6 +94,7 @@ public final class AudioLearningService extends Service {
 
         AudioSnapshot(
             String status, int index, int total, String conceptId, String word, String meaning,
+            String romaji, String ipa, String exTarget, String exBase,
             String stepRole, String stepText, String stepLang,
             String preset, String order, int targetRepeat, float speed, String repeatMode, boolean includeDrills, boolean preferOffline,
             long sleepRemainingMs, int heardCount, long completedSeq, String lastCompletedConceptId, String error
@@ -98,6 +105,10 @@ public final class AudioLearningService extends Service {
             this.conceptId = conceptId;
             this.word = word;
             this.meaning = meaning;
+            this.romaji = romaji == null ? "" : romaji;
+            this.ipa = ipa == null ? "" : ipa;
+            this.exTarget = exTarget == null ? "" : exTarget;
+            this.exBase = exBase == null ? "" : exBase;
             this.stepRole = stepRole;
             this.stepText = stepText;
             this.stepLang = stepLang;
@@ -138,7 +149,7 @@ public final class AudioLearningService extends Service {
     private static volatile AudioLearningService activeInstance = null;
     private static volatile Listener externalListener = null;
     private static volatile AudioSnapshot lastSnapshot = new AudioSnapshot(
-        STATE_IDLE, 0, 0, "", "", "", "", "", "", AudioConfig.defaults().preset,
+        STATE_IDLE, 0, 0, "", "", "", "", "", "", "", "", "", "", AudioConfig.defaults().preset,
         AudioConfig.defaults().order, AudioConfig.defaults().targetRepeat,
         1.0f, AudioConfig.defaults().repeatMode, false, false, 0L, 0, 0L, "", ""
     );
@@ -170,6 +181,8 @@ public final class AudioLearningService extends Service {
     private String activeStepRole = "";
     private String activeStepText = "";
     private String activeStepLang = "";
+    private String activePairTarget = "";
+    private String activePairBase = "";
     private long sleepDeadlineMs = 0L;
     private int heardCount = 0;
     private long completedSeq = 0L;
@@ -329,9 +342,7 @@ public final class AudioLearningService extends Service {
             config = newConfig == null ? AudioConfig.defaults() : newConfig;
             currentIndex = Math.max(0, Math.min(startIndex, tracks.size() - 1));
             currentStepIndex = 0;
-            activeStepRole = "";
-            activeStepText = "";
-            activeStepLang = "";
+            clearActiveStepLocked();
             heardCount = 0;
             completedSeq = 0L;
             lastCompletedConceptId = "";
@@ -436,9 +447,7 @@ public final class AudioLearningService extends Service {
             cancelInFlightLocked();
             currentIndex = clamped;
             currentStepIndex = 0;
-            activeStepRole = "";
-            activeStepText = "";
-            activeStepLang = "";
+            clearActiveStepLocked();
             errorCode = "";
             stateLock.notifyAll();
         }
@@ -459,9 +468,7 @@ public final class AudioLearningService extends Service {
             cancelInFlightLocked();
             currentIndex = next;
             currentStepIndex = 0;
-            activeStepRole = "";
-            activeStepText = "";
-            activeStepLang = "";
+            clearActiveStepLocked();
             errorCode = "";
             stateLock.notifyAll();
         }
@@ -492,9 +499,7 @@ public final class AudioLearningService extends Service {
             tracks = Collections.emptyList();
             currentIndex = 0;
             currentStepIndex = 0;
-            activeStepRole = "";
-            activeStepText = "";
-            activeStepLang = "";
+            clearActiveStepLocked();
             sleepDeadlineMs = 0L;
             resumeAfterTransientFocusLoss = false;
             releaseWakeLockLocked();
@@ -511,6 +516,14 @@ public final class AudioLearningService extends Service {
         lastNotifKey = "";
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE);
         stopSelf();
+    }
+
+    private void clearActiveStepLocked() {
+        activeStepRole = "";
+        activeStepText = "";
+        activeStepLang = "";
+        activePairTarget = "";
+        activePairBase = "";
     }
 
     private void runPlaybackLoop() {
@@ -538,9 +551,7 @@ public final class AudioLearningService extends Service {
                 curTracks = tracks;
                 if (curTracks.isEmpty() || currentIndex < 0 || currentIndex >= curTracks.size()) {
                     playState = STATE_PAUSED;
-                    activeStepRole = "";
-                    activeStepText = "";
-                    activeStepLang = "";
+                    clearActiveStepLocked();
                     releaseWakeLockLocked();
                     unregisterNoisyReceiverSafe();
                     publishSnapshot();
@@ -567,6 +578,8 @@ public final class AudioLearningService extends Service {
                 activeStepRole = step.role;
                 activeStepText = step.text;
                 activeStepLang = step.lang;
+                activePairTarget = step.pairTarget;
+                activePairBase = step.pairBase;
 
                 stepToken = new CallToken();
                 activeStepToken = stepToken;
@@ -653,9 +666,7 @@ public final class AudioLearningService extends Service {
                     errorCode = errToReport.isEmpty() ? "unavailable" : errToReport;
                     playState = STATE_PAUSED;
                     currentStepIndex = 0;
-                    activeStepRole = "";
-                    activeStepText = "";
-                    activeStepLang = "";
+                    clearActiveStepLocked();
                     releaseWakeLockLocked();
                     unregisterNoisyReceiverSafe();
                     abandonFocusLocked();
@@ -664,9 +675,7 @@ public final class AudioLearningService extends Service {
                     sleepDeadlineMs = 0L;
                     playState = STATE_PAUSED;
                     currentStepIndex = 0;
-                    activeStepRole = "";
-                    activeStepText = "";
-                    activeStepLang = "";
+                    clearActiveStepLocked();
                     releaseWakeLockLocked();
                     unregisterNoisyReceiverSafe();
                     abandonFocusLocked();
@@ -685,9 +694,7 @@ public final class AudioLearningService extends Service {
     /** Advances currentIndex per repeatMode. Returns true if playback continues, false if playlist reached end. */
     private boolean advanceAfterTrackLocked() {
         currentStepIndex = 0;
-        activeStepRole = "";
-        activeStepText = "";
-        activeStepLang = "";
+        clearActiveStepLocked();
         if (tracks.isEmpty()) {
             playState = STATE_PAUSED;
             return false;
@@ -820,6 +827,10 @@ public final class AudioLearningService extends Service {
 
     private void setupMediaSession() {
         mediaSession = new MediaSessionCompat(this, "DictLearnAudio");
+        PendingIntent sessionPi = buildOpenAudioPendingIntent();
+        if (sessionPi != null) {
+            mediaSession.setSessionActivity(sessionPi);
+        }
         mediaSession.setCallback(new MediaSessionCompat.Callback() {
             @Override public void onPlay() { resumePlayback(); }
             @Override public void onPause() { pausePlayback(false); }
@@ -827,6 +838,84 @@ public final class AudioLearningService extends Service {
             @Override public void onSkipToPrevious() { prevTrack(); }
             @Override public void onStop() { stopSession(); }
         });
+    }
+
+    private PendingIntent buildOpenAudioPendingIntent() {
+        Intent launch = getPackageManager().getLaunchIntentForPackage(getPackageName());
+        if (launch == null) {
+            launch = new Intent(Intent.ACTION_MAIN);
+            launch.addCategory(Intent.CATEGORY_LAUNCHER);
+            launch.setPackage(getPackageName());
+        }
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        launch.putExtra(EXTRA_OPEN_AUDIO, true);
+        return PendingIntent.getActivity(
+            this, 10, launch, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+    }
+
+    static String formatStepRoleLabel(String role) {
+        if ("meaning".equals(role)) return "Nghĩa";
+        if ("word".equals(role)) return "Từ mới";
+        if ("repeat".equals(role)) return "Nhắc lại";
+        if ("ex_base".equals(role)) return "Dịch VD";
+        if ("ex_target".equals(role)) return "Ví dụ";
+        if ("drill_base".equals(role)) return "Dịch câu";
+        if ("drill_target".equals(role)) return "Công sở";
+        return "";
+    }
+
+    static String formatNotifTitle(AudioSnapshot s) {
+        if (s == null || s.word.isEmpty()) return "Nghe thụ động · dict-learn";
+        StringBuilder sb = new StringBuilder(s.word);
+        String phonetic = !s.romaji.isEmpty() ? s.romaji : s.ipa;
+        if (!phonetic.isEmpty() && (s.word.length() + phonetic.length() + s.meaning.length() <= 46)) {
+            sb.append(" (").append(phonetic).append(")");
+        }
+        if (!s.meaning.isEmpty()) {
+            sb.append(" — ").append(s.meaning);
+        }
+        return sb.toString();
+    }
+
+    static String formatNotifBody(AudioSnapshot s) {
+        if (s == null) return "Đang chuẩn bị danh sách phát";
+        if (!s.exTarget.isEmpty() && !s.exBase.isEmpty()) {
+            return s.exTarget + " — " + s.exBase;
+        }
+        if (!s.exTarget.isEmpty()) return s.exTarget;
+        if (!s.exBase.isEmpty()) return s.exBase;
+        if (!s.meaning.isEmpty() && s.total > 0) {
+            return s.meaning + " · " + (s.index + 1) + "/" + s.total;
+        }
+        if (s.total > 0) return "Từ " + (s.index + 1) + "/" + s.total;
+        return "Đang chuẩn bị danh sách phát";
+    }
+
+    static String formatNotifSubText(AudioSnapshot s) {
+        if (s == null) return "Nghe thụ động";
+        StringBuilder sb = new StringBuilder();
+        if (s.total > 0) {
+            sb.append(s.index + 1).append("/").append(s.total);
+        }
+        String role = formatStepRoleLabel(s.stepRole);
+        if (!role.isEmpty()) {
+            if (sb.length() > 0) sb.append(" · ");
+            sb.append(role);
+        }
+        if (!s.romaji.isEmpty() || !s.ipa.isEmpty()) {
+            String phonetic = !s.romaji.isEmpty() ? s.romaji : s.ipa;
+            if (!formatNotifTitle(s).contains(phonetic)) {
+                if (sb.length() > 0) sb.append(" · ");
+                sb.append(phonetic);
+            }
+        }
+        return sb.length() > 0 ? sb.toString() : "Nghe thụ động";
+    }
+
+    private static String notifKeyFor(AudioSnapshot s) {
+        return s.status + "|" + s.index + "|" + s.total + "|" + s.conceptId
+            + "|" + s.word + "|" + s.meaning + "|" + s.exTarget + "|" + s.exBase + "|" + s.stepRole;
     }
 
     private void ensureNotificationChannel() {
@@ -852,31 +941,22 @@ public final class AudioLearningService extends Service {
             startForeground(NOTIFICATION_ID, n);
         }
         foregroundEntered = true;
-        lastNotifKey = s.status + "|" + s.index + "|" + s.total + "|" + s.conceptId;
+        lastNotifKey = notifKeyFor(s);
     }
 
     private Notification buildNotification(AudioSnapshot s) {
-        Intent launch = getPackageManager().getLaunchIntentForPackage(getPackageName());
-        if (launch == null) launch = new Intent();
-        launch.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        PendingIntent contentPi = PendingIntent.getActivity(
-            this, 0, launch, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
+        PendingIntent contentPi = buildOpenAudioPendingIntent();
 
         boolean isPlaying = STATE_PLAYING.equals(s.status);
-        String title = s.word.isEmpty() ? "Nghe thụ động · dict-learn" : s.word;
-        StringBuilder sub = new StringBuilder();
-        if (!s.meaning.isEmpty()) sub.append(s.meaning);
-        if (s.total > 0) {
-            if (sub.length() > 0) sub.append(" · ");
-            sub.append(s.index + 1).append("/").append(s.total);
-        }
-        String subtitle = sub.length() > 0 ? sub.toString() : "Đang chuẩn bị danh sách phát";
+        String title = formatNotifTitle(s);
+        String body = formatNotifBody(s);
+        String subText = formatNotifSubText(s);
 
         NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_dict_audio)
             .setContentTitle(title)
-            .setContentText(subtitle)
+            .setContentText(body)
+            .setSubText(subText)
             .setContentIntent(contentPi)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(isPlaying)
@@ -920,11 +1000,23 @@ public final class AudioLearningService extends Service {
             .setState(pbState, s.index, isPlaying ? s.speed : 0f)
             .build());
 
+        String title = formatNotifTitle(s);
+        String body = formatNotifBody(s);
+        String sub = formatNotifSubText(s);
+        StringBuilder desc = new StringBuilder();
+        if (!s.exTarget.isEmpty()) desc.append(s.exTarget);
+        if (!s.exBase.isEmpty()) {
+            if (desc.length() > 0) desc.append('\n');
+            desc.append(s.exBase);
+        }
+
         MediaMetadataCompat.Builder mb = new MediaMetadataCompat.Builder()
-            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, s.word.isEmpty() ? "dict-learn" : s.word)
-            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, s.meaning.isEmpty() ? "Nghe thụ động" : s.meaning)
-            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM,
-                s.total > 0 ? ("Từ " + (s.index + 1) + " / " + s.total) : "Nghe thụ động");
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+            .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, title)
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, body)
+            .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, body)
+            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, sub)
+            .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION, desc.toString());
         mediaSession.setMetadata(mb.build());
     }
 
@@ -934,6 +1026,10 @@ public final class AudioLearningService extends Service {
             int safeIdx = total > 0 ? Math.max(0, Math.min(currentIndex, total - 1)) : 0;
             AudioTrackItem cur = total > 0 ? tracks.get(safeIdx) : null;
             long sleepRem = sleepDeadlineMs > 0L ? Math.max(0L, sleepDeadlineMs - System.currentTimeMillis()) : 0L;
+            String ro = cur != null ? cur.romaji : "";
+            String ipa = cur != null ? cur.ipa : "";
+            String exT = !activePairTarget.isEmpty() ? activePairTarget : (cur != null ? cur.exTarget : "");
+            String exB = !activePairBase.isEmpty() ? activePairBase : (cur != null ? cur.exBase : "");
             return new AudioSnapshot(
                 playState,
                 safeIdx,
@@ -941,6 +1037,10 @@ public final class AudioLearningService extends Service {
                 cur != null ? cur.conceptId : "",
                 cur != null ? cur.word : "",
                 cur != null ? cur.meaning : "",
+                ro,
+                ipa,
+                exT,
+                exB,
                 activeStepRole,
                 activeStepText,
                 activeStepLang,
@@ -964,7 +1064,7 @@ public final class AudioLearningService extends Service {
         AudioSnapshot s = buildSnapshot();
         lastSnapshot = s;
         updateMediaSession(s);
-        String nKey = s.status + "|" + s.index + "|" + s.total + "|" + s.conceptId;
+        String nKey = notifKeyFor(s);
         if (foregroundEntered && notificationManager != null && !STATE_IDLE.equals(s.status)
             && !nKey.equals(lastNotifKey)) {
             lastNotifKey = nKey;

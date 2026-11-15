@@ -126,7 +126,11 @@ public class DictTTSPluginUnitTest {
         // Deep preset with drills (2 bilingual drills * 3 steps = +6 -> 12 steps total)
         List<UtteranceStep> deepDrills = AudioQueueModels.buildSteps(track, new AudioConfig("deep", 1.0f, "none", true, false));
         assertEquals(12, deepDrills.size());
+        assertEquals("Excuse me, can you show me the way?", deepDrills.get(0).pairTarget);
+        assertEquals("Xin lỗi, bạn có thể chỉ đường cho tôi được không?", deepDrills.get(0).pairBase);
         assertEquals("drill_base", deepDrills.get(6).role);
+        assertEquals("💼 I will say excuse me first.", deepDrills.get(6).pairTarget);
+        assertEquals("Tôi sẽ nói xin lỗi trước.", deepDrills.get(6).pairBase);
         assertEquals("drill_target", deepDrills.get(7).role);
         assertEquals("drill_target", deepDrills.get(8).role);
         assertEquals("drill_target", deepDrills.get(11).role);
@@ -137,6 +141,8 @@ public class DictTTSPluginUnitTest {
         assertEquals("meaning", quickDefault.get(0).role);
         assertEquals("word", quickDefault.get(1).role);
         assertEquals("repeat", quickDefault.get(2).role);
+        assertEquals("Excuse me, can you show me the way?", quickDefault.get(0).pairTarget);
+        assertEquals("Xin lỗi, bạn có thể chỉ đường cho tôi được không?", quickDefault.get(2).pairBase);
 
         // Configurable setting: base_first + targetRepeat=1
         List<UtteranceStep> quickSingle = AudioQueueModels.buildSteps(
@@ -155,7 +161,8 @@ public class DictTTSPluginUnitTest {
         assertEquals("meaning", targetFirst.get(1).role);
         assertEquals("repeat", targetFirst.get(2).role);
 
-        // Target-only preset keeps only target-language items repeated 2x by default
+        // Target-only preset keeps only target-language items repeated 2x by default,
+        // while visual pairTarget/pairBase stay bilingual for screen & notification display.
         List<UtteranceStep> targetOnly = AudioQueueModels.buildSteps(track, new AudioConfig("target_only", 1.0f, "none", true, false));
         for (UtteranceStep s : targetOnly) {
             assertEquals("en", s.lang);
@@ -165,6 +172,48 @@ public class DictTTSPluginUnitTest {
         assertEquals("repeat", targetOnly.get(1).role);
         assertEquals("ex_target", targetOnly.get(2).role);
         assertEquals("ex_target", targetOnly.get(3).role);
+        assertEquals("Xin lỗi, bạn có thể chỉ đường cho tôi được không?", targetOnly.get(0).pairBase);
+    }
+
+    @Test
+    public void notificationFormatting_includesWordMeaningAndBilingualExamples() {
+        AudioLearningService.AudioSnapshot snap = new AudioLearningService.AudioSnapshot(
+            AudioLearningService.STATE_PLAYING,
+            0,
+            30,
+            "EXCUSE_ME",
+            "excuse me",
+            "xin lỗi",
+            "",
+            "/ɪkˈskjuːz miː/",
+            "Excuse me, sir.",
+            "Xin lỗi đã làm phiền.",
+            "ex_target",
+            "Excuse me, sir.",
+            "en",
+            "deep",
+            "base_first",
+            2,
+            1.0f,
+            "none",
+            false,
+            false,
+            0L,
+            0,
+            0L,
+            "",
+            ""
+        );
+        String title = AudioLearningService.formatNotifTitle(snap);
+        String body = AudioLearningService.formatNotifBody(snap);
+        String sub = AudioLearningService.formatNotifSubText(snap);
+
+        assertTrue("Title should include both word and meaning: " + title,
+            title.contains("excuse me") && title.contains("xin lỗi"));
+        assertTrue("Body should include both target example and base translation: " + body,
+            body.contains("Excuse me, sir.") && body.contains("Xin lỗi đã làm phiền."));
+        assertTrue("SubText should include queue progress and current step: " + sub,
+            sub.contains("1/30") && sub.contains("Ví dụ"));
     }
 
     @Test

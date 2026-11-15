@@ -29,6 +29,9 @@
   var audioPreviewTracks = [];
   var audioPreviewIndex = 0;
   var audioEnrichReq = "";
+  var audioCardCache = {};
+  var appBootReady = false;
+  var pendingOpenAudio = false;
 
   // Demo mode (?lite=1) + lazy drill-pack loading. The full drills.json is
   // the heaviest payload (~23 MB); the app boots on concepts+langs so the
@@ -1100,10 +1103,18 @@
         $("boot").classList.add("hidden");
         $("top").classList.remove("hidden");
         $("app").classList.remove("hidden");
-        return initAudioSubsystem().then(function () {
+        return initAudioSubsystem().then(function (initAudioState) {
           renderHome();
-          showHome();
           buildQueue();
+          appBootReady = true;
+          var openAudioNow = pendingOpenAudio
+            || !!(initAudioState && (initAudioState.openRequested || initAudioState.status === "playing"));
+          pendingOpenAudio = false;
+          if (openAudioNow) {
+            showAudio(false);
+          } else {
+            showHome();
+          }
           return render();
         });
       });
@@ -1255,26 +1266,28 @@
     });
   }
 
-  function enrichAudioCard(conceptId) {
-    if (!conceptId || audioEnrichReq === conceptId) return;
-    audioEnrichReq = conceptId;
+  function ensureAudioCardData(conceptId) {
+    if (!conceptId) return;
+    var key = base() + "_" + target() + "_" + conceptId;
+    if (audioCardCache[key] || audioEnrichReq === key) return;
+    audioEnrichReq = key;
     Promise.all([loadLang(base()), loadLang(target())]).then(function (parts) {
-      if (audioEnrichReq !== conceptId) return;
-      var cur = window.AudioPlayer ? window.AudioPlayer.getState() : null;
-      if (!cur || cur.conceptId !== conceptId) return;
+      if (audioEnrichReq === key) audioEnrichReq = "";
       var baseD = parts[0] || {}, targD = parts[1] || {};
-      var ph = [
-        (targD.ro && targD.ro[conceptId]) || "",
-        (targD.ipa && targD.ipa[conceptId]) || ""
-      ].filter(Boolean).join(" · ");
-      if ($("audio-phonetics") && !$("audio-phonetics").textContent) $("audio-phonetics").textContent = ph;
-      if ($("audio-ex-target") && cur.stepRole !== "drill_target" && !$("audio-ex-target").textContent) {
-        $("audio-ex-target").textContent = (targD.e && targD.e[conceptId]) || "";
+      audioCardCache[key] = {
+        _done: true,
+        ro: (targD.ro && targD.ro[conceptId]) || "",
+        ipa: (targD.ipa && targD.ipa[conceptId]) || "",
+        exTarget: (targD.e && targD.e[conceptId]) || "",
+        exBase: (baseD.e && baseD.e[conceptId]) || ""
+      };
+      var cur = window.AudioPlayer ? window.AudioPlayer.getState() : null;
+      if (cur && cur.conceptId === conceptId) {
+        renderAudioScreen(cur);
       }
-      if ($("audio-ex-base") && cur.stepRole !== "drill_base" && !$("audio-ex-base").textContent) {
-        $("audio-ex-base").textContent = (baseD.e && baseD.e[conceptId]) || "";
-      }
-    }).catch(function () {});
+    }).catch(function () {
+      if (audioEnrichReq === key) audioEnrichReq = "";
+    });
   }
 
   function renderAudioScreen(state) {
@@ -1350,16 +1363,25 @@
       }
     }
 
+    var cacheKey = view.conceptId ? (base() + "_" + target() + "_" + view.conceptId) : "";
+    var cached = cacheKey ? (audioCardCache[cacheKey] || null) : null;
+    var effRo = view.ro || (cached && cached.ro) || "";
+    var effIpa = view.ipa || (cached && cached.ipa) || "";
+    var effExTarget = view.exTarget
+      || (view.stepRole === "drill_target" && view.stepText ? ("💼 " + view.stepText) : "")
+      || (cached && cached.exTarget) || "";
+    var effExBase = view.exBase
+      || (view.stepRole === "drill_base" && view.stepText ? view.stepText : "")
+      || (cached && cached.exBase) || "";
+
     if ($("audio-word")) $("audio-word").textContent = view.word || "—";
     if ($("audio-phonetics")) {
-      $("audio-phonetics").textContent = [view.ro, view.ipa].filter(Boolean).join(" · ");
+      $("audio-phonetics").textContent = [effRo, effIpa].filter(Boolean).join(" · ");
     }
     if ($("audio-meaning")) $("audio-meaning").textContent = view.meaning || "";
 
-    var showExTarget = view.stepRole === "drill_target" ? ("💼 " + (view.stepText || "")) : (view.exTarget || "");
-    var showExBase = view.stepRole === "drill_base" ? (view.stepText || "") : (view.exBase || "");
-    if ($("audio-ex-target")) $("audio-ex-target").textContent = showExTarget;
-    if ($("audio-ex-base")) $("audio-ex-base").textContent = showExBase;
+    if ($("audio-ex-target")) $("audio-ex-target").textContent = effExTarget;
+    if ($("audio-ex-base")) $("audio-ex-base").textContent = effExBase;
 
     if ($("audio-word")) $("audio-word").classList.toggle("audio-hl", view.stepRole === "word" || view.stepRole === "repeat");
     if ($("audio-meaning")) $("audio-meaning").classList.toggle("audio-hl", view.stepRole === "meaning");
@@ -1411,8 +1433,8 @@
       }
     }
 
-    if (isActive && view.conceptId && !view.ro && !view.exTarget) {
-      enrichAudioCard(view.conceptId);
+    if (isActive && view.conceptId && !cached && (!effExTarget || !effExBase || (!effRo && !effIpa))) {
+      ensureAudioCardData(view.conceptId);
     }
   }
 
@@ -1429,10 +1451,14 @@
     if (!visible) return;
     if ($("audio-mini-title")) {
       $("audio-mini-title").textContent = (st.status === "playing" ? "🎧 " : st.status === "loading" ? "⏳ " : "⏸ ") +
-        (st.word || "Đang phát") + (st.total ? " (" + (st.index + 1) + "/" + st.total + ")" : "");
+        (st.word || "Đang phát") + (st.meaning ? " — " + st.meaning : "") +
+        (st.total ? " (" + (st.index + 1) + "/" + st.total + ")" : "");
     }
     if ($("audio-mini-sub")) {
-      $("audio-mini-sub").textContent = st.stepText || st.meaning || "";
+      var subLine = st.exTarget
+        ? (st.exTarget + (st.exBase ? " — " + st.exBase : ""))
+        : (st.stepText || st.meaning || "");
+      $("audio-mini-sub").textContent = subLine;
     }
     if ($("audio-mini-toggle")) {
       $("audio-mini-toggle").textContent = st.status === "playing" || st.status === "loading" ? "⏸" : "▶";
@@ -1440,7 +1466,7 @@
   }
 
   function initAudioSubsystem() {
-    if (!window.AudioPlayer) return Promise.resolve();
+    if (!window.AudioPlayer) return Promise.resolve(null);
     window.AudioPlayer.setOnTrackHeard(function (conceptId, st) {
       if (!audioStats || !conceptId) return;
       var t = todayISO();
@@ -1467,6 +1493,10 @@
       renderAudioScreen(st);
       updateMiniAudioBar(st);
       updateAudioHomeMeta();
+      if (st && st.openRequested) {
+        if (appBootReady) showAudio(false);
+        else pendingOpenAudio = true;
+      }
     });
     window.AudioPlayer.subscribePrefetch(function (ev) {
       var btn = $("audio-prefetch");
@@ -1485,8 +1515,10 @@
     return window.AudioPlayer.init().then(function () {
       return loadAudioStats();
     }).then(function () {
-      renderAudioScreen(window.AudioPlayer.getState());
-      updateMiniAudioBar(window.AudioPlayer.getState());
+      var cur = window.AudioPlayer.getState();
+      renderAudioScreen(cur);
+      updateMiniAudioBar(cur);
+      return cur;
     });
   }
 
@@ -1632,9 +1664,30 @@
     }
     if ($("audio-mini-stop")) $("audio-mini-stop").onclick = function () { window.AudioPlayer.stop(); };
 
+    if ($("audio-word")) {
+      $("audio-word").onclick = function () {
+        var st = window.AudioPlayer.getState();
+        if (st && st.status === "playing") return;
+        var w = $("audio-word").textContent;
+        if (w && w !== "—") speak(w, target(), true);
+      };
+    }
+    if ($("audio-ex-target")) {
+      $("audio-ex-target").onclick = function () {
+        var st = window.AudioPlayer.getState();
+        if (st && st.status === "playing") return;
+        var ex = String($("audio-ex-target").textContent || "").replace(/^💼\s*/, "").trim();
+        if (ex) speak(ex, target(), true);
+      };
+    }
+
     if (document.addEventListener) {
       document.addEventListener("visibilitychange", function () {
-        if (!document.hidden && window.AudioPlayer) window.AudioPlayer.syncState();
+        if (!document.hidden && window.AudioPlayer) {
+          window.AudioPlayer.syncState().then(function (st) {
+            if (st && st.openRequested) showAudio(false);
+          });
+        }
       });
     }
   }
@@ -1723,6 +1776,8 @@
         : Promise.resolve();
       audioPreviewTracks = [];
       audioPreviewIndex = 0;
+      audioCardCache = {};
+      audioEnrichReq = "";
       searchIndexKey = "";
       searchIndexList = [];
       if ($("dict-search") && $("dict-search").value) {

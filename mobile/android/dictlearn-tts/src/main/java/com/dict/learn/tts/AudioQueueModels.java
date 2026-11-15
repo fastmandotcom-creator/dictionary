@@ -81,12 +81,27 @@ public final class AudioQueueModels {
         public final String text;
         public final String lang;
         public final long pauseAfterMs;
+        public final String pairTarget;
+        public final String pairBase;
 
         public UtteranceStep(String role, String text, String lang, long pauseAfterMs) {
+            this(role, text, lang, pauseAfterMs, "", "");
+        }
+
+        public UtteranceStep(
+            String role,
+            String text,
+            String lang,
+            long pauseAfterMs,
+            String pairTarget,
+            String pairBase
+        ) {
             this.role = role;
             this.text = text;
             this.lang = lang;
             this.pauseAfterMs = Math.max(0L, Math.min(10_000L, pauseAfterMs));
+            this.pairTarget = safeTrim(pairTarget);
+            this.pairBase = safeTrim(pairBase);
         }
     }
 
@@ -200,7 +215,9 @@ public final class AudioQueueModels {
             order,
             repeatCount,
             speed,
-            true
+            true,
+            item.exTarget,
+            item.exBase
         );
 
         if (PRESET_QUICK.equals(preset)) {
@@ -221,7 +238,9 @@ public final class AudioQueueModels {
                 order,
                 repeatCount,
                 speed,
-                false
+                false,
+                item.exTarget,
+                item.exBase
             );
         }
 
@@ -243,7 +262,9 @@ public final class AudioQueueModels {
                         order,
                         repeatCount,
                         speed,
-                        false
+                        false,
+                        "💼 " + d.target,
+                        d.base
                     );
                     added++;
                 }
@@ -264,7 +285,9 @@ public final class AudioQueueModels {
         String order,
         int repeatCount,
         float speed,
-        boolean isWordBlock
+        boolean isWordBlock,
+        String pairTarget,
+        String pairBase
     ) {
         if (targetText.isEmpty()) return;
         boolean hasPrimary = !primaryText.isEmpty() && !primaryText.equalsIgnoreCase(targetText);
@@ -277,25 +300,25 @@ public final class AudioQueueModels {
             for (int i = 0; i < repeatCount; i++) {
                 String role = i == 0 ? targetFirstRole : targetRepeatRole;
                 long pause = (i < repeatCount - 1) ? repeatGap : blockEnd;
-                out.add(new UtteranceStep(role, targetText, targetLang, pause));
+                out.add(new UtteranceStep(role, targetText, targetLang, pause, pairTarget, pairBase));
             }
             return;
         }
 
         if (ORDER_BASE_FIRST.equals(order)) {
-            out.add(new UtteranceStep(primaryRole, primaryText, primaryLang, afterPrimaryCue));
+            out.add(new UtteranceStep(primaryRole, primaryText, primaryLang, afterPrimaryCue, pairTarget, pairBase));
             for (int i = 0; i < repeatCount; i++) {
                 String role = i == 0 ? targetFirstRole : targetRepeatRole;
                 long pause = (i < repeatCount - 1) ? repeatGap : blockEnd;
-                out.add(new UtteranceStep(role, targetText, targetLang, pause));
+                out.add(new UtteranceStep(role, targetText, targetLang, pause, pairTarget, pairBase));
             }
             return;
         }
 
         // ORDER_TARGET_FIRST: test recognition/recall first, then anchor on remaining target repeats
         if (repeatCount <= 1) {
-            out.add(new UtteranceStep(targetFirstRole, targetText, targetLang, recallBeforePrimary));
-            out.add(new UtteranceStep(primaryRole, primaryText, primaryLang, blockEnd));
+            out.add(new UtteranceStep(targetFirstRole, targetText, targetLang, recallBeforePrimary, pairTarget, pairBase));
+            out.add(new UtteranceStep(primaryRole, primaryText, primaryLang, blockEnd, pairTarget, pairBase));
             return;
         }
 
@@ -303,10 +326,10 @@ public final class AudioQueueModels {
         for (int i = 0; i < preCount; i++) {
             String role = i == 0 ? targetFirstRole : targetRepeatRole;
             long pause = (i < preCount - 1) ? repeatGap : recallBeforePrimary;
-            out.add(new UtteranceStep(role, targetText, targetLang, pause));
+            out.add(new UtteranceStep(role, targetText, targetLang, pause, pairTarget, pairBase));
         }
-        out.add(new UtteranceStep(primaryRole, primaryText, primaryLang, scalePause(550L, speed)));
-        out.add(new UtteranceStep(targetRepeatRole, targetText, targetLang, blockEnd));
+        out.add(new UtteranceStep(primaryRole, primaryText, primaryLang, scalePause(550L, speed), pairTarget, pairBase));
+        out.add(new UtteranceStep(targetRepeatRole, targetText, targetLang, blockEnd, pairTarget, pairBase));
     }
 
     private static String safeTrim(String s) {
