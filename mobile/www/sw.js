@@ -9,7 +9,7 @@
  * Registered in index.html:
  *   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
  */
-const CACHE = 'dict-learn-v10'; // v10: v2.0.1 Passive Audio notification examples & tap-to-open Audio screen
+const CACHE = 'dict-learn-v11'; // v11: v2.1.0 Unified Session Deck & Seamless Study <-> Audio Handoff
 
 // Core app shell (always cached; revalidated on each navigate)
 const SHELL = [

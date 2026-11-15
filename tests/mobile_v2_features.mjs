@@ -81,6 +81,17 @@ const IDS = [
   'dict-search', 'dict-clear', 'dict-results', 'cefr-filter', 'cefr-summary',
   'sessionlen', 'sndbtn', 'thmbtn', 'toast', 'playdrill', 'drillcheck', 'fillcheck',
   'autoupd', 'checkupd', 'verline', 'setbtn', 'settings-card', 'update-banner',
+  'session-status', 'study-to-audio', 'audio-to-study',
+  'audio-grade-row', 'audio-grade-hard', 'audio-grade-ok', 'audio-grade-good',
+  'audio-b1-sub', 'audio-b2-sub', 'audio-b3-sub',
+  'audiostartbtn', 'audio-home-sub', 'audio-screen', 'audio-homebtn', 'audio-progress',
+  'audio-sleep', 'audio-card', 'audio-state-badge', 'audio-cefr-badge', 'audio-word',
+  'audio-phonetics', 'audio-meaning', 'audio-ex-target', 'audio-ex-base', 'audio-steps',
+  'audio-prev', 'audio-play', 'audio-next', 'audio-stop', 'audio-master', 'audio-prefetch',
+  'audio-source', 'audio-preset', 'audio-order-row', 'audio-order', 'audio-target-repeat',
+  'audio-speed', 'audio-repeat', 'audio-drills-row', 'audio-drills', 'audio-offline',
+  'audio-autostage', 'audio-note', 'audio-mini', 'audio-mini-open', 'audio-mini-title',
+  'audio-mini-sub', 'audio-mini-toggle', 'audio-mini-stop',
 ];
 
 function buildSandbox(initialStorage = {}) {
@@ -90,6 +101,10 @@ function buildSandbox(initialStorage = {}) {
   els.target.value = 'en';
   els.sessionlen.value = '10';
   els.autoupd.checked = true;
+  els['audio-source'].value = 'session';
+  els['audio-preset'].value = 'quick';
+  els['audio-speed'].value = '1';
+  els['audio-repeat'].value = 'none';
 
   // Create CEFR pill buttons matching index.html
   const levels = ['all', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
@@ -104,7 +119,7 @@ function buildSandbox(initialStorage = {}) {
   els['cefr-filter']._pills = pills;
 
   ['drill', 'fillbox', 'conjbox'].forEach((id) => els[id].classList.add('panel'));
-  ['study', 'drill', 'fillbox', 'conjbox', 'update-banner', 'toast', 'back-hint', 'dict-clear', 'dict-results', 'undobtn']
+  ['study', 'audio-screen', 'audio-mini', 'drill', 'fillbox', 'conjbox', 'update-banner', 'toast', 'back-hint', 'dict-clear', 'dict-results', 'undobtn']
     .forEach((id) => els[id].classList.add('hidden'));
 
   const spoken = [];
@@ -361,7 +376,43 @@ async function main() {
   assert.ok(sb2.els['conj-opts'].children.length >= 2, 'fr context quiz builds >= 2 choices dynamically');
   assert.ok(sb2.spoken.some((u) => u.lang === 'fr'), 'fr context quiz speaks in "fr"');
 
-  console.log('\nALL v2.0.0 FEATURE & BUGFIX TESTS PASSED');
+  // 7) Unified 50-word Session Handoff (Study <-> Audio on 12k dataset)
+  console.log('7) Unified 50-word Session Handoff (Study <-> Audio)');
+  sb2.els.target.value = 'en';
+  await sb2.els.target.dispatch('change');
+  await sleep(120);
+  sb2.els.sessionlen.value = '50';
+  sb2.els.sessionlen.dispatch('change');
+  sb2.els.startbtn.dispatch('click');
+  await sleep(60);
+  for (let s = 0; s < 5; s++) {
+    sb2.els.b3.dispatch('click');
+    await sleep(15);
+  }
+  await sleep(40);
+  const sixthConcept = sb2.els.card.dataset.id;
+  assert.match(sb2.els.progress.textContent, /^6 \/ 50/, 'study at card 6 / 50');
+
+  await sb2.els['study-to-audio'].dispatch('click');
+  await sleep(80);
+  assert.ok(!sb2.els['audio-screen'].classList.contains('hidden'), 'study-to-audio opens Audio screen');
+  assert.strictEqual(sb2.win.AudioPlayer.getTracks().length, 50, 'Audio tracks match 50-word Study queue');
+  assert.strictEqual(sb2.win.AudioPlayer.getState().conceptId, sixthConcept, 'Audio resumes exact 6th word');
+
+  await sb2.els['audio-next'].dispatch('click');
+  await sb2.els['audio-next'].dispatch('click');
+  await sleep(40);
+  const eighthConcept = sb2.win.AudioPlayer.getState().conceptId;
+  assert.strictEqual(sb2.win.AudioPlayer.getState().index, 7, 'Audio advanced to 8th word (index 7)');
+
+  await sb2.els['audio-to-study'].dispatch('click');
+  await sleep(60);
+  assert.ok(!sb2.els.study.classList.contains('hidden'), 'audio-to-study returns to Study screen');
+  assert.strictEqual(sb2.els.card.dataset.id, eighthConcept, 'Study resumes exact 8th word');
+  assert.match(sb2.els.progress.textContent, /^8 \/ 50/, 'Study progress reflects 8 / 50');
+  await sb2.els['audio-stop'].onclick();
+
+  console.log('\nALL v2.0.0 & v2.1.0 UNIFIED SESSION TESTS PASSED');
 }
 
 main().catch((e) => { console.error('FAIL', e); process.exit(1); });

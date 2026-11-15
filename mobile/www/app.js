@@ -347,24 +347,52 @@
     var seen = false;
     try { seen = !!localStorage.getItem("dictlearn_onboard_" + pairKey()); } catch (e) {}
     $("onboard").classList.toggle("hidden", seen || c.total > 0);
+    updateSessionStatus();
     updateAudioHomeMeta();
+  }
+
+  function updateSessionStatus() {
+    var el = $("session-status");
+    if (!el) return;
+    var active = window.AudioPlayer ? window.AudioPlayer.getState() : null;
+    var lvTxt = cefrLevel === "all" ? "A1–C2" : cefrLevel;
+    if (active && (active.status === "playing" || active.status === "paused") && active.total) {
+      el.textContent = (active.status === "playing" ? "Đang nghe " : "Tạm dừng ") +
+        ((active.index || 0) + 1) + " / " + active.total + " từ · chạm Thẻ hoặc Nghe để tiếp tục";
+      return;
+    }
+    if (queue.length && idx > 0 && idx < queue.length && !sessionDone) {
+      el.textContent = "Đang ở từ " + (idx + 1) + " / " + queue.length + " (" + lvTxt + ") · đồng bộ Thẻ ↔ Nghe";
+      return;
+    }
+    var n = queue.length || sessionLen();
+    el.textContent = "Buổi " + n + " từ (" + lvTxt + ") · dùng chung cho Thẻ & Nghe";
   }
 
   function updateAudioHomeMeta() {
     var sub = $("audio-home-sub");
     if (!sub) return;
+    var active = window.AudioPlayer ? window.AudioPlayer.getState() : null;
+    if (active && (active.status === "playing" || active.status === "paused") && active.word) {
+      var posTxt = active.total ? (" (" + ((active.index || 0) + 1) + "/" + active.total + ")") : "";
+      sub.textContent = (active.status === "playing" ? "Đang phát: " : "Đang tạm dừng: ") + active.word + posTxt + " · " + (active.meaning || "");
+      return;
+    }
     if (!audioStats) {
-      sub.textContent = "Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình";
+      sub.textContent = queue.length
+        ? ("Cùng " + queue.length + " từ của buổi học · phát cả khi tắt màn hình")
+        : "Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình";
       return;
     }
     var heardToday = Object.keys(audioStats.todayHeardIds || {}).length;
-    var active = window.AudioPlayer ? window.AudioPlayer.getState() : null;
-    if (active && (active.status === "playing" || active.status === "paused") && active.word) {
-      sub.textContent = (active.status === "playing" ? "Đang phát: " : "Đang tạm dừng: ") + active.word + " · " + (active.meaning || "");
+    if (queue.length && idx > 0 && idx < queue.length && !sessionDone) {
+      sub.textContent = "Tiếp tục từ vị trí " + (idx + 1) + " / " + queue.length + " · phát ngầm song ngữ";
     } else if (heardToday > 0) {
       sub.textContent = "Hôm nay đã nghe " + heardToday + " từ · chạm để nghe tiếp";
     } else {
-      sub.textContent = "Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình";
+      sub.textContent = queue.length
+        ? ("Cùng " + queue.length + " từ của buổi học · phát cả khi tắt màn hình")
+        : "Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình";
     }
   }
 
@@ -401,6 +429,7 @@
     if (!queue.length) queue = concepts.slice(0, sessionLen());
     idx = 0;
     updateProgress();
+    updateSessionStatus();
   }
 
   function openConceptInStudy(id) {
@@ -595,6 +624,7 @@
         '<div class="done-actions">' +
           hardBtnHtml +
           '<button type="button" class="' + (sessionHardIds.length ? "ghost" : "primary") + '" data-done-act="next">Học ' + sessionLen() + " từ tiếp theo →</button>" +
+          '<button type="button" class="ghost" data-done-act="audio">🎧 Nghe lại buổi học này</button>' +
           '<button type="button" class="ghost" data-done-act="home">← Về trang chủ</button>' +
         "</div>" +
       "</div>";
@@ -1155,7 +1185,7 @@
   function audioPrefsFromUI() {
     var basePrefs = (audioStats && audioStats.prefs) || (window.AudioPlayer && window.AudioPlayer.DEFAULT_PREFS) || {};
     var out = Object.assign({ autoStageSrs: false }, basePrefs);
-    if ($("audio-source")) out.source = $("audio-source").value || out.source || "due";
+    if ($("audio-source")) out.source = $("audio-source").value || out.source || "session";
     if ($("audio-preset")) out.preset = $("audio-preset").value || out.preset || "deep";
     if ($("audio-order")) out.order = $("audio-order").value || out.order || "base_first";
     if ($("audio-target-repeat")) out.targetRepeat = parseInt($("audio-target-repeat").value || String(out.targetRepeat || 2), 10) || 2;
@@ -1171,7 +1201,7 @@
   function syncAudioPrefsUI() {
     if (!audioStats || !audioStats.prefs) return;
     var p = audioStats.prefs;
-    if ($("audio-source")) $("audio-source").value = p.source || "due";
+    if ($("audio-source")) $("audio-source").value = p.source || "session";
     if ($("audio-preset")) $("audio-preset").value = p.preset || "deep";
     if ($("audio-order")) $("audio-order").value = p.order || "base_first";
     if ($("audio-target-repeat")) $("audio-target-repeat").value = String(p.targetRepeat || 2);
@@ -1204,9 +1234,11 @@
     return window.AudioPlayer.saveStats(base(), target(), audioStats);
   }
 
-  function prepareAudioTracks(ensureDrills) {
+  function prepareAudioTracks(ensureDrills, overrideTargetId) {
     if (!window.AudioPlayer) return Promise.resolve([]);
     var prefs = audioPrefsFromUI();
+    var src = prefs.source || "session";
+    if (src === "session" && !queue.length) buildQueue();
     var loads = [loadLang(base()), loadLang(target())];
     if ((ensureDrills || prefs.includeDrills) && base() === "vi" && target() === "en" && drillsReady) {
       loads.push(drillsReady.catch(function () {}));
@@ -1219,18 +1251,23 @@
         drills: drills,
         srs: readSrs(),
         mastered: (audioStats && audioStats.mastered) || {},
-        source: prefs.source || "due",
+        source: src,
+        sessionIds: src === "session" ? queue : null,
         levelFilter: cefrLevel || "all",
         baseLang: base(),
         targetLang: target(),
-        limit: prefs.limit || 30,
+        limit: src === "session" ? Math.max(sessionLen(), queue.length) : sessionLen(),
         today: todayISO()
       });
       audioPreviewTracks = list;
+      var targetLookup = overrideTargetId
+        || (src === "session" && !sessionDone && queue[idx] ? queue[idx] : "")
+        || (audioStats && audioStats.cursorId)
+        || "";
       var idxFound = 0;
-      if (audioStats && audioStats.cursorId) {
+      if (targetLookup) {
         for (var i = 0; i < list.length; i++) {
-          if (list[i].id === audioStats.cursorId) { idxFound = i; break; }
+          if (list[i].id === targetLookup) { idxFound = i; break; }
         }
       }
       audioPreviewIndex = idxFound;
@@ -1238,6 +1275,144 @@
       if (!st || st.status === "idle") renderAudioScreen(st);
       return list;
     });
+  }
+
+  function updateAudioGradeHints(id) {
+    var rec = id ? (readSrs()[id] || null) : null;
+    var hardNext = computeNextSrs(rec, "hard");
+    var okNext = computeNextSrs(rec, "ok");
+    var goodNext = computeNextSrs(rec, "good");
+    if ($("audio-b1-sub")) $("audio-b1-sub").textContent = "lặp lại " + hardNext.interval + " ngày";
+    if ($("audio-b2-sub")) $("audio-b2-sub").textContent = "lặp lại " + okNext.interval + " ngày";
+    if ($("audio-b3-sub")) $("audio-b3-sub").textContent = "gặp lại " + goodNext.interval + " ngày";
+  }
+
+  function syncStudyCursorFromAudio(st) {
+    if (!st || !st.conceptId || !st.status || st.status === "idle") return;
+    var studyVisible = $("study") && !$("study").classList.contains("hidden");
+    if (studyVisible) return;
+    var qPos = queue.indexOf(st.conceptId);
+    if (qPos !== -1) {
+      idx = qPos;
+      sessionDone = false;
+    }
+    if (typeof st.index === "number" && st.index >= 0) {
+      audioPreviewIndex = st.index;
+    }
+    updateSessionStatus();
+  }
+
+  function handoffStudyToAudio() {
+    if (!window.AudioPlayer || !$("audio-screen")) return Promise.resolve({ ok: false });
+    if (!queue.length) buildQueue();
+    var targetCid = (!sessionDone && idx >= 0 && idx < queue.length) ? queue[idx] : (queue[0] || "");
+    if ($("audio-source") && $("audio-source").value !== "session") {
+      $("audio-source").value = "session";
+      if (audioStats && audioStats.prefs) {
+        audioStats.prefs.source = "session";
+        saveAudioStats();
+      }
+    }
+    hidePanels();
+    $("home").classList.add("hidden");
+    $("study").classList.add("hidden");
+    $("audio-screen").classList.remove("hidden");
+    updateMiniAudioBar();
+    var prefs = audioPrefsFromUI();
+    return prepareAudioTracks(prefs.includeDrills, targetCid).then(function (list) {
+      if (!list || !list.length) {
+        renderAudioScreen(window.AudioPlayer.getState());
+        return { ok: false };
+      }
+      return startPassiveAudio();
+    });
+  }
+
+  function syncQueueFromAudio(activeTracks, targetCid, targetTrackIdx) {
+    var trackIds = [];
+    for (var i = 0; i < (activeTracks || []).length; i++) {
+      if (activeTracks[i] && activeTracks[i].id) trackIds.push(activeTracks[i].id);
+    }
+    var src = ($("audio-source") && $("audio-source").value) || "session";
+    if (targetCid && queue.indexOf(targetCid) !== -1 && (src === "session" || !trackIds.length)) {
+      idx = queue.indexOf(targetCid);
+    } else if (trackIds.length) {
+      queue = trackIds;
+      requeued = {};
+      sessionHardIds = [];
+      undoStack = [];
+      sessionStats = { learned: 0, remembered: 0, correct: 0, practice: 0 };
+      var foundIdx = targetCid ? queue.indexOf(targetCid) : -1;
+      idx = foundIdx !== -1 ? foundIdx : Math.max(0, Math.min(Number(targetTrackIdx) || 0, queue.length - 1));
+    } else if (targetCid) {
+      openConceptInStudy(targetCid);
+      return;
+    } else if (!queue.length) {
+      buildQueue();
+    }
+    sessionDone = false;
+    showStudy();
+  }
+
+  function handoffAudioToStudy() {
+    if (!window.AudioPlayer) {
+      showStudy();
+      return Promise.resolve();
+    }
+    var st = window.AudioPlayer.getState();
+    var isLive = !!(st && st.status && st.status !== "idle");
+    var playerTracks = window.AudioPlayer.getTracks ? window.AudioPlayer.getTracks() : [];
+    var activeTracks = (isLive && playerTracks && playerTracks.length) ? playerTracks : audioPreviewTracks;
+    var targetCid = (isLive && st.conceptId)
+      ? st.conceptId
+      : (activeTracks[audioPreviewIndex] ? activeTracks[audioPreviewIndex].id : "");
+    var targetTrackIdx = (isLive && typeof st.index === "number") ? st.index : audioPreviewIndex;
+    var pauseP = (st && (st.status === "playing" || st.status === "loading"))
+      ? window.AudioPlayer.pause()
+      : Promise.resolve(st);
+    return pauseP.then(function () {
+      syncQueueFromAudio(activeTracks, targetCid, targetTrackIdx);
+    });
+  }
+
+  function gradeFromAudio(kind) {
+    if (!window.AudioPlayer) return Promise.resolve();
+    var st = window.AudioPlayer.getState();
+    var isActive = !!(st && st.status && st.status !== "idle" && st.conceptId);
+    var cid = isActive ? st.conceptId : (audioPreviewTracks[audioPreviewIndex] && audioPreviewTracks[audioPreviewIndex].id);
+    if (!cid) return Promise.resolve();
+
+    var store = readSrs();
+    var qPos = queue.indexOf(cid);
+    undoStack.push({
+      id: cid,
+      prevEntry: store[cid] ? Object.assign({}, store[cid]) : null,
+      prevIdx: qPos !== -1 ? qPos : idx,
+      prevQueueLen: queue.length,
+      hadRequeued: !!requeued[cid],
+      prevHard: sessionHardIds.slice(),
+      prevStats: Object.assign({}, sessionStats)
+    });
+    if (undoStack.length > 30) undoStack.shift();
+
+    var nextRec = computeNextSrs(store[cid], kind);
+    store[cid] = nextRec;
+    sessionStats.learned++;
+    if (kind === "good" || kind === "ok") sessionStats.remembered = (sessionStats.remembered || 0) + 1;
+    if (kind === "hard" && sessionHardIds.indexOf(cid) === -1) sessionHardIds.push(cid);
+    persistSrs();
+
+    var label = kind === "good" ? "Đã nhớ" : kind === "ok" ? "Mờ hồ" : "Chưa nhớ";
+    toast("✓ " + label + " · hẹn lại sau " + nextRec.interval + " ngày", kind === "hard" ? "" : "ok");
+
+    if (isActive) {
+      return window.AudioPlayer.next();
+    }
+    if (audioPreviewTracks.length && audioPreviewIndex + 1 < audioPreviewTracks.length) {
+      audioPreviewIndex += 1;
+    }
+    renderAudioScreen(st);
+    return Promise.resolve();
   }
 
   function startPassiveAudio() {
@@ -1331,8 +1506,12 @@
       if ($("audio-ex-target")) $("audio-ex-target").textContent = "";
       if ($("audio-ex-base")) $("audio-ex-base").textContent = "";
       if (playBtn) playBtn.textContent = "▶ Nghe";
+      if ($("audio-grade-row")) $("audio-grade-row").classList.add("hidden");
       return;
     }
+
+    if ($("audio-grade-row")) $("audio-grade-row").classList.remove("hidden");
+    updateAudioGradeHints(view.conceptId);
 
     if (cefrBadge && view.conceptId) {
       cefrBadge.textContent = cefrOf(view.conceptId);
@@ -1490,6 +1669,7 @@
       updateAudioHomeMeta();
     });
     window.AudioPlayer.subscribe(function (st) {
+      syncStudyCursorFromAudio(st);
       renderAudioScreen(st);
       updateMiniAudioBar(st);
       updateAudioHomeMeta();
@@ -1530,6 +1710,15 @@
     if ($("audio-homebtn")) {
       $("audio-homebtn").onclick = showHome;
     }
+    if ($("study-to-audio")) {
+      $("study-to-audio").onclick = function () { return handoffStudyToAudio(); };
+    }
+    if ($("audio-to-study")) {
+      $("audio-to-study").onclick = function () { return handoffAudioToStudy(); };
+    }
+    if ($("audio-grade-hard")) $("audio-grade-hard").onclick = function () { return gradeFromAudio("hard"); };
+    if ($("audio-grade-ok")) $("audio-grade-ok").onclick = function () { return gradeFromAudio("ok"); };
+    if ($("audio-grade-good")) $("audio-grade-good").onclick = function () { return gradeFromAudio("good"); };
     if ($("audio-play")) {
       $("audio-play").onclick = function () {
         var st = window.AudioPlayer.getState();
@@ -1709,7 +1898,14 @@
 
   function wire() {
     // home
-    $("startbtn").onclick = function () { showStudy(); if (idx >= queue.length || sessionDone) { buildQueue(); render(); } };
+    $("startbtn").onclick = function () {
+      var ast = window.AudioPlayer ? window.AudioPlayer.getState() : null;
+      if (ast && (ast.status === "playing" || ast.status === "paused") && $("audio-screen")) {
+        return handoffAudioToStudy();
+      }
+      showStudy();
+      if (idx >= queue.length || sessionDone) { buildQueue(); render(); }
+    };
     $("homebtn").onclick = showHome;
     if ($("undobtn")) $("undobtn").onclick = undoGrade;
     $("onboardok").onclick = function () {
@@ -1799,6 +1995,8 @@
     $("target").onchange = onPairChange;
     $("sessionlen").onchange = function () {
       try { localStorage.setItem("dictlearn_session", $("sessionlen").value); } catch (e) {}
+      audioPreviewTracks = [];
+      audioPreviewIndex = 0;
       buildQueue();
       renderHome();
       if (!$("study").classList.contains("hidden")) render();
@@ -1951,6 +2149,8 @@
         } else if (doneAct === "next") {
           buildQueue();
           render();
+        } else if (doneAct === "audio") {
+          handoffStudyToAudio();
         } else if (doneAct === "home") {
           showHome();
         }

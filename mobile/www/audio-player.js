@@ -16,7 +16,7 @@
   if (typeof window === "undefined") return;
 
   var DEFAULT_PREFS = {
-    source: "due",         // "due" | "fresh" | "learned" | "mix"
+    source: "session",     // "session" | "due" | "fresh" | "learned" | "mix"
     limit: 30,             // tracks per queue
     preset: "deep",        // "deep" | "quick" | "target_only"
     order: "base_first",   // "base_first" (default: primary first) | "target_first"
@@ -142,8 +142,9 @@
 
     var seen = {};
     var ordered = [];
-    function pushList(arr) {
-      for (var k = 0; k < arr.length && ordered.length < limit; k++) {
+    function pushList(arr, cap) {
+      var maxLen = cap || limit;
+      for (var k = 0; k < arr.length && ordered.length < maxLen; k++) {
         var id = arr[k];
         if (!seen[id]) {
           seen[id] = true;
@@ -152,7 +153,19 @@
       }
     }
 
-    if (source === "fresh") {
+    var sessionIds = Array.isArray(opts.sessionIds) ? opts.sessionIds : null;
+    if (source === "session" && sessionIds && sessionIds.length) {
+      var sessionCap = Math.max(limit, Math.min(200, sessionIds.length));
+      var unmastered = [];
+      var allSession = [];
+      for (var si = 0; si < sessionIds.length; si++) {
+        var sid = sessionIds[si];
+        if (!sid || !targetData.w || !targetData.w[sid]) continue;
+        allSession.push(sid);
+        if (!mastered[sid]) unmastered.push(sid);
+      }
+      pushList(unmastered.length ? unmastered : allSession, sessionCap);
+    } else if (source === "fresh") {
       pushList(fresh);
       if (!ordered.length) pushList(due.concat(hard, okList, goodList));
     } else if (source === "learned") {
@@ -179,7 +192,7 @@
       }
       ordered = uniq.slice(0, limit);
     } else {
-      // "due" (default): overdue SRS -> hard -> ok -> fresh words to fill session
+      // "due" (or "session" fallback when no sessionIds): overdue SRS -> hard -> ok -> fresh
       pushList(due);
       pushList(hard);
       pushList(okList);

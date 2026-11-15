@@ -452,6 +452,46 @@
     }
     .audio-mini .iconbtn { min-width: 2.5rem; min-height: 2.5rem; }
     body.has-audio-mini main { padding-bottom: calc(5.2rem + env(safe-area-inset-bottom)); }
+
+    /* ---------- unified session hub & dual-mode handoff ---------- */
+    .session-hub {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 1rem; padding: 0.9rem; margin-bottom: 1rem;
+    }
+    .session-hub-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 0.5rem; margin-bottom: 0.7rem;
+    }
+    .session-hub-title { font-weight: 800; font-size: 0.96rem; }
+    .session-hub-sub { font-size: 0.78rem; color: var(--sub); margin-top: 0.1rem; }
+    .session-hub-head select {
+      background: var(--bg); border: 1px solid var(--line); border-radius: 0.65rem;
+      padding: 0.4rem 0.55rem; min-height: 2.4rem; font-size: 0.85rem; font-weight: 700;
+      flex: 0 0 auto;
+    }
+    .session-hub .primary { margin-bottom: 0.55rem; }
+    .session-hub .audio-entry { margin-bottom: 0; }
+
+    .handoff-btn {
+      padding: 0.42rem 0.72rem; font-size: 0.82rem; font-weight: 800;
+      min-height: 2.4rem; border-color: var(--accent); color: var(--accent);
+      background: var(--accent-soft); white-space: nowrap; flex: 0 0 auto;
+    }
+    .audio-grade-row {
+      position: static; margin-top: 0; margin-bottom: 0.75rem; background: transparent; padding-bottom: 0;
+    }
+    .audio-grade-row button { min-height: 3.35rem; font-size: 0.92rem; }
+    .audio-adv { border-top: 1px solid var(--line); }
+    .audio-adv > summary {
+      list-style: none; cursor: pointer; padding: 0.8rem 0;
+      font-weight: 700; font-size: 0.92rem; color: var(--sub);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .audio-adv > summary::-webkit-details-marker { display: none; }
+    .audio-adv > summary::after { content: "▾"; font-size: 0.9rem; }
+    .audio-adv[open] > summary::after { content: "▴"; }
+    .audio-adv[open] > summary { color: var(--text); }
+    .audio-adv .setting-row:first-of-type { border-top: 1px solid var(--line); }
   </style>
 </head>
 <body>
@@ -513,22 +553,30 @@
         </div>
       </div>
 
-      <button id="startbtn" class="primary">Học tiếp ngay →</button>
-
-      <button id="audiostartbtn" class="audio-entry" type="button">
-        <div class="ae-left">
-          <div class="ae-title">🎧 Nghe thụ động (chạy ngầm)</div>
-          <div class="ae-sub" id="audio-home-sub">Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình</div>
+      <div class="session-hub" id="session-hub">
+        <div class="session-hub-head">
+          <div>
+            <div class="session-hub-title">Buổi học đồng bộ (Thẻ ↔ Nghe)</div>
+            <div class="session-hub-sub" id="session-status">Sẵn sàng · chọn số từ cho cả 2 chế độ</div>
+          </div>
+          <select id="sessionlen" aria-label="Số từ mỗi buổi học">
+            <option value="10">10 từ</option>
+            <option value="25">25 từ</option>
+            <option value="50">50 từ</option>
+            <option value="100">100 từ</option>
+          </select>
         </div>
-        <span class="ae-go">Nghe →</span>
-      </button>
 
-      <div class="sec-title">Tra từ nhanh (12.000 từ offline)</div>
-      <div class="search-box">
-        <input id="dict-search" type="search" placeholder="🔎 Gõ từ tiếng Việt hoặc ngoại ngữ…" autocomplete="off" autocorrect="off">
-        <button id="dict-clear" class="search-clear hidden" type="button" aria-label="Xóa tìm kiếm">✕</button>
+        <button id="startbtn" class="primary">Học tiếp ngay →</button>
+
+        <button id="audiostartbtn" class="audio-entry" type="button">
+          <div class="ae-left">
+            <div class="ae-title">🎧 Nghe buổi học này (chạy ngầm)</div>
+            <div class="ae-sub" id="audio-home-sub">Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình</div>
+          </div>
+          <span class="ae-go">Nghe →</span>
+        </button>
       </div>
-      <div id="dict-results" class="search-results hidden"></div>
 
       <div class="sec-title">Cấp độ CEFR (<span id="cefr-summary">Tất cả A1–C2</span>)</div>
       <div id="cefr-filter" class="cefr-pills" role="tablist" aria-label="Lọc theo cấp độ CEFR">
@@ -541,20 +589,18 @@
         <button class="cefr-pill" type="button" data-level="C2">C2 · Thành thạo</button>
       </div>
 
+      <div class="sec-title">Tra từ nhanh (12.000 từ offline)</div>
+      <div class="search-box">
+        <input id="dict-search" type="search" placeholder="🔎 Gõ từ tiếng Việt hoặc ngoại ngữ…" autocomplete="off" autocorrect="off">
+        <button id="dict-clear" class="search-clear hidden" type="button" aria-label="Xóa tìm kiếm">✕</button>
+      </div>
+      <div id="dict-results" class="search-results hidden"></div>
+
       <div class="sec-title">Luyện kỹ năng · từ đang học</div>
       <div class="practice-row">
         <button id="listen">🎧<span>Nghe & ghi</span></button>
         <button id="fillbtn">✏️<span>Điền khuyết</span></button>
         <button id="conjbtn">🧩<span>Chia dạng</span></button>
-      </div>
-
-      <div class="home-row2">
-        <span class="muted">Mỗi buổi học</span>
-        <select id="sessionlen">
-          <option value="10">10 từ</option>
-          <option value="25">25 từ</option>
-          <option value="50">50 từ</option>
-        </select>
       </div>
 
       <!-- update banner (auto-update ON by default) -->
@@ -593,6 +639,7 @@
         <button id="homebtn" class="ghost">←</button>
         <p class="muted" id="progress"></p>
         <button id="undobtn" class="ghost undo-btn hidden" type="button" aria-label="Hoàn tác">↩ Hoàn tác</button>
+        <button id="study-to-audio" class="ghost handoff-btn" type="button" title="Chuyển sang nghe từ này">🎧 Nghe tiếp</button>
       </div>
       <div class="bar bar-sm"><div id="study-bar" style="width:0%"></div></div>
       <div id="swipehint" class="hint hidden">Quẹt card: → Đã nhớ · ← Chưa nhớ · ↓ Mờ hồ · Chạm thẻ để lật</div>
@@ -653,11 +700,12 @@
       <div class="audio-top">
         <button id="audio-homebtn" class="ghost" aria-label="Quay lại">←</button>
         <p class="muted" id="audio-progress">Chuẩn bị…</p>
+        <button id="audio-to-study" class="ghost handoff-btn" type="button" title="Mở thẻ học ở đúng vị trí này">📖 Học thẻ</button>
         <select id="audio-sleep" aria-label="Hẹn giờ tắt">
-          <option value="0">⏱ Tắt hẹn giờ</option>
-          <option value="10">⏱ 10 phút</option>
-          <option value="20">⏱ 20 phút</option>
-          <option value="30">⏱ 30 phút</option>
+          <option value="0">⏱ Tắt</option>
+          <option value="10">⏱ 10p</option>
+          <option value="20">⏱ 20p</option>
+          <option value="30">⏱ 30p</option>
         </select>
       </div>
 
@@ -688,6 +736,12 @@
         <button id="audio-next" class="ghost" type="button">⏭ Tiếp</button>
       </div>
 
+      <div class="grade-row audio-grade-row" id="audio-grade-row">
+        <button class="hard" id="audio-grade-hard" type="button">Chưa nhớ<span class="sub" id="audio-b1-sub">lặp lại 1 ngày</span></button>
+        <button class="ok"   id="audio-grade-ok"   type="button">Mờ hồ<span class="sub" id="audio-b2-sub">lặp lại 3 ngày</span></button>
+        <button class="good" id="audio-grade-good" type="button">Đã nhớ<span class="sub" id="audio-b3-sub">gặp lại 7 ngày</span></button>
+      </div>
+
       <div class="audio-actions-row">
         <button id="audio-stop" class="ghost" type="button">⏹ Dừng nền</button>
         <button id="audio-master" class="ghost" type="button">✓ Bỏ qua từ này</button>
@@ -698,9 +752,10 @@
         <div class="setting-row">
           <div>
             <b>Nguồn phát</b>
-            <p class="muted">Chọn danh sách từ tự động</p>
+            <p class="muted">Mặc định đồng bộ 100% cùng buổi học</p>
           </div>
           <select id="audio-source" aria-label="Nguồn danh sách phát">
+            <option value="session" selected>Cùng buổi học hiện tại</option>
             <option value="due">Ưu tiên cần nhớ</option>
             <option value="fresh">Từ mới A1→C2</option>
             <option value="learned">Từ đã học</option>
@@ -716,27 +771,6 @@
             <option value="deep">Học sâu (Từ &amp; Ví dụ)</option>
             <option value="quick">Ôn nhanh (Chỉ từ &amp; Nghĩa)</option>
             <option value="target_only">Nghe chìm (Chỉ tiếng học)</option>
-          </select>
-        </div>
-        <div class="setting-row" id="audio-order-row">
-          <div>
-            <b>Thứ tự ngôn ngữ</b>
-            <p class="muted">Nghe hiểu nghĩa trước hay thử nhớ trước</p>
-          </div>
-          <select id="audio-order" aria-label="Thứ tự ngôn ngữ">
-            <option value="base_first">Gốc trước → Tiếng học</option>
-            <option value="target_first">Tiếng học → Tiếng gốc</option>
-          </select>
-        </div>
-        <div class="setting-row">
-          <div>
-            <b>Lặp tiếng đang học</b>
-            <p class="muted">Số lần đọc cho mỗi từ/câu cần học</p>
-          </div>
-          <select id="audio-target-repeat" aria-label="Số lần đọc tiếng học">
-            <option value="2" selected>2 lần (Mặc định)</option>
-            <option value="1">1 lần</option>
-            <option value="3">3 lần</option>
           </select>
         </div>
         <div class="setting-row">
@@ -757,27 +791,51 @@
             </select>
           </div>
         </div>
-        <label class="setting-row" id="audio-drills-row">
-          <div>
-            <b>Thêm câu công sở</b>
-            <p class="muted">Đọc thêm 1–2 câu tình huống EN↔VI</p>
+        <details class="audio-adv">
+          <summary>Tùy chỉnh nâng cao (Thứ tự, Lặp từ, Giọng)</summary>
+          <div class="setting-row" id="audio-order-row">
+            <div>
+              <b>Thứ tự ngôn ngữ</b>
+              <p class="muted">Nghe hiểu nghĩa trước hay thử nhớ trước</p>
+            </div>
+            <select id="audio-order" aria-label="Thứ tự ngôn ngữ">
+              <option value="base_first">Gốc trước → Tiếng học</option>
+              <option value="target_first">Tiếng học → Tiếng gốc</option>
+            </select>
           </div>
-          <input type="checkbox" id="audio-drills" class="switch">
-        </label>
-        <label class="setting-row">
-          <div>
-            <b>Ưu tiên giọng Offline</b>
-            <p class="muted">Dùng giọng trong máy trước, tiết kiệm 4G</p>
+          <div class="setting-row">
+            <div>
+              <b>Lặp tiếng đang học</b>
+              <p class="muted">Số lần đọc cho mỗi từ/câu cần học</p>
+            </div>
+            <select id="audio-target-repeat" aria-label="Số lần đọc tiếng học">
+              <option value="2" selected>2 lần (Mặc định)</option>
+              <option value="1">1 lần</option>
+              <option value="3">3 lần</option>
+            </select>
           </div>
-          <input type="checkbox" id="audio-offline" class="switch">
-        </label>
-        <label class="setting-row">
-          <div>
-            <b>Đưa từ mới vào ôn ngày mai</b>
-            <p class="muted">Chỉ xếp lịch cho từ chưa học, không ghi đè thẻ cũ</p>
-          </div>
-          <input type="checkbox" id="audio-autostage" class="switch">
-        </label>
+          <label class="setting-row" id="audio-drills-row">
+            <div>
+              <b>Thêm câu công sở</b>
+              <p class="muted">Đọc thêm 1–2 câu tình huống EN↔VI</p>
+            </div>
+            <input type="checkbox" id="audio-drills" class="switch">
+          </label>
+          <label class="setting-row">
+            <div>
+              <b>Ưu tiên giọng Offline</b>
+              <p class="muted">Dùng giọng trong máy trước, tiết kiệm 4G</p>
+            </div>
+            <input type="checkbox" id="audio-offline" class="switch">
+          </label>
+          <label class="setting-row">
+            <div>
+              <b>Đưa từ mới vào ôn ngày mai</b>
+              <p class="muted">Chỉ xếp lịch cho từ chưa học, không ghi đè thẻ cũ</p>
+            </div>
+            <input type="checkbox" id="audio-autostage" class="switch">
+          </label>
+        </details>
       </div>
       <p class="panel-note" id="audio-note" style="margin-top:0.6rem"></p>
     </section>

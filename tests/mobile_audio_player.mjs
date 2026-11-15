@@ -81,9 +81,13 @@ const IDS = [
   'audio-drills-row', 'audio-drills', 'audio-offline', 'audio-autostage', 'audio-note',
   'audio-mini', 'audio-mini-open', 'audio-mini-title', 'audio-mini-sub',
   'audio-mini-toggle', 'audio-mini-stop',
+  // v2.1.0 unified session & dual-mode handoff IDs
+  'session-status', 'study-to-audio', 'audio-to-study', 'audio-cefr-badge',
+  'audio-grade-row', 'audio-grade-hard', 'audio-grade-ok', 'audio-grade-good',
+  'audio-b1-sub', 'audio-b2-sub', 'audio-b3-sub',
 ];
 
-function buildSandbox({ capacitorPlugin = null, initialStorage = null } = {}) {
+function buildSandbox({ capacitorPlugin = null, initialStorage = null, conceptCount = 0 } = {}) {
   const els = {};
   IDS.forEach((id) => (els[id] = new El(id)));
 
@@ -136,7 +140,7 @@ function buildSandbox({ capacitorPlugin = null, initialStorage = null } = {}) {
   };
 
   const storageMap = new Map(Object.entries(initialStorage || {}));
-  const sampleConcepts = ['C_DUE', 'C_HARD', 'C_FRESH_1', 'C_FRESH_2', 'C_MASTERED'];
+  let sampleConcepts = ['C_DUE', 'C_HARD', 'C_FRESH_1', 'C_FRESH_2', 'C_MASTERED'];
   const sampleData = {
     'concepts.json': sampleConcepts,
     'langs.json': [
@@ -185,6 +189,21 @@ function buildSandbox({ capacitorPlugin = null, initialStorage = null } = {}) {
       ],
     },
   };
+  if (conceptCount > 5) {
+    sampleConcepts = [];
+    sampleData['lang/vi.json'] = { w: {}, e: {} };
+    sampleData['lang/en.json'] = { w: {}, ro: {}, ipa: {}, e: {} };
+    for (let i = 1; i <= conceptCount; i++) {
+      const id = 'C_' + String(i).padStart(2, '0');
+      sampleConcepts.push(id);
+      sampleData['lang/vi.json'].w[id] = 'nghia_' + i;
+      sampleData['lang/vi.json'].e[id] = 'Ví dụ ' + i;
+      sampleData['lang/en.json'].w[id] = 'word_' + i;
+      sampleData['lang/en.json'].ipa[id] = '/w' + i + '/';
+      sampleData['lang/en.json'].e[id] = 'Example ' + i + '.';
+    }
+    sampleData['concepts.json'] = sampleConcepts;
+  }
 
   const spokenUtterances = [];
   const win = {
@@ -364,6 +383,44 @@ async function testPurePlaylistAndSteps() {
     Array.from(targetOnly.map((s) => s.role)),
     ['word', 'repeat', 'ex_target', 'ex_target'],
     'target_only uses 2x repeats on word + example'
+  );
+
+  // Unified session playlist source: preserves exact sessionIds order & deduplicates
+  const sessionList = AP.buildPlaylist({
+    concepts, baseData, targetData, srs,
+    mastered: { A_MASTERED: 1 },
+    source: 'session',
+    sessionIds: ['E_HARD', 'B_FRESH', 'C_OK', 'E_HARD', 'A_MASTERED'],
+    limit: 10,
+  });
+  assert.deepStrictEqual(
+    Array.from(sessionList.map((t) => t.id)),
+    ['E_HARD', 'B_FRESH', 'C_OK'],
+    'session source preserves exact study queue order and excludes mastered'
+  );
+  const allMasteredSession = AP.buildPlaylist({
+    concepts, baseData, targetData, srs,
+    mastered: { E_HARD: 1, B_FRESH: 1 },
+    source: 'session',
+    sessionIds: ['E_HARD', 'B_FRESH'],
+    limit: 10,
+  });
+  assert.deepStrictEqual(
+    Array.from(allMasteredSession.map((t) => t.id)),
+    ['E_HARD', 'B_FRESH'],
+    'session source falls back to full sessionIds if all items were audio-mastered'
+  );
+  const fallbackSession = AP.buildPlaylist({
+    concepts, baseData, targetData, srs,
+    mastered: { A_MASTERED: 1 },
+    source: 'session',
+    limit: 20,
+    today,
+  });
+  assert.deepStrictEqual(
+    Array.from(fallbackSession.map((t) => t.id)),
+    ['D_DUE', 'E_HARD', 'C_OK', 'B_FRESH'],
+    'session source without sessionIds falls back cleanly to due priority order'
   );
   console.log('OK  AudioPlayer.buildPlaylist + buildSteps');
 }
@@ -712,11 +769,96 @@ async function testColdResumeFromNotification() {
   console.log('OK  Cold resume from notification opens #audio-screen with persisted bilingual examples');
 }
 
+async function testBidirectionalSessionHandoff50() {
+  const { win, els, storageMap } = buildSandbox({
+    conceptCount: 55,
+    initialStorage: {
+      dictlearn_onboard_dict_srs_v2_vi_en: '1',
+    },
+  });
+  await waitFor(() => els.boot.classList.contains('hidden') && !els.home.classList.contains('hidden'));
+
+  // Select 50 words per session and start active card study
+  els.sessionlen.value = '50';
+  els.sessionlen.dispatch('change');
+  assert.match(els['session-status'].textContent, /50 từ/, 'home hub reflects 50-word session');
+
+  els.startbtn.dispatch('click');
+  await waitFor(() => !els.study.classList.contains('hidden') && els.card.dataset.id === 'C_01');
+  assert.match(els.progress.textContent, /^1 \/ 50/, 'study starts at 1 / 50');
+
+  // Study first 14 words -> now at card 15 / 50 (C_15)
+  for (let i = 0; i < 14; i++) {
+    els.b3.dispatch('click');
+    await new Promise((r) => setTimeout(r, 8));
+  }
+  await waitFor(() => els.card.dataset.id === 'C_15');
+  assert.match(els.progress.textContent, /^15 \/ 50/, 'study advanced to 15 / 50');
+
+  // Handoff Study -> Audio (busy, want to listen to the rest of the 50 words)
+  await els['study-to-audio'].dispatch('click');
+  await waitFor(() =>
+    !els['audio-screen'].classList.contains('hidden')
+    && win.AudioPlayer.getState().status === 'playing'
+    && win.AudioPlayer.getState().index === 14
+  );
+  assert(els.study.classList.contains('hidden'), 'study screen hidden after handoff');
+  assert.strictEqual(win.AudioPlayer.getTracks().length, 50, 'audio queue shares exact 50 session words');
+  assert.strictEqual(win.AudioPlayer.getState().conceptId, 'C_15', 'audio starts right at 15th word (C_15)');
+  assert.strictEqual(els['audio-word'].textContent, 'word_15', 'UI shows word_15');
+
+  // Advance audio to 32 / 50 (C_32), then quick-grade SRS from Audio screen!
+  for (let s = 14; s < 31; s++) {
+    await win.AudioPlayer.next();
+  }
+  await waitFor(() => win.AudioPlayer.getState().conceptId === 'C_32' && win.AudioPlayer.getState().index === 31);
+  assert.strictEqual(els['audio-b3-sub'].textContent, 'gặp lại 7 ngày', 'audio SRS hint previews 7 days for fresh C_32');
+
+  await els['audio-grade-good'].dispatch('click');
+  await waitFor(() => win.AudioPlayer.getState().conceptId === 'C_33' && win.AudioPlayer.getState().index === 32);
+  const srsAfterAudioGrade = JSON.parse(storageMap.get('srs_dict_srs_v2_vi_en'));
+  assert.strictEqual(srsAfterAudioGrade.C_32.grade, 'good', 'audio quick-grade saved C_32 to SRS');
+  assert.strictEqual(srsAfterAudioGrade.C_32.interval, 7);
+
+  // Handoff Audio -> Study at 33 / 50 (C_33)
+  await els['audio-to-study'].dispatch('click');
+  await waitFor(() => !els.study.classList.contains('hidden') && els.card.dataset.id === 'C_33');
+  assert.strictEqual(win.AudioPlayer.getState().status, 'paused', 'audio paused cleanly on handoff back to study');
+  assert.match(els.progress.textContent, /^33 \/ 50/, 'study resumes at exact 33 / 50 position');
+
+  // Go Home while audio paused at C_33 -> clicking #startbtn also hands off to C_33!
+  els.homebtn.dispatch('click');
+  assert.match(els['session-status'].textContent, /33 \/ 50/, 'home hub shows paused 33 / 50 cursor');
+  await els.startbtn.dispatch('click');
+  await waitFor(() => !els.study.classList.contains('hidden') && els.card.dataset.id === 'C_33');
+
+  // Grade remaining cards (33..50 -> 18 cards) to reach Session Done, then verify "Nghe lại buổi học này"
+  await els['audio-stop'].onclick();
+  for (let r = 32; r < 50; r++) {
+    els.b3.dispatch('click');
+    await new Promise((res) => setTimeout(res, 8));
+  }
+  await waitFor(() => els.card.dataset.done === '1');
+  assert(els.card.innerHTML.includes('data-done-act="audio"'), 'Session Done offers audio replay of session');
+  const replayBtn = new El('done_audio');
+  replayBtn.setAttribute('data-done-act', 'audio');
+  els.card.dispatch('click', { target: replayBtn });
+  await waitFor(() =>
+    !els['audio-screen'].classList.contains('hidden')
+    && win.AudioPlayer.getState().status === 'playing'
+    && win.AudioPlayer.getState().index === 0
+  );
+  assert.strictEqual(win.AudioPlayer.getTracks().length, 50, 'replaying finished session builds 50-word queue');
+  await els['audio-stop'].onclick();
+  console.log('OK  Bidirectional 50-word Study <-> Audio handoff & Audio SRS grading');
+}
+
 async function main() {
   await testPurePlaylistAndSteps();
   await testWebPlaybackUiAndSrsIsolation();
   await testNativePluginDelegation();
   await testColdResumeFromNotification();
+  await testBidirectionalSessionHandoff50();
   console.log('\nALL PASSIVE AUDIO PLAYER TESTS PASSED');
 }
 
