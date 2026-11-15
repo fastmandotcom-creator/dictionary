@@ -130,6 +130,22 @@ async function main() {
   win.TTS._last = { ok: false, result: 'no-voice', engine: 'native', detail: '' };
   ok(win.TTS.message().includes('giọng'), 'message() gives a fix hint for no-voice');
 
+  // status() reports the layer map (no native plugin on the web stub).
+  const st = await win.TTS.status();
+  ok(st.nativeBound === false, 'status().nativeBound=false without Capacitor');
+  ok(st.hasCapacitor === false, 'status().hasCapacitor=false without Capacitor');
+
+  // Honest web fallback: a WebView that exposes speechSynthesis but has NO
+  // voices must report "no-voice" instead of silently "succeeding".
+  const w2 = buildSandbox();
+  const win2 = w2.win;
+  vm.createContext(win2);
+  win2.speechSynthesis.getVoices = () => []; // Android WebView: zero voices
+  win2.Capacitor = undefined;
+  vm.runInContext(fs.readFileSync(path.join(WWW, 'tts.js'), 'utf8'), win2, { filename: 'tts.js' });
+  const out2 = await win2.TTS.speak('hello', 'en');
+  ok(out2.ok === false && out2.result === 'no-voice', '0-voice WebView -> no-voice, not silent success');
+
   console.log('ALL TTS BRIDGE CHECKS PASSED');
 }
 main();

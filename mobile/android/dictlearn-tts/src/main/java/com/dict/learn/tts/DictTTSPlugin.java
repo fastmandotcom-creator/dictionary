@@ -180,37 +180,37 @@ public class DictTTSPlugin extends Plugin {
             return new String[] {"spoken", "cache", "played " + mp3Cache.getName()};
         }
 
-        // 2) the phone's installed engines (default first), recording to a WAV.
-        String[] phone = pronounceWithEngines(app, text, lang, locale);
-        if ("spoken".equals(phone[0])) return phone;
-
-        // 3) Google's online voice (duosub prefers it; the phone is the
-        //    fallback — for us the phone already failed, so Google now).
+        // 2) Google's online voice FIRST when the device has a voice for the
+        //    language and the network is available (duosub-study's DEFAULT
+        //    engine is the Google web voice; it answers in ~1s with a real MP3
+        //    for en/zh/pt/vi/...). This is the fastest path to an audible word.
         if (googleSupported(lang) && text.length() <= MAX_GOOGLE_CHARS
             && !googleResting()) {
             googleNoVoiceForText = false;
-            File tmp = new File(new File(app.getCacheDir(), "tts"),
-                Integer.toHexString((lang + "|" + text).hashCode()) + ".mp3");
             byte[] mp3 = downloadGoogleMp3(text, lang);
-            if (mp3 != null) {
+            if (mp3 != null && looksLikeMp3(mp3)) {
                 try {
-                    File dir = tmp.getParentFile();
+                    File dir = mp3Cache.getParentFile();
                     if (!dir.exists()) dir.mkdirs();
-                    FileOutputStream out = new FileOutputStream(tmp);
+                    FileOutputStream out = new FileOutputStream(mp3Cache);
                     out.write(mp3);
                     out.close();
                     cacheCount++;
                 } catch (Throwable ignored) {}
-                if (looksLikeMp3(mp3) && playSpeechFile(tmp)) {
+                if (playSpeechFile(mp3Cache)) {
                     return new String[] {"spoken", "google-web", "downloaded " + mp3.length + " bytes"};
                 }
-            } else if (googleNoVoiceForText) {
-                // Every address answered but none had a voice for this text:
-                // not an outage — do not penalize the next words.
-            } else {
-                markGoogleResting();
             }
+            if (!googleNoVoiceForText) {
+                markGoogleResting(); // outage: don't hammer Google on the next word
+            }
+            // fell through: Google had no voice for this text, or is down —
+            // use the phone's own engines below.
         }
+
+        // 3) the phone's installed engines (default first), recording to a WAV.
+        String[] phone = pronounceWithEngines(app, text, lang, locale);
+        if ("spoken".equals(phone[0])) return phone;
 
         // 4) last resort: a direct utterance with the default engine so the
         //    button is never silent without a reported reason.

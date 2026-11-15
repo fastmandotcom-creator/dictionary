@@ -637,6 +637,39 @@
     $("fill-input").addEventListener("keydown", function (e) { if (e.key === "Enter") checkFill(); });
     $("fillcheck").onclick = checkFill;
 
+    // --- TTS self-test (Settings → "Kiểm tra"): reveals which layer can
+    //     produce audio on THIS device (native plugin reachable? how many
+    //     engines installed? Google resting? last speak result?). This is
+    //     the on-device diagnostic the silent "Nghe từ" bug needed.
+    var ttsbtn = $("ttstestbtn");
+    var ttsy = $("ttstest");
+    var runTtsTest = function () {
+      if (!window.TTS || !TTS.status) { if (ttsy) ttsy.textContent = "TTS module chưa nạp."; return; }
+      var lang = target();
+      TTS.speak("hello", lang).then(function () {
+        TTS.status().then(function (s) {
+          if (!ttsy) return;
+          var L = [];
+          L.push("Engine " + lang + ": " + (s.last && s.last.ok ? "✅ " + s.last.engine : "❌ " + (s.last ? s.last.result : "none")));
+          if (s.nativeBound) {
+            L.push("Native plugin: ✅ · " + (s.engines || 0) + " engine(s)" + (s.googleResting ? " · Google nghỉ" : "") + " · cache " + (s.cacheCount || 0));
+          } else if (s.hasCapacitor) {
+            L.push("Native plugin: ❌ Capacitor có, DictTTS không khả dụng");
+          } else {
+            L.push("Native plugin: ❌ không có Capacitor (chạy web)");
+          }
+          L.push("Lần cuối: " + ((s.last && s.last.detail) || "—"));
+          ttsy.textContent = L.join("\n");
+          ttsy.style.whiteSpace = "pre-line";
+          if (!(s.last && s.last.ok)) {
+            toast("TTS chưa phát được — xem chi tiết", "bad");
+            if (s.last && s.last.result === "no-voice" && TTS.openSettings) TTS.openSettings();
+          }
+        });
+      });
+    };
+    if (ttsbtn) ttsbtn.onclick = runTtsTest;
+
     // --- M3.2 swipe gestures (Anki-style) ---
     var card = $("card");
     var startX = 0, startY = 0, swiping = false;

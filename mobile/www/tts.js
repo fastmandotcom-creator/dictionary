@@ -41,6 +41,26 @@
   var TTS = {
     _last: { ok: false, result: "none", engine: "none", detail: "" },
 
+    // The full on-device status (for the Settings "Kiểm tra TTS" screen and
+    // for debugging): which layer the audio can come from, and what the last
+    // speak reported.
+    status: function () {
+      var s = {
+        nativeBound: nativeOk,
+        hasCapacitor: !!cap,
+        last: TTS._last
+      };
+      if (nativeOk && proxy.diagnose) {
+        return proxy.diagnose().then(function (d) {
+          s.engines = d && d.engineCount;
+          s.googleResting = !!(d && d.googleResting);
+          s.cacheCount = d && d.cacheCount;
+          return s;
+        }, function () { return s; });
+      }
+      return Promise.resolve(s);
+    },
+
     available: function () {
       return nativeOk || !!(window.speechSynthesis && window.SpeechSynthesisUtterance);
     },
@@ -99,11 +119,28 @@
     },
 
     speakWeb: function (text, lang) {
-      if (window.speechSynthesis && window.SpeechSynthesisUtterance) {
+      // The Android WebView often EXPOSES speechSynthesis but with zero
+      // voices installed — it accepts the utterance and plays nothing. Detect
+      // that here so the app can tell the user instead of staying silent.
+      var synth = window.speechSynthesis;
+      if (synth && window.SpeechSynthesisUtterance) {
         var u = new window.SpeechSynthesisUtterance(text);
         u.lang = TTS.mapLang(lang);
-        try { window.speechSynthesis.cancel(); } catch (e) {}
-        window.speechSynthesis.speak(u);
+        try {
+          // The Android WebView exposes speechSynthesis but with no voices; on
+          // desktop/Chrome getVoices() returns real voices. Only treat "empty
+          // voice list" as a silent failure when the API actually reports it.
+          if (typeof synth.getVoices === "function") {
+            var voices = synth.getVoices() || [];
+            if (voices.length === 0) {
+              TTS._last = { ok: false, result: "no-voice", engine: "web",
+                detail: "window.speechSynthesis has no voices on this device" };
+              return Promise.resolve(TTS._last);
+            }
+          }
+        } catch (e) {}
+        try { synth.cancel(); } catch (e) {}
+        synth.speak(u);
         TTS._last = { ok: true, result: "spoken", engine: "web", detail: "window.speechSynthesis" };
         return Promise.resolve(TTS._last);
       }
