@@ -45,6 +45,7 @@
       font-size: 16px; line-height: 1.45;
     }
     header, main { max-width: 30rem; margin: 0 auto; padding: 0.9rem 1rem calc(1rem + env(safe-area-inset-bottom)); }
+    main { padding-bottom: calc(5.4rem + env(safe-area-inset-bottom)); }
     select, button, input { font: inherit; color: var(--text); }
     button { cursor: pointer; border: 0; }
     .hidden { display: none !important; }
@@ -217,10 +218,10 @@
     .card.swiping { transition: none; }
     .card-meta { display: flex; justify-content: space-between; align-items: center; gap: 0.4rem; margin-bottom: 0.35rem; }
     .card-pos { font-size: 0.8rem; color: var(--sub); font-weight: 700; }
-    .target { font-size: 2.1rem; font-weight: 800; margin-top: 0.15rem; letter-spacing: -0.01em; line-height: 1.2; }
+    .target { font-size: clamp(1.55rem, 6vw, 2.2rem); font-weight: 800; margin-top: 0.15rem; letter-spacing: -0.01em; line-height: 1.2; overflow-wrap: anywhere; }
     .ro  { color: var(--accent); font-size: 1.05rem; margin-top: 0.3rem; }
     .ipa { color: var(--sub); font-size: 0.95rem; margin-top: 0.1rem; }
-    .base { color: var(--good-fg); font-size: 1.35rem; font-weight: 700; margin-top: 0.85rem; }
+    .base { color: var(--good-fg); font-size: 1.35rem; font-weight: 700; margin-top: 0.85rem; overflow-wrap: anywhere; }
     .ex {
       color: var(--sub); font-size: 0.95rem; margin-top: 0.7rem;
       border-top: 1px solid var(--line); padding-top: 0.65rem;
@@ -250,7 +251,8 @@
     .ghost:active { background: var(--accent-soft); }
 
     .grade-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-top: 0.75rem;
-      position: sticky; bottom: 0; background: var(--bg); padding-bottom: 0.4rem; }
+      position: sticky; bottom: calc(4.15rem + env(safe-area-inset-bottom)); z-index: 20;
+      background: var(--bg); padding: 0.25rem 0 0.4rem; }
     .grade-row button {
       border-radius: 0.9rem; min-height: 4rem; display: flex; flex-direction: column;
       gap: 0.15rem; align-items: center; justify-content: center; font-weight: 800; font-size: 1rem;
@@ -347,11 +349,14 @@
 
     /* ---------- toast / back hint ---------- */
     #toast, #back-hint {
-      position: fixed; left: 50%; bottom: calc(1.4rem + env(safe-area-inset-bottom));
+      position: fixed; left: 50%; bottom: calc(4.8rem + env(safe-area-inset-bottom));
       transform: translateX(-50%); z-index: 60;
       background: var(--card); border: 1px solid var(--line); color: var(--text);
       padding: 0.7rem 1.1rem; border-radius: 0.8rem; font-size: 0.95rem; max-width: 90%;
       box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    }
+    body.has-audio-mini #toast, body.has-audio-mini #back-hint {
+      bottom: calc(9.2rem + env(safe-area-inset-bottom));
     }
     #back-hint { background: var(--bad); border-color: var(--bad); color: var(--bad-fg); }
     #toast.ok  { background: var(--good); color: var(--good-fg); border-color: var(--good); }
@@ -388,10 +393,10 @@
       background: var(--accent-soft); color: var(--accent); margin-bottom: 0.6rem;
     }
     .audio-badge.is-playing { background: var(--good); color: var(--good-fg); }
-    .audio-word { font-size: 2rem; font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; }
+    .audio-word { font-size: clamp(1.5rem, 5.5vw, 2.1rem); font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; overflow-wrap: anywhere; }
     .audio-phonetics { color: var(--accent); font-size: 0.95rem; margin-top: 0.25rem; }
     .audio-meaning {
-      color: var(--good-fg); font-size: 1.25rem; font-weight: 700;
+      color: var(--good-fg); font-size: 1.25rem; font-weight: 700; overflow-wrap: anywhere;
       margin-top: 0.65rem; padding: 0.35rem 0.5rem; border-radius: 0.5rem;
       transition: background 0.15s ease;
     }
@@ -436,7 +441,7 @@
     }
 
     .audio-mini {
-      position: fixed; left: 50%; bottom: calc(0.65rem + env(safe-area-inset-bottom));
+      position: fixed; left: 50%; bottom: calc(4.25rem + env(safe-area-inset-bottom));
       transform: translateX(-50%); z-index: 45;
       width: calc(100% - 1.6rem); max-width: 28rem;
       background: var(--card); border: 1px solid var(--accent); border-radius: 0.95rem;
@@ -451,7 +456,7 @@
       font-size: 0.78rem; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .audio-mini .iconbtn { min-width: 2.5rem; min-height: 2.5rem; }
-    body.has-audio-mini main { padding-bottom: calc(5.2rem + env(safe-area-inset-bottom)); }
+    body.has-audio-mini main { padding-bottom: calc(9.5rem + env(safe-area-inset-bottom)); }
 
     /* ---------- unified session hub & dual-mode handoff ---------- */
     .session-hub {
@@ -492,6 +497,92 @@
     .audio-adv[open] > summary::after { content: "▴"; }
     .audio-adv[open] > summary { color: var(--text); }
     .audio-adv .setting-row:first-of-type { border-top: 1px solid var(--line); }
+
+    /* ---------- batch controls, 4-pillar nav & responsive architecture ---------- */
+    .session-batch-row, .study-batch-row, .audio-batch-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem;
+    }
+    .session-batch-row { margin-top: 0.55rem; }
+    .study-batch-row { margin-top: 0.55rem; }
+    .audio-batch-row { margin-bottom: 0.55rem; }
+    .audio-actions-row { margin-bottom: 0.75rem; }
+    .batch-btn {
+      font-size: 0.8rem; font-weight: 700; min-height: 2.6rem;
+      padding: 0.4rem 0.5rem; border-radius: 0.75rem;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .bottom-nav {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+      background: var(--card); border-top: 1px solid var(--line);
+      padding: 0.25rem 0.45rem calc(0.35rem + env(safe-area-inset-bottom));
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.25rem;
+    }
+    .bottom-nav button {
+      background: transparent; color: var(--sub); border-radius: 0.7rem;
+      min-height: 3.1rem; padding: 0.22rem 0.2rem;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 0.1rem; font-size: 0.7rem; font-weight: 700;
+    }
+    .bottom-nav button > span:first-child { font-size: 1.15rem; line-height: 1; }
+    .bottom-nav button.is-active { background: var(--accent-soft); color: var(--accent); }
+    .home-col .sec-title:first-child { margin-top: 0; }
+
+    /* Small phones (<= 380px) */
+    @media (max-width: 380px) {
+      header, main { padding-left: 0.72rem; padding-right: 0.72rem; }
+      .brand { font-size: 0.92rem; }
+      .header-actions { gap: 0.25rem; }
+      .langrow { gap: 0.22rem; }
+      .langrow select { max-width: 4.8rem; padding: 0.35rem 0.4rem; font-size: 0.82rem; min-height: 2.45rem; }
+      .iconbtn { min-width: 2.35rem; min-height: 2.35rem; font-size: 0.95rem; }
+      .batch-btn, .study-practice-row .ghost, .audio-actions-row button { font-size: 0.74rem; padding: 0.35rem 0.35rem; }
+      .grade-row button { min-height: 3.6rem; font-size: 0.92rem; }
+    }
+
+    /* Landscape phones */
+    @media (orientation: landscape) and (max-height: 540px) {
+      header, main { max-width: 58rem; }
+      main { padding-bottom: calc(4.6rem + env(safe-area-inset-bottom)); }
+      body.has-audio-mini main { padding-bottom: calc(8.6rem + env(safe-area-inset-bottom)); }
+      .split-layout {
+        display: grid; grid-template-columns: 1.12fr 0.88fr; gap: 0.9rem; align-items: start;
+      }
+      #study .card, #audio-screen .audio-hero { min-height: 10.5rem; margin-bottom: 0; }
+      #study .grade-row { position: static; margin-top: 0.55rem; padding: 0; background: transparent; }
+      #study .split-side .row2 { margin-top: 0; }
+    }
+
+    /* Tablets & Wide (>= 720px) */
+    @media (min-width: 720px) {
+      header, main { max-width: 60rem; padding-left: 1.4rem; padding-right: 1.4rem; }
+      main { padding-bottom: calc(5.8rem + env(safe-area-inset-bottom)); }
+      .home-grid {
+        display: grid; grid-template-columns: 1.06fr 0.94fr; gap: 1.15rem; align-items: start;
+      }
+      .split-layout {
+        display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 1.15rem; align-items: start;
+      }
+      #study .card, #audio-screen .audio-hero { min-height: 16rem; margin-bottom: 0; }
+      #study .grade-row { position: static; margin-top: 0.7rem; padding: 0; background: transparent; }
+      #study .split-side .row2 { margin-top: 0; }
+      .bottom-nav {
+        left: 50%; right: auto; transform: translateX(-50%); bottom: calc(0.65rem + env(safe-area-inset-bottom));
+        width: min(34rem, calc(100% - 2rem)); border: 1px solid var(--line);
+        border-radius: 1.05rem; padding: 0.3rem 0.45rem;
+        box-shadow: 0 10px 28px rgba(0,0,0,0.28);
+      }
+      .audio-mini { bottom: calc(5.1rem + env(safe-area-inset-bottom)); max-width: 34rem; }
+      body.has-audio-mini #toast, body.has-audio-mini #back-hint { bottom: calc(9.8rem + env(safe-area-inset-bottom)); }
+    }
+
+    /* Desktop PWA (>= 1024px) */
+    @media (min-width: 1024px) {
+      header, main { max-width: 66rem; }
+      .home-grid { gap: 1.4rem; }
+      .split-layout { grid-template-columns: 1.2fr 0.8fr; gap: 1.4rem; }
+      #study .card, #audio-screen .audio-hero { padding: 1.5rem 1.6rem; min-height: 18rem; }
+    }
   </style>
 </head>
 <body>
@@ -530,105 +621,115 @@
         <button id="onboardok" class="ghost">Bắt đầu</button>
       </div>
 
-      <div class="stat-card">
-        <div class="stat-head">
-          <div>
-            <div class="stat-num" id="stat-learned">0</div>
-            <div class="stat-sub">/ <span id="stat-total">0</span> từ đã được chấm điểm</div>
-          </div>
-          <span class="chip">Chuỗi · <b id="stat-streak">0</b> ngày</span>
-        </div>
-        <div class="bar"><div id="learned-bar" style="width:0%"></div></div>
-        <div class="stat-goal">
-          <div class="stat-goal-row">
-            <span id="daily-goal-text">Mục tiêu hôm nay: 0 / 10</span>
-            <span>Hôm nay · <b id="stat-today">0</b> từ</span>
-          </div>
-          <div class="bar bar-sm bar-good"><div id="daily-goal-bar" style="width:0%"></div></div>
-        </div>
-        <div class="chips">
-          <span class="chip is-warn">Đang học · <b id="stat-learning">0</b></span>
-          <span class="chip is-good">Thuộc vững · <b id="stat-mastered">0</b></span>
-          <span class="chip">Đến hạn · <b id="stat-due">0</b></span>
-        </div>
-      </div>
-
-      <div class="session-hub" id="session-hub">
-        <div class="session-hub-head">
-          <div>
-            <div class="session-hub-title">Buổi học đồng bộ (Thẻ ↔ Nghe)</div>
-            <div class="session-hub-sub" id="session-status">Sẵn sàng · chọn số từ cho cả 2 chế độ</div>
-          </div>
-          <select id="sessionlen" aria-label="Số từ mỗi buổi học">
-            <option value="10">10 từ</option>
-            <option value="25">25 từ</option>
-            <option value="50">50 từ</option>
-            <option value="100">100 từ</option>
-          </select>
-        </div>
-
-        <button id="startbtn" class="primary">Học tiếp ngay →</button>
-
-        <button id="audiostartbtn" class="audio-entry" type="button">
-          <div class="ae-left">
-            <div class="ae-title">🎧 Nghe buổi học này (chạy ngầm)</div>
-            <div class="ae-sub" id="audio-home-sub">Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình</div>
-          </div>
-          <span class="ae-go">Nghe →</span>
-        </button>
-      </div>
-
-      <div class="sec-title">Cấp độ CEFR (<span id="cefr-summary">Tất cả A1–C2</span>)</div>
-      <div id="cefr-filter" class="cefr-pills" role="tablist" aria-label="Lọc theo cấp độ CEFR">
-        <button class="cefr-pill is-active" type="button" data-level="all">Tất cả</button>
-        <button class="cefr-pill" type="button" data-level="A1">A1 · Cơ bản</button>
-        <button class="cefr-pill" type="button" data-level="A2">A2 · Sơ trung</button>
-        <button class="cefr-pill" type="button" data-level="B1">B1 · Trung cấp</button>
-        <button class="cefr-pill" type="button" data-level="B2">B2 · Trung cao</button>
-        <button class="cefr-pill" type="button" data-level="C1">C1 · Cao cấp</button>
-        <button class="cefr-pill" type="button" data-level="C2">C2 · Thành thạo</button>
-      </div>
-
-      <div class="sec-title">Tra từ nhanh (12.000 từ offline)</div>
-      <div class="search-box">
-        <input id="dict-search" type="search" placeholder="🔎 Gõ từ tiếng Việt hoặc ngoại ngữ…" autocomplete="off" autocorrect="off">
-        <button id="dict-clear" class="search-clear hidden" type="button" aria-label="Xóa tìm kiếm">✕</button>
-      </div>
-      <div id="dict-results" class="search-results hidden"></div>
-
-      <div class="sec-title">Luyện kỹ năng · từ đang học</div>
-      <div class="practice-row">
-        <button id="listen">🎧<span>Nghe & ghi</span></button>
-        <button id="fillbtn">✏️<span>Điền khuyết</span></button>
-        <button id="conjbtn">🧩<span>Chia dạng</span></button>
-      </div>
-
-      <!-- update banner (auto-update ON by default) -->
       <div id="update-banner" class="update-banner hidden"></div>
 
-      <!-- settings: auto-update + about -->
-      <div class="sec-title">Cài đặt</div>
-      <div id="settings-card" class="settings-card">
-        <label class="setting-row">
-          <div>
-            <b>Tự động cập nhật</b>
-            <p class="muted">Tự kiểm tra bản APK mới mỗi ngày · cài đè giữ nguyên tiến độ học</p>
+      <div class="home-grid">
+        <div class="home-col">
+          <div class="stat-card">
+            <div class="stat-head">
+              <div>
+                <div class="stat-num" id="stat-learned">0</div>
+                <div class="stat-sub">/ <span id="stat-total">0</span> từ đã được chấm điểm</div>
+              </div>
+              <span class="chip">Chuỗi · <b id="stat-streak">0</b> ngày</span>
+            </div>
+            <div class="bar"><div id="learned-bar" style="width:0%"></div></div>
+            <div class="stat-goal">
+              <div class="stat-goal-row">
+                <span id="daily-goal-text">Mục tiêu hôm nay: 0 / 10</span>
+                <span>Hôm nay · <b id="stat-today">0</b> từ</span>
+              </div>
+              <div class="bar bar-sm bar-good"><div id="daily-goal-bar" style="width:0%"></div></div>
+            </div>
+            <div class="chips">
+              <span class="chip is-warn">Đang học · <b id="stat-learning">0</b></span>
+              <span class="chip is-good">Thuộc vững · <b id="stat-mastered">0</b></span>
+              <span class="chip">Đến hạn · <b id="stat-due">0</b></span>
+            </div>
           </div>
-          <input type="checkbox" id="autoupd" class="switch" checked>
-        </label>
-        <div class="setting-row">
-          <div>
-            <b>Bản hiện tại</b>
-            <p class="muted" id="verline">v…</p>
+
+          <div class="session-hub" id="session-hub">
+            <div class="session-hub-head">
+              <div>
+                <div class="session-hub-title">Buổi học đồng bộ (Thẻ ↔ Nghe)</div>
+                <div class="session-hub-sub" id="session-status">Sẵn sàng · chọn số từ cho cả 2 chế độ</div>
+              </div>
+              <select id="sessionlen" aria-label="Số từ mỗi buổi học">
+                <option value="10">10 từ</option>
+                <option value="25">25 từ</option>
+                <option value="50" selected>50 từ</option>
+                <option value="100">100 từ</option>
+              </select>
+            </div>
+
+            <button id="startbtn" class="primary">Học tiếp ngay →</button>
+
+            <button id="audiostartbtn" class="audio-entry" type="button">
+              <div class="ae-left">
+                <div class="ae-title">🎧 Nghe buổi học này (chạy ngầm)</div>
+                <div class="ae-sub" id="audio-home-sub">Nghe nghĩa → từ học ×2 → ví dụ song ngữ cả khi tắt màn hình</div>
+              </div>
+              <span class="ae-go">Nghe →</span>
+            </button>
+
+            <div class="session-batch-row">
+              <button id="session-replay" class="ghost batch-btn" type="button">🔄 Học lại 50 từ này</button>
+              <button id="session-next-batch" class="ghost batch-btn" type="button">⏭ 50 từ tiếp theo</button>
+            </div>
           </div>
-          <button id="checkupd" class="ghost slim2">Kiểm tra ngay</button>
         </div>
-        <div class="setting-row">
-          <div>
-            <b>Phát âm (TTS)</b>
-            <p class="muted" id="ttstest">Đang kiểm tra…</p>
+
+        <div class="home-col">
+          <div class="sec-title">Cấp độ CEFR (<span id="cefr-summary">Tất cả A1–C2</span>)</div>
+          <div id="cefr-filter" class="cefr-pills" role="tablist" aria-label="Lọc theo cấp độ CEFR">
+            <button class="cefr-pill is-active" type="button" data-level="all">Tất cả</button>
+            <button class="cefr-pill" type="button" data-level="A1">A1 · Cơ bản</button>
+            <button class="cefr-pill" type="button" data-level="A2">A2 · Sơ trung</button>
+            <button class="cefr-pill" type="button" data-level="B1">B1 · Trung cấp</button>
+            <button class="cefr-pill" type="button" data-level="B2">B2 · Trung cao</button>
+            <button class="cefr-pill" type="button" data-level="C1">C1 · Cao cấp</button>
+            <button class="cefr-pill" type="button" data-level="C2">C2 · Thành thạo</button>
           </div>
-          <button id="ttstestbtn" class="ghost slim2">Kiểm tra</button>
+
+          <div class="sec-title">Tra từ nhanh (12.000 từ offline)</div>
+          <div class="search-box">
+            <input id="dict-search" type="search" placeholder="🔎 Gõ từ tiếng Việt hoặc ngoại ngữ…" autocomplete="off" autocorrect="off">
+            <button id="dict-clear" class="search-clear hidden" type="button" aria-label="Xóa tìm kiếm">✕</button>
+          </div>
+          <div id="dict-results" class="search-results hidden"></div>
+
+          <div class="sec-title">Luyện kỹ năng · từ đang học</div>
+          <div class="practice-row">
+            <button id="listen">🎧<span>Nghe & ghi</span></button>
+            <button id="fillbtn">✏️<span>Điền khuyết</span></button>
+            <button id="conjbtn">🧩<span>Chia dạng</span></button>
+          </div>
+
+          <!-- settings: auto-update + about -->
+          <div class="sec-title">Cài đặt</div>
+          <div id="settings-card" class="settings-card">
+            <label class="setting-row">
+              <div>
+                <b>Tự động cập nhật</b>
+                <p class="muted">Tự kiểm tra bản APK mới mỗi ngày · cài đè giữ nguyên tiến độ học</p>
+              </div>
+              <input type="checkbox" id="autoupd" class="switch" checked>
+            </label>
+            <div class="setting-row">
+              <div>
+                <b>Bản hiện tại</b>
+                <p class="muted" id="verline">v…</p>
+              </div>
+              <button id="checkupd" class="ghost slim2">Kiểm tra ngay</button>
+            </div>
+            <div class="setting-row">
+              <div>
+                <b>Phát âm (TTS)</b>
+                <p class="muted" id="ttstest">Đang kiểm tra…</p>
+              </div>
+              <button id="ttstestbtn" class="ghost slim2">Kiểm tra</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -644,23 +745,33 @@
       <div class="bar bar-sm"><div id="study-bar" style="width:0%"></div></div>
       <div id="swipehint" class="hint hidden">Quẹt card: → Đã nhớ · ← Chưa nhớ · ↓ Mờ hồ · Chạm thẻ để lật</div>
 
-      <div class="card" id="card"></div>
+      <div class="split-layout">
+        <div class="split-main">
+          <div class="card" id="card"></div>
+        </div>
+        <div class="split-side">
+          <div class="row2">
+            <button class="ghost" id="flip">👀 Hiện nghĩa</button>
+            <button class="ghost" id="speak">🔊 Nghe từ</button>
+          </div>
 
-      <div class="row2">
-        <button class="ghost" id="flip">👀 Hiện nghĩa</button>
-        <button class="ghost" id="speak">🔊 Nghe từ</button>
-      </div>
+          <div class="study-practice-row" id="study-practice-row">
+            <button class="ghost" id="study-listen" type="button">🎧 Nghe & ghi</button>
+            <button class="ghost" id="study-fill" type="button">✏️ Điền khuyết</button>
+            <button class="ghost" id="study-conj" type="button">🧩 Trắc nghiệm</button>
+          </div>
 
-      <div class="study-practice-row" id="study-practice-row">
-        <button class="ghost" id="study-listen" type="button">🎧 Nghe & ghi</button>
-        <button class="ghost" id="study-fill" type="button">✏️ Điền khuyết</button>
-        <button class="ghost" id="study-conj" type="button">🧩 Trắc nghiệm</button>
-      </div>
+          <div class="study-batch-row">
+            <button id="study-replay" class="ghost batch-btn" type="button">🔄 Học lại 50 từ này</button>
+            <button id="study-next-batch" class="ghost batch-btn" type="button">⏭ 50 từ tiếp</button>
+          </div>
 
-      <div class="grade-row">
-        <button class="hard" id="b1">Chưa nhớ<span class="sub" id="b1-sub">lặp lại sau 1 ngày</span></button>
-        <button class="ok"   id="b2">Mờ hồ<span class="sub" id="b2-sub">lặp lại sau 3 ngày</span></button>
-        <button class="good" id="b3">Đã nhớ<span class="sub" id="b3-sub">gặp lại sau 7 ngày</span></button>
+          <div class="grade-row">
+            <button class="hard" id="b1">Chưa nhớ<span class="sub" id="b1-sub">lặp lại sau 1 ngày</span></button>
+            <button class="ok"   id="b2">Mờ hồ<span class="sub" id="b2-sub">lặp lại sau 3 ngày</span></button>
+            <button class="good" id="b3">Đã nhớ<span class="sub" id="b3-sub">gặp lại sau 7 ngày</span></button>
+          </div>
+        </div>
       </div>
 
       <!-- ============ practice panels (one open at a time) ============ -->
@@ -709,43 +820,54 @@
         </select>
       </div>
 
-      <div class="audio-hero" id="audio-card">
-        <div class="card-meta">
-          <div class="audio-badge" id="audio-state-badge">Sẵn sàng</div>
-          <span class="badge-mini hidden" id="audio-cefr-badge">A1</span>
+      <div class="split-layout">
+        <div class="split-main">
+          <div class="audio-hero" id="audio-card">
+            <div class="card-meta">
+              <div class="audio-badge" id="audio-state-badge">Sẵn sàng</div>
+              <span class="badge-mini hidden" id="audio-cefr-badge">A1</span>
+            </div>
+            <div class="audio-word" id="audio-word">—</div>
+            <div class="audio-phonetics" id="audio-phonetics"></div>
+            <div class="audio-meaning" id="audio-meaning"></div>
+            <div class="audio-ex-box">
+              <div class="audio-ex-line" id="audio-ex-target"></div>
+              <div class="audio-ex-line" id="audio-ex-base"></div>
+            </div>
+            <div class="audio-steps" id="audio-steps">
+              <span class="audio-step-pill" data-role="meaning">Nghĩa gốc</span>
+              <span class="audio-step-pill" data-role="word">Từ học</span>
+              <span class="audio-step-pill" data-role="repeat">Đọc lại</span>
+              <span class="audio-step-pill" data-role="ex_base">Dịch ví dụ</span>
+              <span class="audio-step-pill" data-role="ex_target">Ví dụ học</span>
+            </div>
+          </div>
         </div>
-        <div class="audio-word" id="audio-word">—</div>
-        <div class="audio-phonetics" id="audio-phonetics"></div>
-        <div class="audio-meaning" id="audio-meaning"></div>
-        <div class="audio-ex-box">
-          <div class="audio-ex-line" id="audio-ex-target"></div>
-          <div class="audio-ex-line" id="audio-ex-base"></div>
+
+        <div class="split-side">
+          <div class="audio-transport">
+            <button id="audio-prev" class="ghost" type="button">⏮ Trước</button>
+            <button id="audio-play" class="audio-main-btn" type="button">▶ Nghe</button>
+            <button id="audio-next" class="ghost" type="button">⏭ Tiếp</button>
+          </div>
+
+          <div class="grade-row audio-grade-row" id="audio-grade-row">
+            <button class="hard" id="audio-grade-hard" type="button">Chưa nhớ<span class="sub" id="audio-b1-sub">lặp lại 1 ngày</span></button>
+            <button class="ok"   id="audio-grade-ok"   type="button">Mờ hồ<span class="sub" id="audio-b2-sub">lặp lại 3 ngày</span></button>
+            <button class="good" id="audio-grade-good" type="button">Đã nhớ<span class="sub" id="audio-b3-sub">gặp lại 7 ngày</span></button>
+          </div>
+
+          <div class="audio-batch-row">
+            <button id="audio-replay" class="ghost batch-btn" type="button">🔄 Nghe lại 50 từ này</button>
+            <button id="audio-next-batch" class="ghost batch-btn" type="button">⏭ 50 từ tiếp</button>
+          </div>
+
+          <div class="audio-actions-row">
+            <button id="audio-stop" class="ghost" type="button">⏹ Dừng nền</button>
+            <button id="audio-master" class="ghost" type="button">✓ Bỏ qua từ này</button>
+            <button id="audio-prefetch" class="ghost" type="button">⬇ Tải sẵn</button>
+          </div>
         </div>
-        <div class="audio-steps" id="audio-steps">
-          <span class="audio-step-pill" data-role="meaning">Nghĩa gốc</span>
-          <span class="audio-step-pill" data-role="word">Từ học</span>
-          <span class="audio-step-pill" data-role="repeat">Đọc lại</span>
-          <span class="audio-step-pill" data-role="ex_base">Dịch ví dụ</span>
-          <span class="audio-step-pill" data-role="ex_target">Ví dụ học</span>
-        </div>
-      </div>
-
-      <div class="audio-transport">
-        <button id="audio-prev" class="ghost" type="button">⏮ Trước</button>
-        <button id="audio-play" class="audio-main-btn" type="button">▶ Nghe</button>
-        <button id="audio-next" class="ghost" type="button">⏭ Tiếp</button>
-      </div>
-
-      <div class="grade-row audio-grade-row" id="audio-grade-row">
-        <button class="hard" id="audio-grade-hard" type="button">Chưa nhớ<span class="sub" id="audio-b1-sub">lặp lại 1 ngày</span></button>
-        <button class="ok"   id="audio-grade-ok"   type="button">Mờ hồ<span class="sub" id="audio-b2-sub">lặp lại 3 ngày</span></button>
-        <button class="good" id="audio-grade-good" type="button">Đã nhớ<span class="sub" id="audio-b3-sub">gặp lại 7 ngày</span></button>
-      </div>
-
-      <div class="audio-actions-row">
-        <button id="audio-stop" class="ghost" type="button">⏹ Dừng nền</button>
-        <button id="audio-master" class="ghost" type="button">✓ Bỏ qua từ này</button>
-        <button id="audio-prefetch" class="ghost" type="button">⬇ Tải sẵn</button>
       </div>
 
       <div class="settings-card audio-cfg-card">
@@ -849,6 +971,13 @@
       <button id="audio-mini-stop" class="iconbtn" type="button" aria-label="Dừng phát nền">✕</button>
     </div>
   </main>
+
+  <nav id="bottom-nav" class="bottom-nav hidden" aria-label="Điều hướng chính">
+    <button id="nav-home" type="button" class="is-active" data-nav="home"><span>🏠</span><span>Trang chủ</span></button>
+    <button id="nav-study" type="button" data-nav="study"><span>📖</span><span>Học thẻ</span></button>
+    <button id="nav-audio" type="button" data-nav="audio"><span>🎧</span><span>Nghe nền</span></button>
+    <button id="nav-search" type="button" data-nav="search"><span>🔎</span><span>Tra từ</span></button>
+  </nav>
 
   <script src="cap-bridge.js"></script>
   <script src="srs-store.js"></script>

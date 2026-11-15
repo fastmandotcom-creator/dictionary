@@ -60,10 +60,11 @@ class El {
   querySelector() { return null; }
   querySelectorAll(sel) {
     if (sel === '.cefr-pill' && this._pills) return this._pills;
+    if (sel === 'button[data-nav]' && this._navBtns) return this._navBtns;
     return [];
   }
   setPointerCapture() {}
-  focus() {}
+  focus() { this.focused = true; }
   appendChild(c) { c.parentNode = this; this.children.push(c); }
   scrollIntoView() { this.scrolledIntoView = true; }
 }
@@ -81,7 +82,10 @@ const IDS = [
   'dict-search', 'dict-clear', 'dict-results', 'cefr-filter', 'cefr-summary',
   'sessionlen', 'sndbtn', 'thmbtn', 'toast', 'playdrill', 'drillcheck', 'fillcheck',
   'autoupd', 'checkupd', 'verline', 'setbtn', 'settings-card', 'update-banner',
-  'session-status', 'study-to-audio', 'audio-to-study',
+  'session-status', 'session-replay', 'session-next-batch',
+  'study-to-audio', 'study-replay', 'study-next-batch',
+  'audio-to-study', 'audio-replay', 'audio-next-batch',
+  'bottom-nav', 'nav-home', 'nav-study', 'nav-audio', 'nav-search',
   'audio-grade-row', 'audio-grade-hard', 'audio-grade-ok', 'audio-grade-good',
   'audio-b1-sub', 'audio-b2-sub', 'audio-b3-sub',
   'audiostartbtn', 'audio-home-sub', 'audio-screen', 'audio-homebtn', 'audio-progress',
@@ -118,8 +122,14 @@ function buildSandbox(initialStorage = {}) {
   });
   els['cefr-filter']._pills = pills;
 
+  els['nav-home'].setAttribute('data-nav', 'home');
+  els['nav-study'].setAttribute('data-nav', 'study');
+  els['nav-audio'].setAttribute('data-nav', 'audio');
+  els['nav-search'].setAttribute('data-nav', 'search');
+  els['bottom-nav']._navBtns = [els['nav-home'], els['nav-study'], els['nav-audio'], els['nav-search']];
+
   ['drill', 'fillbox', 'conjbox'].forEach((id) => els[id].classList.add('panel'));
-  ['study', 'audio-screen', 'audio-mini', 'drill', 'fillbox', 'conjbox', 'update-banner', 'toast', 'back-hint', 'dict-clear', 'dict-results', 'undobtn']
+  ['study', 'audio-screen', 'audio-mini', 'bottom-nav', 'drill', 'fillbox', 'conjbox', 'update-banner', 'toast', 'back-hint', 'dict-clear', 'dict-results', 'undobtn']
     .forEach((id) => els[id].classList.add('hidden'));
 
   const spoken = [];
@@ -412,7 +422,58 @@ async function main() {
   assert.match(sb2.els.progress.textContent, /^8 \/ 50/, 'Study progress reflects 8 / 50');
   await sb2.els['audio-stop'].onclick();
 
-  console.log('\nALL v2.0.0 & v2.1.0 UNIFIED SESSION TESTS PASSED');
+  // 8) Batch Navigation (Next 50 vs Replay 50) & 4-Pillar Bottom Nav
+  console.log('8) Batch Navigation (Next 50 vs Replay 50) & 4-Pillar Bottom Nav');
+  assert.ok(!sb2.els['bottom-nav'].classList.contains('hidden'), 'bottom-nav revealed after boot');
+  sb2.els['nav-study'].dispatch('click');
+  await sleep(60);
+  assert.ok(!sb2.els.study.classList.contains('hidden'), 'nav-study opens Study');
+  assert.ok(sb2.els['nav-study'].classList.contains('is-active'), 'nav-study marked active');
+
+  // Replay current 50-word batch in Study -> jumps back to 1 / 50 on same batch
+  await sb2.els['study-replay'].dispatch('click');
+  await sleep(80);
+  assert.match(sb2.els.progress.textContent, /^1 \/ 50/, 'study-replay resets cursor to 1 / 50');
+  const batch1FirstId = sb2.els.card.dataset.id;
+
+  // Next 50 words from Study -> loads disjoint batch 2 (51..100) without needing grades
+  await sb2.els['study-next-batch'].dispatch('click');
+  await sleep(80);
+  assert.match(sb2.els.progress.textContent, /^1 \/ 50/, 'study-next-batch starts batch 2 at 1 / 50');
+  const batch2FirstId = sb2.els.card.dataset.id;
+  assert.notStrictEqual(batch2FirstId, batch1FirstId, 'batch 2 starts on a new unseen concept');
+
+  // Switch to Audio via bottom nav, advance to batch 3 via audio-next-batch
+  await sb2.els['nav-audio'].dispatch('click');
+  await sleep(60);
+  assert.ok(!sb2.els['audio-screen'].classList.contains('hidden'), 'nav-audio opens Audio screen');
+  assert.ok(sb2.els['nav-audio'].classList.contains('is-active'), 'nav-audio marked active');
+  await sb2.els['audio-next-batch'].dispatch('click');
+  await sleep(80);
+  const batch3FirstId = sb2.win.AudioPlayer.getState().conceptId;
+  assert.ok(batch3FirstId && batch3FirstId !== batch2FirstId && batch3FirstId !== batch1FirstId, 'audio-next-batch loads batch 3 cleanly');
+  await sb2.els['audio-next'].dispatch('click');
+  await sleep(40);
+  assert.strictEqual(sb2.win.AudioPlayer.getState().index, 1, 'advanced in batch 3');
+  await sb2.els['audio-replay'].dispatch('click');
+  await sleep(80);
+  assert.strictEqual(sb2.win.AudioPlayer.getState().index, 0, 'audio-replay restarts batch 3 at index 0');
+  assert.strictEqual(sb2.win.AudioPlayer.getState().conceptId, batch3FirstId, 'audio-replay keeps exact batch 3 first word');
+  await sb2.els['audio-stop'].onclick();
+
+  // Home batch buttons & Search nav focus
+  sb2.els['nav-home'].dispatch('click');
+  await sleep(40);
+  assert.ok(!sb2.els.home.classList.contains('hidden'), 'nav-home opens Home');
+  assert.match(sb2.els['session-status'].textContent, /Bộ #3/, 'session-status displays Bộ #3');
+  await sb2.els['session-next-batch'].dispatch('click');
+  await sleep(60);
+  assert.match(sb2.els['session-status'].textContent, /Bộ #4/, 'session-next-batch on Home advances to Bộ #4');
+  sb2.els['nav-search'].dispatch('click');
+  await sleep(30);
+  assert.ok(sb2.els['dict-search'].scrolledIntoView && sb2.els['dict-search'].focused, 'nav-search focuses offline search box');
+
+  console.log('\nALL v2.0.0, v2.1.0 & v2.2.0 BATCH/NAV TESTS PASSED');
 }
 
 main().catch((e) => { console.error('FAIL', e); process.exit(1); });

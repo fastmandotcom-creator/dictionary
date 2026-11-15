@@ -21,6 +21,8 @@
   var sessionHardIds = [];
   var undoStack = [];
   var cefrLevel = "all";
+  var batchNum = 1;
+  var seenBatchIds = {};
   var searchIndexKey = "";
   var searchIndexList = [];
   var cardExTarget = "";
@@ -66,7 +68,7 @@
   function target() { return $("target") ? $("target").value : "en"; }
   function sessionLen() {
     var el = $("sessionlen");
-    return el ? parseInt(el.value || "10", 10) : 10;
+    return el ? parseInt(el.value || "50", 10) : 50;
   }
   function cefrOf(id) {
     var r = conceptRank[id];
@@ -351,22 +353,48 @@
     updateAudioHomeMeta();
   }
 
+  function resetBatchHistory() {
+    batchNum = 1;
+    seenBatchIds = {};
+  }
+
+  function uniqueIds(list) {
+    var seen = {}, out = [];
+    for (var i = 0; i < (list || []).length; i++) {
+      var cid = list[i];
+      if (cid && !seen[cid]) { seen[cid] = true; out.push(cid); }
+    }
+    return out;
+  }
+
+  function updateBatchButtons() {
+    var n = queue.length || sessionLen();
+    var nextN = sessionLen();
+    if ($("session-replay")) $("session-replay").textContent = "🔄 Học lại " + n + " từ này";
+    if ($("session-next-batch")) $("session-next-batch").textContent = "⏭ " + nextN + " từ tiếp theo";
+    if ($("study-replay")) $("study-replay").textContent = "🔄 Học lại " + n + " từ";
+    if ($("study-next-batch")) $("study-next-batch").textContent = "⏭ " + nextN + " từ tiếp";
+    if ($("audio-replay")) $("audio-replay").textContent = "🔄 Nghe lại " + n + " từ";
+    if ($("audio-next-batch")) $("audio-next-batch").textContent = "⏭ " + nextN + " từ tiếp";
+  }
+
   function updateSessionStatus() {
     var el = $("session-status");
-    if (!el) return;
     var active = window.AudioPlayer ? window.AudioPlayer.getState() : null;
     var lvTxt = cefrLevel === "all" ? "A1–C2" : cefrLevel;
-    if (active && (active.status === "playing" || active.status === "paused") && active.total) {
-      el.textContent = (active.status === "playing" ? "Đang nghe " : "Tạm dừng ") +
-        ((active.index || 0) + 1) + " / " + active.total + " từ · chạm Thẻ hoặc Nghe để tiếp tục";
-      return;
+    if (el) {
+      if (active && (active.status === "playing" || active.status === "paused") && active.total) {
+        el.textContent = "Bộ #" + batchNum + " · " +
+          (active.status === "playing" ? "Đang nghe " : "Tạm dừng ") +
+          ((active.index || 0) + 1) + " / " + active.total + " (" + lvTxt + ")";
+      } else if (queue.length && idx > 0 && idx < queue.length && !sessionDone) {
+        el.textContent = "Bộ #" + batchNum + " (" + queue.length + " từ · " + lvTxt + ") · đang ở " + (idx + 1) + " / " + queue.length;
+      } else {
+        var n = queue.length || sessionLen();
+        el.textContent = "Bộ #" + batchNum + " · " + n + " từ (" + lvTxt + ") · đồng bộ Thẻ ↔ Nghe";
+      }
     }
-    if (queue.length && idx > 0 && idx < queue.length && !sessionDone) {
-      el.textContent = "Đang ở từ " + (idx + 1) + " / " + queue.length + " (" + lvTxt + ") · đồng bộ Thẻ ↔ Nghe";
-      return;
-    }
-    var n = queue.length || sessionLen();
-    el.textContent = "Buổi " + n + " từ (" + lvTxt + ") · dùng chung cho Thẻ & Nghe";
+    updateBatchButtons();
   }
 
   function updateAudioHomeMeta() {
@@ -396,7 +424,9 @@
     }
   }
 
-  function buildQueue(customIds) {
+  function buildQueue(customIds, opts) {
+    var excludeSeen = !!(opts && opts.excludeSeen);
+    var cycled = false;
     sessionDone = false;
     sessionStats = { learned: 0, remembered: 0, correct: 0, practice: 0 };
     requeued = {};
@@ -406,30 +436,108 @@
       queue = customIds.slice();
       idx = 0;
       updateProgress();
-      return;
+      updateSessionStatus();
+      return false;
     }
     var srs = readSrs();
     var t = todayISO();
-    var due = [], fresh = [];
-    for (var i = 0; i < concepts.length; i++) {
-      var cid = concepts[i];
-      if (!inCefrFilter(cid)) continue;
-      var rec = srs[cid];
-      if (rec && rec.due && rec.due <= t) due.push(cid);
-      else if (!rec) fresh.push(cid);
+    function collectCandidates(ignoreSeen) {
+      var due = [], fresh = [];
+      for (var i = 0; i < concepts.length; i++) {
+        var cid = concepts[i];
+        if (!inCefrFilter(cid)) continue;
+        if (!ignoreSeen && excludeSeen && seenBatchIds[cid]) continue;
+        var rec = srs[cid];
+        if (rec && rec.due && rec.due <= t) due.push(cid);
+        else if (!rec) fresh.push(cid);
+      }
+      var list = due.concat(fresh);
+      if (!list.length && cefrLevel !== "all") {
+        for (var j = 0; j < concepts.length; j++) {
+          var bCid = concepts[j];
+          if (!inCefrFilter(bCid)) continue;
+          if (!ignoreSeen && excludeSeen && seenBatchIds[bCid]) continue;
+          list.push(bCid);
+        }
+      }
+      return { list: list, dueCount: due.length };
     }
-    queue = due.concat(fresh);
-    if (!queue.length && cefrLevel !== "all") {
-      // If selected CEFR band has nothing due/fresh, allow reviewing words from that band
-      var bandAll = [];
-      for (var j = 0; j < concepts.length; j++) if (inCefrFilter(concepts[j])) bandAll.push(concepts[j]);
-      queue = bandAll;
+    var picked = collectCandidates(false);
+    if (!picked.list.length && excludeSeen) {
+      resetBatchHistory();
+      cycled = true;
+      picked = collectCandidates(true);
     }
-    queue = queue.slice(0, Math.max(sessionLen(), due.length));
+    queue = picked.list.slice(0, Math.max(sessionLen(), picked.dueCount));
     if (!queue.length) queue = concepts.slice(0, sessionLen());
     idx = 0;
     updateProgress();
     updateSessionStatus();
+    return cycled;
+  }
+
+  function stopAudioIfActive() {
+    var st = window.AudioPlayer && window.AudioPlayer.getState ? window.AudioPlayer.getState() : null;
+    if (st && st.status && st.status !== "idle" && window.AudioPlayer.stop) {
+      return window.AudioPlayer.stop();
+    }
+    return Promise.resolve();
+  }
+
+  function restartCurrentSession(surface) {
+    if (!queue.length) buildQueue();
+    else queue = uniqueIds(queue);
+    idx = 0;
+    sessionDone = false;
+    sessionStats = { learned: 0, remembered: 0, correct: 0, practice: 0 };
+    requeued = {};
+    sessionHardIds = [];
+    undoStack = [];
+    audioPreviewTracks = [];
+    audioPreviewIndex = 0;
+    return stopAudioIfActive().then(function () {
+      updateProgress();
+      updateSessionStatus();
+      updateAudioHomeMeta();
+      if (surface === "audio" && $("audio-screen")) {
+        toast("🔄 Đã phát lại Bộ #" + batchNum + " (" + queue.length + " từ)");
+        return handoffStudyToAudio();
+      }
+      if (surface === "study") {
+        toast("🔄 Đã quay về thẻ 1 / " + queue.length + " (Bộ #" + batchNum + ")");
+        showStudy();
+        return render();
+      }
+      renderHome();
+      toast("🔄 Bộ #" + batchNum + " (" + queue.length + " từ) đã về vị trí 1/" + queue.length);
+      return Promise.resolve();
+    });
+  }
+
+  function nextSessionBatch(surface) {
+    for (var i = 0; i < queue.length; i++) {
+      if (queue[i]) seenBatchIds[queue[i]] = 1;
+    }
+    batchNum += 1;
+    audioPreviewTracks = [];
+    audioPreviewIndex = 0;
+    return stopAudioIfActive().then(function () {
+      var cycled = buildQueue(null, { excludeSeen: true });
+      if (cycled) toast("🎉 Đã hết vòng cấp độ này — quay lại Bộ #1");
+      updateAudioHomeMeta();
+      if (surface === "audio" && $("audio-screen")) {
+        if (!cycled) toast("⏭ Bộ #" + batchNum + " · " + queue.length + " từ tiếp theo");
+        return handoffStudyToAudio();
+      }
+      if (surface === "study") {
+        if (!cycled) toast("⏭ Đã tải Bộ #" + batchNum + " (" + queue.length + " từ tiếp theo)");
+        showStudy();
+        return render();
+      }
+      renderHome();
+      if (!cycled) toast("⏭ Đã nạp Bộ #" + batchNum + " (" + queue.length + " từ tiếp theo)");
+      return Promise.resolve();
+    });
   }
 
   function openConceptInStudy(id) {
@@ -473,30 +581,37 @@
   }
 
   // ---------------- screens ----------------
+  function syncBottomNav(activeTab) {
+    var nav = $("bottom-nav");
+    if (!nav || !nav.querySelectorAll) return;
+    var btns = nav.querySelectorAll("button[data-nav]");
+    for (var i = 0; i < btns.length; i++) {
+      var tab = btns[i].getAttribute("data-nav");
+      btns[i].classList.toggle("is-active", tab === activeTab);
+    }
+  }
+  function setActiveScreen(name) {
+    if ($("home")) $("home").classList.toggle("hidden", name !== "home");
+    if ($("study")) $("study").classList.toggle("hidden", name !== "study");
+    if ($("audio-screen")) $("audio-screen").classList.toggle("hidden", name !== "audio");
+    syncBottomNav(name);
+    updateMiniAudioBar();
+  }
   function showStudy() {
     if (sessionDone && idx >= queue.length) buildQueue();
     if (sessionDone) sessionDone = false;
-    $("home").classList.add("hidden");
-    if ($("audio-screen")) $("audio-screen").classList.add("hidden");
-    $("study").classList.remove("hidden");
-    updateMiniAudioBar();
+    setActiveScreen("study");
     if (!sessionDone) render();
   }
   function showHome() {
     hidePanels();
-    $("study").classList.add("hidden");
-    if ($("audio-screen")) $("audio-screen").classList.add("hidden");
-    $("home").classList.remove("hidden");
+    setActiveScreen("home");
     renderHome();
-    updateMiniAudioBar();
   }
   function showAudio(autoStart) {
     if (!$("audio-screen")) return Promise.resolve();
     hidePanels();
-    $("home").classList.add("hidden");
-    $("study").classList.add("hidden");
-    $("audio-screen").classList.remove("hidden");
-    updateMiniAudioBar();
+    setActiveScreen("audio");
     var st = window.AudioPlayer ? window.AudioPlayer.getState() : null;
     if (st && st.status && st.status !== "idle") {
       renderAudioScreen(st);
@@ -623,7 +738,8 @@
           "Tổng tiến bộ: " + fmt(c.total) + " / " + fmt(concepts.length) + " từ (chuỗi " + streakDays() + " ngày)</p>" +
         '<div class="done-actions">' +
           hardBtnHtml +
-          '<button type="button" class="' + (sessionHardIds.length ? "ghost" : "primary") + '" data-done-act="next">Học ' + sessionLen() + " từ tiếp theo →</button>" +
+          '<button type="button" class="' + (sessionHardIds.length ? "ghost" : "primary") + '" data-done-act="next">⏭ Học ' + sessionLen() + " từ tiếp theo →</button>" +
+          '<button type="button" class="ghost" data-done-act="replay">🔄 Học lại ' + Math.max(1, queue.length) + " từ vừa rồi</button>" +
           '<button type="button" class="ghost" data-done-act="audio">🎧 Nghe lại buổi học này</button>' +
           '<button type="button" class="ghost" data-done-act="home">← Về trang chủ</button>' +
         "</div>" +
@@ -687,8 +803,7 @@
     // the panel the user just asked for is actually visible.
     var home = $("home"), study = $("study");
     if (home && study && !home.classList.contains("hidden")) {
-      home.classList.add("hidden");
-      study.classList.remove("hidden");
+      setActiveScreen("study");
     }
   }
 
@@ -1122,7 +1237,7 @@
       $("target").value = "en";
       applyTheme(localStorage.getItem("dictlearn_theme") || "auto");
       var sl = $("sessionlen");
-      if (sl) sl.value = localStorage.getItem("dictlearn_session") || "10";
+      if (sl) sl.value = localStorage.getItem("dictlearn_session") || sl.value || "50";
       try { cefrLevel = localStorage.getItem("dictlearn_cefr_level") || "all"; } catch (e) { cefrLevel = "all"; }
       // background load of the drill pack (non-blocking)
       drillsReady = fetch(db + "/drills.json")
@@ -1133,6 +1248,7 @@
         $("boot").classList.add("hidden");
         $("top").classList.remove("hidden");
         $("app").classList.remove("hidden");
+        if ($("bottom-nav")) $("bottom-nav").classList.remove("hidden");
         return initAudioSubsystem().then(function (initAudioState) {
           renderHome();
           buildQueue();
@@ -1314,10 +1430,8 @@
       }
     }
     hidePanels();
-    $("home").classList.add("hidden");
-    $("study").classList.add("hidden");
-    $("audio-screen").classList.remove("hidden");
-    updateMiniAudioBar();
+    audioPreviewTracks = [];
+    setActiveScreen("audio");
     var prefs = audioPrefsFromUI();
     return prepareAudioTracks(prefs.includeDrills, targetCid).then(function (list) {
       if (!list || !list.length) {
@@ -1716,6 +1830,12 @@
     if ($("audio-to-study")) {
       $("audio-to-study").onclick = function () { return handoffAudioToStudy(); };
     }
+    if ($("audio-replay")) {
+      $("audio-replay").onclick = function () { return restartCurrentSession("audio"); };
+    }
+    if ($("audio-next-batch")) {
+      $("audio-next-batch").onclick = function () { return nextSessionBatch("audio"); };
+    }
     if ($("audio-grade-hard")) $("audio-grade-hard").onclick = function () { return gradeFromAudio("hard"); };
     if ($("audio-grade-ok")) $("audio-grade-ok").onclick = function () { return gradeFromAudio("ok"); };
     if ($("audio-grade-good")) $("audio-grade-good").onclick = function () { return gradeFromAudio("good"); };
@@ -1897,7 +2017,7 @@
   }
 
   function wire() {
-    // home
+    // home & unified navigation
     $("startbtn").onclick = function () {
       var ast = window.AudioPlayer ? window.AudioPlayer.getState() : null;
       if (ast && (ast.status === "playing" || ast.status === "paused") && $("audio-screen")) {
@@ -1906,6 +2026,33 @@
       showStudy();
       if (idx >= queue.length || sessionDone) { buildQueue(); render(); }
     };
+    if ($("session-replay")) $("session-replay").onclick = function () { return restartCurrentSession("home"); };
+    if ($("session-next-batch")) $("session-next-batch").onclick = function () { return nextSessionBatch("home"); };
+    if ($("study-replay")) $("study-replay").onclick = function () { return restartCurrentSession("study"); };
+    if ($("study-next-batch")) $("study-next-batch").onclick = function () { return nextSessionBatch("study"); };
+    if ($("nav-home")) $("nav-home").onclick = showHome;
+    if ($("nav-study")) {
+      $("nav-study").onclick = function () {
+        var ast = window.AudioPlayer ? window.AudioPlayer.getState() : null;
+        if (ast && (ast.status === "playing" || ast.status === "paused") && $("audio-screen")) {
+          return handoffAudioToStudy();
+        }
+        showStudy();
+        if (idx >= queue.length || sessionDone) { buildQueue(); render(); }
+      };
+    }
+    if ($("nav-audio")) $("nav-audio").onclick = function () { return showAudio(false); };
+    if ($("nav-search")) {
+      $("nav-search").onclick = function () {
+        showHome();
+        syncBottomNav("search");
+        var dsEl = $("dict-search");
+        if (dsEl) {
+          if (dsEl.scrollIntoView) dsEl.scrollIntoView({ behavior: "smooth", block: "center" });
+          try { dsEl.focus(); } catch (e) {}
+        }
+      };
+    }
     $("homebtn").onclick = showHome;
     if ($("undobtn")) $("undobtn").onclick = undoGrade;
     $("onboardok").onclick = function () {
@@ -1933,6 +2080,7 @@
         if (!lv) return;
         cefrLevel = lv;
         try { localStorage.setItem("dictlearn_cefr_level", lv); } catch (err) {}
+        resetBatchHistory();
         audioPreviewTracks = [];
         audioPreviewIndex = 0;
         buildQueue();
@@ -1970,6 +2118,7 @@
       var stopAudio = (window.AudioPlayer && window.AudioPlayer.getState().status !== "idle")
         ? window.AudioPlayer.stop()
         : Promise.resolve();
+      resetBatchHistory();
       audioPreviewTracks = [];
       audioPreviewIndex = 0;
       audioCardCache = {};
@@ -1995,6 +2144,7 @@
     $("target").onchange = onPairChange;
     $("sessionlen").onchange = function () {
       try { localStorage.setItem("dictlearn_session", $("sessionlen").value); } catch (e) {}
+      resetBatchHistory();
       audioPreviewTracks = [];
       audioPreviewIndex = 0;
       buildQueue();
@@ -2147,8 +2297,9 @@
           buildQueue(sessionHardIds.slice());
           render();
         } else if (doneAct === "next") {
-          buildQueue();
-          render();
+          nextSessionBatch("study");
+        } else if (doneAct === "replay") {
+          restartCurrentSession("study");
         } else if (doneAct === "audio") {
           handoffStudyToAudio();
         } else if (doneAct === "home") {
