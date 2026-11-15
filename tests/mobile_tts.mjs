@@ -93,7 +93,7 @@ function buildSandbox() {
   return { win, doc };
 }
 
-function main() {
+async function main() {
   const { win } = buildSandbox();
   // No window.Capacitor → tts.js must use the web engine path.
   vm.createContext(win);
@@ -103,16 +103,33 @@ function main() {
   const ok = (c, m) => { if (!c) { console.error('FAIL ' + m); process.exit(1); } console.log('OK  ' + m); };
   ok(!!win.TTS, 'window.TTS registered');
   ok(win.TTS.available(), 'TTS.available() true (web engine present in stub)');
-  ok(win.TTS.engine() === 'web', 'TTS.engine() = "web" when Capacitor absent');
-  const before = win.speechSynthesis._spoke;
-  win.TTS.speak('hello', 'en');
-  ok(win.speechSynthesis._spoke === before + 1, 'TTS.speak() routed to window.speechSynthesis');
+
+  // speak() returns a Promise resolving to the outcome object (duosub result).
+  const out = await win.TTS.speak('hello', 'en');
+  ok(out.ok === true, 'TTS.speak() resolves ok=true on the web engine');
+  ok(win.speechSynthesis._spoke === 1, 'TTS.speak() routed to window.speechSynthesis');
+  ok(out.engine === 'web', 'engine reported as web');
+
   win.TTS.cancel();
   ok(true, 'TTS.cancel() did not throw');
+
+  // diagnose() reports engine availability without Capacitor.
+  const diag = await win.TTS.diagnose();
+  ok(!!diag && diag.web === true, 'TTS.diagnose() reports web=true when Capacitor is absent');
+
+  // openSettings() is a no-op on the web path (resolves, does not throw).
+  await win.TTS.openSettings();
+  ok(true, 'TTS.openSettings() no-ops cleanly on web');
+
   // lang mapping: zh → zh-CN, pt → pt-BR, vi → vi-VN
   ok(win.TTS.mapLang('zh') === 'zh-CN', 'mapLang zh → zh-CN');
   ok(win.TTS.mapLang('pt') === 'pt-BR', 'mapLang pt → pt-BR');
   ok(win.TTS.mapLang('vi') === 'vi-VN', 'mapLang vi → vi-VN');
+
+  // A failure result surfaces a human-readable hint (duosub's message()).
+  win.TTS._last = { ok: false, result: 'no-voice', engine: 'native', detail: '' };
+  ok(win.TTS.message().includes('giọng'), 'message() gives a fix hint for no-voice');
+
   console.log('ALL TTS BRIDGE CHECKS PASSED');
 }
 main();

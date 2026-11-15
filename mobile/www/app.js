@@ -90,15 +90,29 @@
     });
   }
 
-  function speak(text, lang) {
-    if (!text || !soundOn) return;
-    // Native bridge on Android (window.TTS from tts.js), Web Speech on the web.
-    if (window.TTS) { window.TTS.speak(text, lang); return; }
-    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+  // Speak a word. On Android the native DictTTS plugin (duosub-study port) is
+  // preferred; on the web, window.speechSynthesis. Auto-play (every card)
+  // stays silent on failure; only an interactive tap (the "Nghe từ" button,
+  // passed as interactive=true) surfaces the result and a fix hint.
+  function speak(text, lang, interactive) {
+    if (!text || !soundOn) return Promise.resolve(false);
+    var onDone = function (out) {
+      var ok = !!(out && out.ok);
+      if (!ok && interactive && window.TTS && TTS.message) {
+        toast("🔇 " + TTS.message(), "bad");
+      }
+      return ok;
+    };
+    if (window.TTS) return window.TTS.speak(text, lang).then(onDone);
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return Promise.resolve(false);
     var u = new SpeechSynthesisUtterance(text);
-    u.lang = lang === "zh" ? "zh-CN" : lang === "pt" ? "pt-BR" : lang;
+    u.lang = TTS_map(lang);
     speechSynthesis.cancel();
     speechSynthesis.speak(u);
+    return Promise.resolve(true);
+  }
+  function TTS_map(lang) {
+    switch (lang) { case "zh": return "zh-CN"; case "pt": return "pt-BR"; case "vi": return "vi-VN"; default: return lang; }
   }
 
   // ---------------- queue & home stats ----------------
@@ -591,7 +605,24 @@
       if (b) b.classList.toggle("hidden");
       if (e) e.classList.toggle("hidden");
     };
-    $("speak").onclick = function () { speak($("card").dataset.word, target()); };
+    // duosub's openSpeechSettings pattern: tapping "Nghe từ" speaks the word;
+    // when the device has no voice for the language it toasts a hint and the
+    // NEXT tap opens the system TTS settings to install the missing voices.
+    var wantSettings = false;
+    $("speak").onclick = function () {
+      var w = $("card").dataset.word;
+      if (wantSettings && window.TTS && TTS.openSettings) {
+        TTS.openSettings();
+        wantSettings = false;
+        return;
+      }
+      speak(w, target(), true).then(function (ok) {
+        if (!ok && window.TTS && TTS._last && TTS._last.result === "no-voice") {
+          wantSettings = true;
+          toast("Thiết bị chưa có giọng đọc " + target() + " · bấm lần nữa để tải", "bad");
+        }
+      });
+    };
     // practice
     $("listen").onclick = showListen;
     $("mic").onclick = toggleMic;
