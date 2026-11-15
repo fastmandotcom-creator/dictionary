@@ -522,6 +522,7 @@
     }
     .deck-bar .batch-btn:not(:disabled):active { color: var(--text); background: var(--accent-soft); }
     .batch-btn:disabled { opacity: 0.42; cursor: default; }
+    #study.has-open-panel .grade-row { position: static; }
 
     .bottom-nav {
       position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
@@ -757,7 +758,7 @@
         <button id="study-to-audio" class="ghost handoff-btn" type="button" title="Chuyển sang nghe từ này">🎧 Nghe tiếp</button>
       </div>
       <div class="bar bar-sm"><div id="study-bar" style="width:0%"></div></div>
-      <div class="study-batch-row deck-bar">
+      <div class="study-batch-row deck-bar" id="study-deck-bar">
         <button id="study-replay" class="ghost batch-btn" type="button">↺ Học lại từ 1/50</button>
         <button id="study-next-batch" class="ghost batch-btn" type="button">⏭ Qua Bộ #2 (50 từ)</button>
       </div>
@@ -767,7 +768,7 @@
         <div class="split-main">
           <div class="card" id="card"></div>
         </div>
-        <div class="split-side">
+        <div class="split-side" id="study-controls">
           <div class="row2">
             <button class="ghost" id="flip">👀 Lật nghĩa</button>
             <button class="ghost" id="speak">🔊 Phát âm từ</button>
@@ -833,7 +834,7 @@
         </select>
       </div>
 
-      <div class="audio-batch-row deck-bar">
+      <div class="audio-batch-row deck-bar" id="audio-deck-bar">
         <button id="audio-replay" class="ghost batch-btn" type="button">↺ Nghe lại từ 1/50</button>
         <button id="audio-next-batch" class="ghost batch-btn" type="button">⏭ Qua Bộ #2 (50 từ)</button>
       </div>
@@ -862,7 +863,7 @@
           </div>
         </div>
 
-        <div class="split-side">
+        <div class="split-side" id="audio-controls">
           <div class="audio-transport">
             <button id="audio-prev" class="ghost" type="button">⏮ Từ trước</button>
             <button id="audio-play" class="audio-main-btn" type="button">▶ Phát nghe</button>

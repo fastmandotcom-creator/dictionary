@@ -83,8 +83,8 @@ const IDS = [
   'sessionlen', 'sndbtn', 'thmbtn', 'toast', 'playdrill', 'drillcheck', 'fillcheck',
   'autoupd', 'checkupd', 'verline', 'setbtn', 'settings-card', 'update-banner',
   'session-status', 'session-replay', 'session-next-batch',
-  'study-to-audio', 'study-replay', 'study-next-batch',
-  'audio-to-study', 'audio-replay', 'audio-next-batch',
+  'study-deck-bar', 'study-controls', 'study-to-audio', 'study-replay', 'study-next-batch',
+  'audio-deck-bar', 'audio-controls', 'audio-to-study', 'audio-replay', 'audio-next-batch',
   'bottom-nav', 'nav-home', 'nav-study', 'nav-audio', 'nav-search',
   'audio-grade-row', 'audio-grade-hard', 'audio-grade-ok', 'audio-grade-good',
   'audio-b1-sub', 'audio-b2-sub', 'audio-b3-sub',
@@ -278,6 +278,8 @@ async function main() {
   }
   await sleep(50);
   assert.strictEqual(sb2.els.card.dataset.done, '1', 'session reaches celebration screen after finishing requeued hard card');
+  assert.ok(sb2.els['study-controls'].classList.contains('hidden'), 'study-controls hidden during Session Done screen');
+  assert.ok(sb2.els['study-deck-bar'].classList.contains('hidden'), 'study-deck-bar hidden during Session Done screen');
   assert.ok(sb2.els.card.innerHTML.includes(hardCid) === false && sb2.els.card.innerHTML.includes('Ôn lại 1 từ chưa nhớ'),
     'done screen offers 1-tap review of hard words in session');
   // Click "Ôn lại 1 từ chưa nhớ" -> starts micro-session focused on hardCid
@@ -287,6 +289,8 @@ async function main() {
   await sleep(60);
   assert.strictEqual(sb2.els.card.dataset.id, hardCid, '1-tap hard review loads missed word in study');
   assert.strictEqual(sb2.els.card.dataset.done, undefined, 'done flag cleared on new study card');
+  assert.ok(!sb2.els['study-controls'].classList.contains('hidden'), 'study-controls restored on new study card');
+  assert.ok(!sb2.els['study-deck-bar'].classList.contains('hidden'), 'study-deck-bar restored on new study card');
 
   // 3) Settings button scrolls & switches to home
   console.log('3) Settings button navigation (#setbtn)');

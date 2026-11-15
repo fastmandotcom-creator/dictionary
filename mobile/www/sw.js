@@ -9,7 +9,7 @@
  * Registered in index.html:
  *   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
  */
-const CACHE = 'dict-learn-v13'; // v13: v2.2.1 Clarified Multi-Screen UX & Deck Switcher Controls
+const CACHE = 'dict-learn-v14'; // v14: v2.2.2 Sub-screen Polish (Session Done, Practice Panels & Audio Empty/Source States)
 
 // Core app shell (always cached; revalidated on each navigate)
 const SHELL = [

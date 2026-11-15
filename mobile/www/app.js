@@ -671,6 +671,8 @@
       showSessionDone();
       return Promise.resolve();
     }
+    if ($("study-controls")) $("study-controls").classList.remove("hidden");
+    if ($("study-deck-bar")) $("study-deck-bar").classList.remove("hidden");
     var id = queue[idx];
     return Promise.all([loadLang(base()), loadLang(target())]).then(function (pair) {
       var known = pair[0];
@@ -752,6 +754,9 @@
       "</div>";
     $("progress").textContent = "Hoàn tất buổi · " + fmt(c.total) + "/" + fmt(concepts.length) + " từ";
     if ($("study-bar")) $("study-bar").style.width = "100%";
+    if ($("study-controls")) $("study-controls").classList.add("hidden");
+    if ($("study-deck-bar")) $("study-deck-bar").classList.add("hidden");
+    if ($("swipehint")) $("swipehint").classList.add("hidden");
     if ($("undobtn")) $("undobtn").classList.toggle("hidden", !undoStack.length);
   }
 
@@ -807,6 +812,11 @@
     // Practice buttons live on the Home screen but their panels render in the
     // Study section. If Home is currently showing, switch to Study first so
     // the panel the user just asked for is actually visible.
+    if (sessionDone || idx >= queue.length) {
+      if (idx >= queue.length) buildQueue();
+      sessionDone = false;
+      render();
+    }
     var home = $("home"), study = $("study");
     if (home && study && !home.classList.contains("hidden")) {
       setActiveScreen("study");
@@ -820,14 +830,20 @@
     if ($("drill")) $("drill").classList.add("hidden");
     if ($("fillbox")) $("fillbox").classList.add("hidden");
     if ($("conjbox")) $("conjbox").classList.add("hidden");
+    if ($("study") && $("study").classList) $("study").classList.remove("has-open-panel");
     drill = null; fill = null; conj = null;
     sessionStats.practice = 0;
   }
   function openPanel(id) {
     hidePanels();
     $(id).classList.remove("hidden");
+    if ($("study") && $("study").classList) $("study").classList.add("has-open-panel");
     var p = $(id);
-    if (p) { var inp = p.querySelector('input[type="text"]'); if (inp && inp.focus) setTimeout(function(){ try { inp.focus(); } catch (e) {} }, 60); }
+    if (p) {
+      if (p.scrollIntoView) p.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      var inp = p.querySelector('input[type="text"]');
+      if (inp && inp.focus) setTimeout(function () { try { inp.focus(); } catch (e) {} }, 60);
+    }
   }
 
   // ---------------- practice helpers (all 35 languages + drills.json) ----------------
@@ -1625,11 +1641,20 @@
       if ($("audio-meaning")) $("audio-meaning").textContent = "Hãy thử đổi nguồn phát khác";
       if ($("audio-ex-target")) $("audio-ex-target").textContent = "";
       if ($("audio-ex-base")) $("audio-ex-base").textContent = "";
-      if (playBtn) playBtn.textContent = "▶ Nghe";
+      if (playBtn) playBtn.textContent = "▶ Phát nghe";
       if ($("audio-grade-row")) $("audio-grade-row").classList.add("hidden");
+      if ($("audio-controls")) $("audio-controls").classList.add("hidden");
+      if ($("audio-deck-bar")) $("audio-deck-bar").classList.add("hidden");
+      var advEl = $("audio-screen").querySelector ? $("audio-screen").querySelector(".audio-adv") : null;
+      if (advEl) advEl.open = true;
       return;
     }
 
+    if ($("audio-controls")) $("audio-controls").classList.remove("hidden");
+    if ($("audio-deck-bar")) {
+      var isSessionSrc = !$("audio-source") || $("audio-source").value === "session";
+      $("audio-deck-bar").classList.toggle("hidden", !isSessionSrc);
+    }
     if ($("audio-grade-row")) $("audio-grade-row").classList.remove("hidden");
     updateAudioGradeHints(view.conceptId);
 
