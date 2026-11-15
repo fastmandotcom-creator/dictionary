@@ -35,4 +35,5 @@ repositories {
 dependencies {
     implementation project(':capacitor-android')
     implementation "androidx.appcompat:appcompat:" + rootProject.ext.androidxAppCompatVersion
+    testImplementation "junit:junit:" + rootProject.ext.junitVersion
 }

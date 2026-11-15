@@ -37,13 +37,44 @@
     });
   }
 
+  function unwrapIdbRecord(res) {
+    if (!res || typeof res !== 'object') return {};
+    if (!Object.prototype.hasOwnProperty.call(res, 'value')) return res;
+    // Recover both standard `{ key, value: obj }` rows and any rows accidentally
+    // wrapped multiple times when idbGet returned the wrapper instead of `.value`.
+    var merged = {};
+    var cur = res;
+    var depth = 0;
+    while (cur && typeof cur === 'object' && Object.prototype.hasOwnProperty.call(cur, 'value') && depth < 8) {
+      var outerKeys = Object.keys(cur);
+      for (var i = 0; i < outerKeys.length; i++) {
+        var k = outerKeys[i];
+        if (k !== 'key' && k !== 'value' && cur[k] && typeof cur[k] === 'object') {
+          merged[k] = cur[k];
+        }
+      }
+      cur = cur.value;
+      depth++;
+    }
+    if (cur && typeof cur === 'object') {
+      var innerKeys = Object.keys(cur);
+      for (var j = 0; j < innerKeys.length; j++) {
+        var ik = innerKeys[j];
+        if (ik !== 'key' && ik !== 'value' && !Object.prototype.hasOwnProperty.call(merged, ik)) {
+          merged[ik] = cur[ik];
+        }
+      }
+    }
+    return merged;
+  }
+
   function idbGet(key) {
     return open().then(function (d) {
       if (!d) return Promise.resolve({});
       return new Promise(function (resolve) {
         var tx = d.transaction(STORE, 'readonly');
         var rq = tx.objectStore(STORE).get(key);
-        rq.onsuccess = function () { resolve(rq.result || {}); };
+        rq.onsuccess = function () { resolve(unwrapIdbRecord(rq.result)); };
         rq.onerror = function () { resolve({}); };
       });
     });

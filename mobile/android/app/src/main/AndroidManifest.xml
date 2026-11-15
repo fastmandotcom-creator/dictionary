@@ -45,6 +45,7 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Self-update: Android 11+ requires this to install the downloaded APK
          via PackageInstaller (v1.5, duosub-study's AppUpdater pattern). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
@@ -53,4 +54,12 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- Android 11+ (API 30+) package visibility: required for TextToSpeech
+         engine discovery (queryIntentServices / new TextToSpeech) on targetSdk 36. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 </manifest>

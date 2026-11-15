@@ -9,11 +9,12 @@
  * Registered in index.html:
  *   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
  */
-const CACHE = 'dict-learn-v5'; // v5: duosub-grade TTS engine (synthesizeToFile) + fixed 'Nghe từ' silent on v1.5.0
+const CACHE = 'dict-learn-v6'; // v6: Capacitor 8 native-bridge fix + IndexedDB unwrap + hardened DictTTSPlugin
 
 // Core app shell (always cached; revalidated on each navigate)
 const SHELL = [
   'index.html',
+  'cap-bridge.js',
   'app.js',
   'srs-store.js',
   'asr-mobile.js',

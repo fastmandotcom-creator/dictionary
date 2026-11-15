@@ -97,7 +97,7 @@ async function main() {
   const { win } = buildSandbox();
   // No window.Capacitor → tts.js must use the web engine path.
   vm.createContext(win);
-  ['srs-store.js', 'asr-mobile.js', 'tts.js', 'app.js'].forEach((f) =>
+  ['cap-bridge.js', 'srs-store.js', 'asr-mobile.js', 'tts.js', 'app.js'].forEach((f) =>
     vm.runInContext(fs.readFileSync(path.join(WWW, f), 'utf8'), win, { filename: f })
   );
   const ok = (c, m) => { if (!c) { console.error('FAIL ' + m); process.exit(1); } console.log('OK  ' + m); };
@@ -142,9 +142,61 @@ async function main() {
   vm.createContext(win2);
   win2.speechSynthesis.getVoices = () => []; // Android WebView: zero voices
   win2.Capacitor = undefined;
-  vm.runInContext(fs.readFileSync(path.join(WWW, 'tts.js'), 'utf8'), win2, { filename: 'tts.js' });
+  ['cap-bridge.js', 'tts.js'].forEach((f) =>
+    vm.runInContext(fs.readFileSync(path.join(WWW, f), 'utf8'), win2, { filename: f })
+  );
   const out2 = await win2.TTS.speak('hello', 'en');
   ok(out2.ok === false && out2.result === 'no-voice', '0-voice WebView -> no-voice, not silent success');
+
+  // Android native-bridge.js shape (NO registerPlugin — plugins live on Capacitor.Plugins):
+  // verify DictTTS binds, speaks, opens settings on 2nd tap after no-voice, and ignores cancelled.
+  const w3 = buildSandbox();
+  const win3 = w3.win;
+  const calls3 = { speak: [], openSettings: 0, diagnose: 0, webSpoke: 0 };
+  let nativeBehavior = { result: 'spoken', engine: 'google-web', detail: 'downloaded 1024 bytes' };
+  win3.speechSynthesis.speak = () => { calls3.webSpoke++; };
+  win3.Capacitor = {
+    DEBUG: false,
+    isLoggingEnabled: false,
+    Plugins: {
+      DictTTS: {
+        speak: async (args) => { calls3.speak.push(args); return nativeBehavior; },
+        cancel: async () => {},
+        diagnose: async () => { calls3.diagnose++; return { engineCount: 2, engineNames: 'com.google.android.tts', networkOnline: true, googleResting: false, cacheCount: 3 }; },
+        openSettings: async () => { calls3.openSettings++; return { result: 'ok' }; },
+      },
+      App: {
+        exitApp: async () => {},
+      },
+    },
+    isPluginAvailable: (name) => Object.prototype.hasOwnProperty.call(win3.Capacitor.Plugins, name),
+  };
+  vm.createContext(win3);
+  ['cap-bridge.js', 'srs-store.js', 'asr-mobile.js', 'tts.js', 'app.js'].forEach((f) =>
+    vm.runInContext(fs.readFileSync(path.join(WWW, f), 'utf8'), win3, { filename: f })
+  );
+  await new Promise((r) => setTimeout(r, 60));
+  const st3 = await win3.TTS.status();
+  ok(st3.nativeBound === true, 'native-bridge.js (no registerPlugin) binds DictTTS');
+  ok(st3.engines === 2 && st3.cacheCount === 3, 'diagnose() values surfaced via Plugins.DictTTS');
+  const out3 = await win3.TTS.speak('hello', 'en');
+  ok(out3.ok === true && out3.engine === 'google-web', 'TTS.speak() calls native Plugins.DictTTS.speak');
+  ok(calls3.webSpoke === 0, 'native path does NOT fall back to silent web speechSynthesis');
+
+  // Interactive #speak no-voice -> 2nd tap opens native TTS settings
+  w3.doc._els.card.dataset.word = 'test';
+  nativeBehavior = { result: 'no-voice', engine: 'native', detail: 'missing voice' };
+  w3.doc._els.speak.dispatch('click');
+  await new Promise((r) => setTimeout(r, 30));
+  ok(calls3.openSettings === 0, '1st tap with no-voice shows toast, does not immediately jump');
+  w3.doc._els.speak.dispatch('click');
+  await new Promise((r) => setTimeout(r, 30));
+  ok(calls3.openSettings === 1, '2nd tap opens native TTS settings via Plugins.DictTTS');
+
+  // Cancelled utterance must not show error toast
+  nativeBehavior = { result: 'cancelled', engine: 'none', detail: 'superseded' };
+  const outCancel = await win3.TTS.speak('next', 'en');
+  ok(outCancel.ok === false && outCancel.cancelled === true, 'cancelled returns cancelled flag cleanly');
 
   console.log('ALL TTS BRIDGE CHECKS PASSED');
 }

@@ -50,7 +50,9 @@ function buildSandbox({ versionMeta, latestRelease, now } = {}) {
   };
   win.window = win; win.globalThis = win;
   vm.createContext(win);
-  vm.runInContext(fs.readFileSync(path.join(WWW, 'update.js'), 'utf8'), win, { filename: 'update.js' });
+  ['cap-bridge.js', 'update.js'].forEach((f) =>
+    vm.runInContext(fs.readFileSync(path.join(WWW, f), 'utf8'), win, { filename: f })
+  );
   return win;
 }
 

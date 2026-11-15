@@ -70,12 +70,15 @@ function sharedStorage() {
 function buildSandbox(storage, { ghRelease } = {}) {
   const doc = {
     _els: {},
+    _docListeners: {},
     getElementById: (id) => { if (!doc._els[id]) doc._els[id] = new El(id); return doc._els[id]; },
     createElement: (t) => new El(t),
     createTextNode: (t) => ({ nodeValue: t }),
     querySelector: () => null,
     querySelectorAll: () => [],
-    addEventListener() {}, removeEventListener() {},
+    addEventListener(t, f) { (doc._docListeners[t] = doc._docListeners[t] || []).push(f); },
+    removeEventListener() {},
+    dispatchEvent(t, ev) { (doc._docListeners[t] || []).forEach((f) => f(ev)); },
   };
   ['base', 'target', 'sessionlen'].forEach((id) => {});
   const els = {};
@@ -125,10 +128,10 @@ function buildSandbox(storage, { ghRelease } = {}) {
   };
   win.window = win; win.globalThis = win;
   vm.createContext(win);
-  ['srs-store.js', 'asr-mobile.js', 'tts.js', 'update.js', 'app.js'].forEach((f) => {
+  ['cap-bridge.js', 'srs-store.js', 'asr-mobile.js', 'tts.js', 'update.js', 'app.js'].forEach((f) => {
     vm.runInContext(fs.readFileSync(path.join(WWW, f), 'utf8'), win, { filename: f });
   });
-  return { win, els };
+  return { win, els, doc };
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -138,7 +141,7 @@ async function main() {
 
   // ---------- JOURNEY: first launch ----------
   console.log('STEP 1: first launch');
-  let { win, els } = buildSandbox(storage, {});
+  let { win, els, doc } = buildSandbox(storage, {});
   await sleep(80);
   assert.ok(els.boot.classList.contains('hidden'), 'boot dismissed');
   assert.ok(!els.top.classList.contains('hidden'), 'header visible');
@@ -247,7 +250,7 @@ async function main() {
 
   console.log('STEP 8: auto-update check (mocked v9.9.9) → banner');
   // fresh sandbox sharing storage, but now with a newer mocked release
-  ({ win, els } = buildSandbox(storage, {
+  ({ win, els, doc } = buildSandbox(storage, {
     ghRelease: {
       tag_name: 'v9.9.9', name: 'Huge new release',
       html_url: 'https://github.com/x/releases/tag/v9.9.9',
@@ -271,7 +274,7 @@ async function main() {
   assert.strictEqual(win.AppUpdate.pref(), 'on', 'pref back on');
 
   console.log('STEP 10: reload (fresh context, shared storage) — SRS survives');
-  ({ win, els } = buildSandbox(storage, {}));
+  ({ win, els, doc } = buildSandbox(storage, {}));
   await sleep(80);
   const srs2 = JSON.parse(JSON.stringify(await win.SrsStore.get('dict_srs_v2_vi_en')));
   const n2 = Object.keys(srs2).length;
@@ -282,9 +285,9 @@ async function main() {
   // onboarding should NOT reappear (dismissed persisted)
   assert.ok(els.onboard.classList.contains('hidden'), 'onboarding stays dismissed');
 
-  console.log('STEP 11: back-button behavior (web no-op path, no crash)');
+  console.log('STEP 11: back-button behavior (Capacitor document backbutton event)');
   els.drill.classList.remove('hidden');
-  win.dispatchEvent('backbutton', { preventDefault() {} });
+  doc.dispatchEvent('backbutton', { preventDefault() {} });
   await sleep(20);
   assert.ok(els.drill.classList.contains('hidden'), 'back press closes open panel');
 

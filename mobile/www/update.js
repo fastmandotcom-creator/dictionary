@@ -113,11 +113,12 @@
         self._rememberInstalled();
         self._renderVersionLine();
       }, function () {
-        if (typeof Capacitor !== "undefined" && Capacitor.App) {
-          return Capacitor.App.getInfo().then(function (i) {
-            self.currentVersion = i.version || "0.0.0";
+        var appPlugin = (window.CapBridge && window.CapBridge.getApp) ? window.CapBridge.getApp() : null;
+        if (appPlugin && appPlugin.getInfo) {
+          return appPlugin.getInfo().then(function (i) {
+            self.currentVersion = (i && i.version) || "0.0.0";
             self._renderVersionLine();
-          });
+          }).catch(function () { return null; });
         }
         return null;
       });
@@ -385,12 +386,10 @@
     openDownload: function (rel) {
       var url = (rel && rel.apk) ? rel.apk : ((rel && rel.url) || this.channelURL);
       if (!this.isHostAllowed(url)) url = this.channelURL; // never a non-GitHub address
-      if (typeof Capacitor !== "undefined" && Capacitor.Plugins && Capacitor.Plugins.Browser) {
-        Capacitor.Plugins.Browser.open({ url: url, presentation: "fullscreen" });
-        return;
-      }
-      if (typeof Capacitor !== "undefined" && Capacitor.App && Capacitor.App.openUrl) {
-        Capacitor.App.openUrl({ url: url });
+      var browser = (window.CapBridge && window.CapBridge.isAvailable && window.CapBridge.isAvailable("Browser"))
+        ? window.CapBridge.getPlugin("Browser") : null;
+      if (browser && browser.open) {
+        browser.open({ url: url, presentation: "fullscreen" });
         return;
       }
       try { window.open(url, "_blank", "noopener"); }
@@ -452,9 +451,11 @@
 
     // Reach the native update plugin when present (Android only).
     _bindNative: function () {
-      if (typeof Capacitor !== "undefined" && Capacitor.registerPlugin &&
-          Capacitor.isPluginAvailable && Capacitor.isPluginAvailable("DictUpdate")) {
-        native = Capacitor.registerPlugin("DictUpdate");
+      var res = (window.CapBridge && window.CapBridge.resolve)
+        ? window.CapBridge.resolve("DictUpdate")
+        : { available: false, plugin: null };
+      if (res.available && res.plugin) {
+        native = res.plugin;
         nativeAvailable = true;
         var self = this;
         if (native.addListener) {
@@ -466,8 +467,8 @@
           } catch (e) {}
         }
         if (native.info) native.info().then(function (i) {
-          self.currentVersionCode = i.versionCode || self.currentVersionCode;
-          self.installedAtMs = i.lastUpdateTime || 0;
+          self.currentVersionCode = (i && i.versionCode) || self.currentVersionCode;
+          self.installedAtMs = (i && i.lastUpdateTime) || 0;
           try { localStorage.setItem(LS_INSTALLED, String(self.installedAtMs)); } catch (e) {}
         }).catch(function () {});
       }

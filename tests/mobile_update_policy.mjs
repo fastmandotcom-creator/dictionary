@@ -91,7 +91,9 @@ function buildSandbox({ versionMeta, latestRelease, updateInfo, nowMs } = {}) {
   };
   win.open = (url) => { win._opened = url; };
   win.location = { href: '' };
-  vm.runInContext(fs.readFileSync(path.join(WWW, 'update.js'), 'utf8'), win, { filename: 'update.js' });
+  ['cap-bridge.js', 'update.js'].forEach((f) =>
+    vm.runInContext(fs.readFileSync(path.join(WWW, f), 'utf8'), win, { filename: f })
+  );
   return { win, els, storage, setNow: (v) => win.Date._setMs(v) };
 }
 
@@ -217,6 +219,40 @@ async function main() {
     await win.AppUpdate.download(rel); // nativeAvailable=false -> openDownload
     assert.strictEqual(win._opened, rel.apk, 'web fallback opens the GitHub release page');
     console.log('OK  web fallback (no native plugin) -> release-page download');
+  }
+
+  // 10) Android native-bridge.js shape (Plugins.DictUpdate + Plugins.App + Plugins.Browser WITHOUT registerPlugin)
+  {
+    const { win } = buildSandbox({ versionMeta: null });
+    const nativeCalls = { download: 0, install: 0, browserOpen: null, appInfo: 0 };
+    win.Capacitor = {
+      Plugins: {
+        DictUpdate: {
+          info: async () => ({ versionCode: 9, lastUpdateTime: 1000, unmetered: true }),
+          download: async (args) => { nativeCalls.download++; return { path: '/tmp/u.apk', sha256: args.sha256 || 'x' }; },
+          install: async () => { nativeCalls.install++; return {}; },
+          addListener: () => ({ remove() {} }),
+        },
+        App: {
+          getInfo: async () => { nativeCalls.appInfo++; return { version: '1.8.0', build: '10' }; },
+        },
+        Browser: {
+          open: async (opts) => { nativeCalls.browserOpen = opts.url; },
+        },
+      },
+      isPluginAvailable: (n) => Object.prototype.hasOwnProperty.call(win.Capacitor.Plugins, n),
+    };
+    win.AppUpdate._bindNative();
+    await win.AppUpdate.loadMeta();
+    await new Promise((r) => setTimeout(r, 20));
+    assert.strictEqual(win.AppUpdate.currentVersion, '1.8.0', 'CapBridge reads Plugins.App.getInfo fallback');
+    assert.strictEqual(win.AppUpdate.currentVersionCode, 9, 'CapBridge binds Plugins.DictUpdate without registerPlugin');
+    const rel = { version: '2.0.0', apk: 'https://github.com/fastmandotcom-creator/dictionary/releases/download/v2.0.0/dict-learn-v2.0.0-android.apk', sha256: 'abc' };
+    await win.AppUpdate.download(rel);
+    assert.strictEqual(nativeCalls.download, 1, 'download() uses Plugins.DictUpdate');
+    win.AppUpdate.openDownload(rel);
+    assert.strictEqual(nativeCalls.browserOpen, rel.apk, 'openDownload() uses Plugins.Browser');
+    console.log('OK  Android native-bridge.js binding (DictUpdate + App + Browser without registerPlugin)');
   }
 
   console.log('\nALL DUOSUB-STYLE UPDATE POLICY TESTS PASSED');

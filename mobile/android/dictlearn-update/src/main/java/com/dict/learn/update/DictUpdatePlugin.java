@@ -142,8 +142,11 @@ public class DictUpdatePlugin extends Plugin {
         File folder = new File(getContext().getCacheDir(), "app-update");
         folder.mkdirs();
         // A fresh download replaces any earlier one (duosub-study clears the folder).
-        for (File old : folder.listFiles()) {
-            if (old.isFile() && !old.getName().equals("last-status.txt")) old.delete();
+        File[] oldFiles = folder.listFiles();
+        if (oldFiles != null) {
+            for (File old : oldFiles) {
+                if (old.isFile() && !old.getName().equals("last-status.txt")) old.delete();
+            }
         }
         File part = new File(folder, "update.apk.part");
         File apk = new File(folder, "update.apk");
@@ -333,8 +336,11 @@ public class DictUpdatePlugin extends Plugin {
     @PluginMethod
     public void clear(PluginCall call) {
         File folder = new File(getContext().getCacheDir(), "app-update");
-        for (File old : folder.listFiles()) {
-            if (old.isFile() && !old.getName().equals("last-status.txt")) old.delete();
+        File[] oldFiles = folder.listFiles();
+        if (oldFiles != null) {
+            for (File old : oldFiles) {
+                if (old.isFile() && !old.getName().equals("last-status.txt")) old.delete();
+            }
         }
         main.post(() -> call.resolve());
     }
@@ -383,14 +389,18 @@ public class DictUpdatePlugin extends Plugin {
     }
 
     private boolean isUnmetered(Context ctx) {
-        ConnectivityManager cm = (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (cm == null) return false;
-        android.net.Network network = cm.getActiveNetwork();
-        if (network == null) return false;
-        NetworkCapabilities caps = cm.getNetworkCapabilities(network);
-        // duosub-study's unmetered(): Wi-Fi or another unmetered network.
-        // NET_CAPABILITY_METERED == 2 (android.net.ConnectivityManager).
-        return caps != null && !caps.hasCapability(2);
+        try {
+            ConnectivityManager cm = (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return false;
+            android.net.Network network = cm.getActiveNetwork();
+            if (network == null) return false;
+            NetworkCapabilities caps = cm.getNetworkCapabilities(network);
+            // duosub-study's unmetered(): Wi-Fi or another unmetered network.
+            // NET_CAPABILITY_METERED == 2 (android.net.ConnectivityManager).
+            return caps != null && !caps.hasCapability(2);
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     /** The receiver that learns the installer's verdict and stores it. */

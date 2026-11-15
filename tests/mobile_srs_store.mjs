@@ -37,7 +37,8 @@ function fakeIndexedDB() {
           get(k) {
             const rq = {};
             setImmediate(() => {
-              rq.result = tables.has(k) ? tables.get(k).value : undefined;
+              // Real IndexedDB with keyPath:'key' returns the full stored row `{ key, value }`!
+              rq.result = tables.has(k) ? tables.get(k) : undefined;
               rq.onsuccess && rq.onsuccess();
             });
             return rq;
@@ -99,7 +100,16 @@ function runStoreTest(kind) {
     await store.clear('vi_en');
     const cleared = await store.get('vi_en');
     assert.strictEqual(JSON.stringify(cleared), '{}', 'idb clear');
-    console.log('OK  IndexedDB backend (round-trip, clear)');
+    // Recovery from nested `{ key, value }` wrapper rows created by older builds
+    const wrapped = { key: 'nested', value: { key: 'nested', value: { A: { grade: 'good' } }, B: { grade: 'ok' } }, C: { grade: 'hard' } };
+    await store.set('nested', wrapped);
+    const recovered = await store.get('nested');
+    assert.strictEqual(recovered.A.grade, 'good', 'recovered deep nested A');
+    assert.strictEqual(recovered.B.grade, 'ok', 'recovered mid nested B');
+    assert.strictEqual(recovered.C.grade, 'hard', 'recovered outer C');
+    assert.strictEqual(recovered.key, undefined, 'stray key stripped');
+    assert.strictEqual(recovered.value, undefined, 'stray value stripped');
+    console.log('OK  IndexedDB backend (real row shape, legacy wrapper recovery, clear)');
   }
 
   console.log('srs-store: all tests passed');

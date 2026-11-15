@@ -17,6 +17,7 @@
   var fill = null;         // { row, blank, answer }
   var conj = null;         // { targetKey, correct, options }
   var soundOn = true;
+  var wantSettings = false;
   var sessionDone = false;
   var sessionStats = { learned: 0, correct: 0, practice: 0 };
 
@@ -97,9 +98,12 @@
   function speak(text, lang, interactive) {
     if (!text || !soundOn) return Promise.resolve(false);
     var onDone = function (out) {
-      var ok = !!(out && out.ok);
-      if (!ok && interactive && window.TTS && TTS.message) {
-        toast("🔇 " + TTS.message(), "bad");
+      if (!out || out.cancelled) return false;
+      var ok = !!out.ok;
+      var skipNoVoice = (interactive === "no-voice-custom" && out.result === "no-voice");
+      if (!ok && interactive && !skipNoVoice && window.TTS && TTS.message) {
+        var msg = TTS.message();
+        if (msg) toast("🔇 " + msg, "bad");
       }
       return ok;
     };
@@ -113,6 +117,20 @@
   }
   function TTS_map(lang) {
     switch (lang) { case "zh": return "zh-CN"; case "pt": return "pt-BR"; case "vi": return "vi-VN"; default: return lang; }
+  }
+  function sampleWordFor(lang) {
+    switch (lang) {
+      case "vi": return "xin chào";
+      case "ja": return "こんにちは";
+      case "ko": return "안녕하세요";
+      case "zh": case "zh-CN": case "cmn": return "你好";
+      case "fr": return "bonjour";
+      case "de": return "hallo";
+      case "es": return "hola";
+      case "ru": return "привет";
+      case "ar": return "مرحبا";
+      default: return "hello";
+    }
   }
 
   // ---------------- queue & home stats ----------------
@@ -236,6 +254,7 @@
   }
 
   function render() {
+    wantSettings = false;
     hidePanels();
     if (sessionDone || !queue.length || idx >= queue.length) {
       showSessionDone();
@@ -262,7 +281,10 @@
         ((known.e && known.e[id]) ? "<br>" + known.e[id] : "") + "</div>";
 
       updateProgress();
-      speak(word, target());
+      var studyEl = $("study");
+      if (studyEl && !studyEl.classList.contains("hidden")) {
+        speak(word, target());
+      }
     });
   }
 
@@ -608,7 +630,6 @@
     // duosub's openSpeechSettings pattern: tapping "Nghe từ" speaks the word;
     // when the device has no voice for the language it toasts a hint and the
     // NEXT tap opens the system TTS settings to install the missing voices.
-    var wantSettings = false;
     $("speak").onclick = function () {
       var w = $("card").dataset.word;
       if (wantSettings && window.TTS && TTS.openSettings) {
@@ -616,17 +637,23 @@
         wantSettings = false;
         return;
       }
-      speak(w, target(), true).then(function (ok) {
+      speak(w, target(), "no-voice-custom").then(function (ok) {
         if (!ok && window.TTS && TTS._last && TTS._last.result === "no-voice") {
-          wantSettings = true;
-          toast("Thiết bị chưa có giọng đọc " + target() + " · bấm lần nữa để tải", "bad");
+          TTS.status().then(function (s) {
+            if (s && s.nativeBound) {
+              wantSettings = true;
+              toast("🔇 Thiết bị chưa có giọng đọc " + target() + " · bấm lần nữa để tải", "bad");
+            } else {
+              toast("🔇 " + TTS.message(), "bad");
+            }
+          });
         }
       });
     };
     // practice
     $("listen").onclick = showListen;
     $("mic").onclick = toggleMic;
-    $("playdrill").onclick = function () { if (drill) speak(drill.s, "en"); };
+    $("playdrill").onclick = function () { if (drill) speak(drill.s, "en", true); };
     $("fillbtn").onclick = showFill;
     $("conjbtn").onclick = showConjugate;
     $("clearbtn").onclick = hidePanels;
@@ -639,20 +666,23 @@
 
     // --- TTS self-test (Settings → "Kiểm tra"): reveals which layer can
     //     produce audio on THIS device (native plugin reachable? how many
-    //     engines installed? Google resting? last speak result?). This is
-    //     the on-device diagnostic the silent "Nghe từ" bug needed.
+    //     engines installed? Google resting? last speak result?).
     var ttsbtn = $("ttstestbtn");
     var ttsy = $("ttstest");
     var runTtsTest = function () {
       if (!window.TTS || !TTS.status) { if (ttsy) ttsy.textContent = "TTS module chưa nạp."; return; }
       var lang = target();
-      TTS.speak("hello", lang).then(function () {
-        TTS.status().then(function (s) {
+      if (ttsbtn) ttsbtn.disabled = true;
+      if (ttsy) ttsy.textContent = "Đang kiểm tra…";
+      TTS.speak(sampleWordFor(lang), lang).then(function () {
+        return TTS.status().then(function (s) {
           if (!ttsy) return;
           var L = [];
           L.push("Engine " + lang + ": " + (s.last && s.last.ok ? "✅ " + s.last.engine : "❌ " + (s.last ? s.last.result : "none")));
           if (s.nativeBound) {
-            L.push("Native plugin: ✅ · " + (s.engines || 0) + " engine(s)" + (s.googleResting ? " · Google nghỉ" : "") + " · cache " + (s.cacheCount || 0));
+            var engInfo = (s.engines || 0) + " engine(s)" + (s.engineNames ? " (" + s.engineNames + ")" : "");
+            var netInfo = (s.networkOnline === false ? " · Offline" : " · Online");
+            L.push("Native plugin: ✅ · " + engInfo + netInfo + (s.googleResting ? " · Google nghỉ" : "") + " · cache " + (s.cacheCount || 0));
           } else if (s.hasCapacitor) {
             L.push("Native plugin: ❌ Capacitor có, DictTTS không khả dụng");
           } else {
@@ -661,11 +691,15 @@
           L.push("Lần cuối: " + ((s.last && s.last.detail) || "—"));
           ttsy.textContent = L.join("\n");
           ttsy.style.whiteSpace = "pre-line";
-          if (!(s.last && s.last.ok)) {
+          if (!(s.last && s.last.ok) && !(s.last && s.last.cancelled)) {
             toast("TTS chưa phát được — xem chi tiết", "bad");
-            if (s.last && s.last.result === "no-voice" && TTS.openSettings) TTS.openSettings();
+            if (s.nativeBound && s.last && s.last.result === "no-voice" && TTS.openSettings) TTS.openSettings();
           }
         });
+      }).then(function () {
+        if (ttsbtn) ttsbtn.disabled = false;
+      }, function () {
+        if (ttsbtn) ttsbtn.disabled = false;
       });
     };
     if (ttsbtn) ttsbtn.onclick = runTtsTest;
@@ -707,8 +741,8 @@
 
     // --- M3.3 Android back press ---
     var lastBack = 0;
-    window.addEventListener("backbutton", function (e) {
-      e.preventDefault();
+    var handleBack = function (e) {
+      if (e && e.preventDefault) e.preventDefault();
       var openPanelEl = document.querySelector(".panel:not(.hidden)");
       if (openPanelEl) { hidePanels(); return; }
       if (!$("study").classList.contains("hidden")) { showHome(); return; }
@@ -718,7 +752,8 @@
         lastBack = 0;
         var hint = $("back-hint");
         if (hint) hint.classList.add("hidden");
-        if (typeof Capacitor !== "undefined" && Capacitor.App) Capacitor.App.exitApp();
+        var capApp = (window.CapBridge && window.CapBridge.getApp) ? window.CapBridge.getApp() : null;
+        if (capApp && capApp.exitApp) capApp.exitApp();
       } else {
         lastBack = now;
         var h2 = $("back-hint");
@@ -727,7 +762,12 @@
           setTimeout(function () { h2.classList.add("hidden"); }, 2500);
         }
       }
-    });
+    };
+    if (window.CapBridge && window.CapBridge.onBackButton) {
+      window.CapBridge.onBackButton(handleBack);
+    } else if (document.addEventListener) {
+      document.addEventListener("backbutton", handleBack);
+    }
   }
 
   wire();
