@@ -9,7 +9,7 @@
  * Registered in index.html:
  *   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
  */
-const CACHE = 'dict-learn-v15'; // v15: Native DictASR SpeechRecognizer + Standard Mic Permissions
+const CACHE = 'dict-learn-v16'; // v16: Stress-free Word Bank + 4-choice Fill-Blank + Adaptive SRS Mode
 
 // Core app shell (always cached; revalidated on each navigate)
 const SHELL = [

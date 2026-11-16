@@ -300,6 +300,28 @@
     .conj-opt.wrong { border-color: var(--bad-fg); background: var(--bad); color: var(--bad-fg); }
     .conj-opt:disabled { cursor: default; opacity: 1; }
     .next-q { margin-top: 0.5rem; width: 100%; min-height: 2.75rem; font-weight: 700; }
+    .panel-note.retry { color: var(--warn-fg); }
+    .mode-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; margin-top: 0.55rem; }
+    .mode-row:empty { display: none; }
+    .mode-row button { flex: 1 1 0; min-width: 8rem; font-weight: 700; }
+    .tile-answer {
+      display: flex; flex-wrap: wrap; align-content: flex-start; gap: 0.4rem;
+      min-height: 3.4rem; padding: 0.45rem 0.2rem; margin: 0.6rem 0 0.7rem;
+      border-bottom: 2px dashed var(--line);
+    }
+    .tile-answer.is-empty::before {
+      content: "Chạm các từ bên dưới để ghép câu"; color: var(--sub);
+      font-size: 0.88rem; align-self: center; padding-left: 0.2rem;
+    }
+    .tile-bank { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.55rem; }
+    .tile {
+      min-height: 2.75rem; padding: 0.35rem 0.75rem; border-radius: 0.7rem;
+      border: 1px solid var(--line); border-bottom-width: 3px;
+      background: var(--card); color: var(--text); font-size: 1rem; font-weight: 600; cursor: pointer;
+    }
+    .tile:active { transform: translateY(1px); border-bottom-width: 2px; }
+    .tile.used { opacity: 0.22; cursor: default; }
+    .tile-answer.solved .tile { border-color: var(--good-fg); color: var(--good-fg); }
     #mic.is-listening {
       border-color: var(--bad-fg); background: var(--bad); color: var(--bad-fg); font-weight: 700;
       animation: mic-pulse 1.3s ease-in-out infinite;
@@ -819,7 +841,7 @@
       <!-- ============ practice panels (one open at a time) ============ -->
       <div id="drill" class="panel hidden">
         <div class="panel-head"><b>🎧 Nghe & ghi</b><button id="clearbtn" class="clear" aria-label="Đóng">✕</button></div>
-        <p class="muted">Nghe câu rồi gõ lại đúng · hoặc chạm Mic để đọc (miễn phí).</p>
+        <p class="muted">Nghe câu rồi chạm từ để ghép · hoặc gõ phím / nói vào Mic.</p>
         <div class="row2">
           <button class="ghost" id="playdrill">🔊 Nghe câu</button>
           <button class="ghost" id="mic" aria-pressed="false">🎤 Mic</button>
@@ -833,9 +855,17 @@
           </div>
         </div>
         <input id="typed" type="text" placeholder="Gõ lại câu vừa nghe…" autocomplete="off" autocapitalize="sentences">
+        <div id="drill-tiles" class="tiles hidden">
+          <div id="drill-answer" class="tile-answer is-empty" aria-live="polite"></div>
+          <div id="drill-bank" class="tile-bank"></div>
+          <button id="drill-reset" class="ghost slim2" type="button">↺ Xếp lại</button>
+        </div>
         <button id="drillcheck" class="slim">Kiểm tra</button>
         <p class="panel-note" id="drill-note"></p>
-        <button id="drillnext" class="ghost next-q hidden" type="button">🔄 Câu khác</button>
+        <div class="mode-row">
+          <button id="drill-mode-btn" class="ghost slim2 hidden" type="button">⌨️ Gõ phím</button>
+          <button id="drillnext" class="ghost slim2 hidden" type="button">🔄 Câu khác</button>
+        </div>
       </div>
 
       <div id="fillbox" class="panel hidden">
@@ -844,10 +874,14 @@
           <button class="ghost slim2" id="playfill" type="button">🔊 Nghe lại câu</button>
         </div>
         <p id="fill-sent" style="font-size:1.05rem;margin-bottom:0.4rem"></p>
+        <div id="fill-opts" class="hidden"></div>
         <input id="fill-input" type="text" placeholder="Gõ từ còn thiếu…" autocomplete="off" autocapitalize="off">
         <button id="fillcheck" class="slim">Kiểm tra</button>
         <p class="panel-note" id="fill-note"></p>
-        <button id="fillnext" class="ghost next-q hidden" type="button">🔄 Câu khác</button>
+        <div class="mode-row">
+          <button id="fill-mode-btn" class="ghost slim2 hidden" type="button">⌨️ Gõ phím</button>
+          <button id="fillnext" class="ghost slim2 hidden" type="button">🔄 Câu khác</button>
+        </div>
       </div>
 
       <div id="conjbox" class="panel hidden">

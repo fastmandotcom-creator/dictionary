@@ -71,6 +71,8 @@ class El {
 
 const IDS = [
   'drillnext', 'fillnext', 'conjnext',
+  'drill-tiles', 'drill-answer', 'drill-bank', 'drill-reset', 'drill-mode-btn',
+  'fill-opts', 'fill-mode-btn',
   'boot', 'top', 'app', 'progress', 'card', 'base', 'target', 'b1', 'b2', 'b3',
   'b1-sub', 'b2-sub', 'b3-sub', 'undobtn', 'study-bar',
   'flip', 'speak', 'listen', 'fillbtn', 'conjbtn', 'clearbtn', 'mic',
@@ -401,6 +403,88 @@ async function main() {
   const noteAfter = sb2.els['conj-note'].textContent;
   opts[1].dispatch('click');
   assert.strictEqual(sb2.els['conj-note'].textContent, noteAfter, 'conj second tap ignored (no double scoring)');
+
+  // 6b) Stress-free Word Bank (Listen) & 4-Choice Fill-Blank + Gentle Retry + Keyboard Toggle
+  sb2.els.target.value = 'en';
+  await sb2.els.target.dispatch('change');
+  await sleep(100);
+  sb2.els.card.dataset.id = conjCid;
+  sb2.els.listen.dispatch('click');
+  await sleep(60);
+  assert.ok(!sb2.els['drill-tiles'].classList.contains('hidden'), 'new word defaults to stress-free Word Bank tiles');
+  assert.ok(sb2.els.typed.classList.contains('hidden'), 'virtual keyboard input hidden in Word Bank mode');
+  const firstTile = sb2.els['drill-bank'].children[0];
+  firstTile.dispatch('click');
+  assert.strictEqual(firstTile.disabled, true, 'tapped bank tile marked used');
+  assert.strictEqual(sb2.els['drill-answer'].children.length, 1, 'tile moved to answer tray');
+  assert.strictEqual(sb2.els.typed.value, firstTile.textContent, 'answer tray syncs typed.value');
+  // tap placed tile to return it to bank
+  sb2.els['drill-answer'].children[0].dispatch('click');
+  assert.strictEqual(firstTile.disabled, false, 'deselected tile returned to bank');
+  assert.strictEqual(sb2.els.typed.value, '', 'typed.value cleared after removing tile');
+  // tap 2 tiles, verify reset clears answer tray & bank
+  sb2.els['drill-bank'].children[0].dispatch('click');
+  sb2.els['drill-bank'].children[1].dispatch('click');
+  assert.strictEqual(sb2.els['drill-answer'].children.length, 2, '2 tiles placed');
+  sb2.els['drill-reset'].dispatch('click');
+  assert.strictEqual(sb2.els['drill-answer'].children.length, 0, 'drill-reset clears answer tray');
+  assert.strictEqual(sb2.els.typed.value, '', 'drill-reset clears typed.value');
+  // toggle to keyboard mode & back
+  sb2.els['drill-mode-btn'].dispatch('click');
+  assert.ok(sb2.els['drill-tiles'].classList.contains('hidden'), 'mode toggle switches to typing');
+  assert.ok(!sb2.els.typed.classList.contains('hidden'), 'typing input revealed');
+  sb2.els['drill-mode-btn'].dispatch('click');
+  assert.ok(!sb2.els['drill-tiles'].classList.contains('hidden'), 'mode toggle returns to Word Bank');
+
+  // Điền khuyết 4-choice + gentle retry + keyboard toggle
+  sb2.els.fillbtn.dispatch('click');
+  await sleep(60);
+  assert.ok(!sb2.els['fill-opts'].classList.contains('hidden'), 'new word Fill-Blank defaults to 4-choice buttons');
+  assert.ok(sb2.els['fill-input'].classList.contains('hidden'), 'fill keyboard input hidden in choice mode');
+  assert.ok(sb2.els['fill-opts'].children.length >= 2, 'fill choices generated (>= 2 options)');
+  const fillTargetSf = drills[conjCid][0].sf.toLowerCase();
+  const wrongChoice = sb2.els['fill-opts'].children.find((b) => b.textContent.toLowerCase() !== fillTargetSf);
+  const rightChoice = sb2.els['fill-opts'].children.find((b) => b.textContent.toLowerCase() === fillTargetSf);
+  assert.ok(rightChoice, 'fill choices include the correct answer');
+  if (wrongChoice) {
+    wrongChoice.dispatch('click');
+    assert.strictEqual(wrongChoice.disabled, true, 'wrong option disabled');
+    assert.ok(sb2.els['fill-note'].className.includes('retry'), 'wrong option gives gentle retry hint instead of harsh failure');
+    assert.ok(!rightChoice.disabled, 'other choices remain clickable for retry');
+  }
+  rightChoice.dispatch('click');
+  assert.ok(sb2.els['fill-note'].className.includes('ok'), 'correct fill choice marks ok');
+  assert.ok(sb2.els['fill-sent'].textContent.includes('[' + rightChoice.textContent + ']'), 'blanked sentence reveals answer inline');
+  // toggle fill mode back to keyboard cleanly
+  sb2.els['fill-mode-btn'].dispatch('click');
+  assert.ok(sb2.els['fill-opts'].classList.contains('hidden'), 'fill mode toggles to keyboard');
+  assert.ok(!sb2.els['fill-input'].classList.contains('hidden'), 'fill input revealed');
+  // reset persisted mode preferences to auto and verify mastered card (reps >= 2, interval >= 7) auto-escalates to typing
+  sb2.win.localStorage.removeItem('dictlearn_drill_mode');
+  sb2.win.localStorage.removeItem('dictlearn_fill_mode');
+  const srsNow = JSON.parse(JSON.stringify(await sb2.win.SrsStore.get('dict_srs_v2_vi_en') || {}));
+  srsNow[conjCid] = { grade: 'good', at: Date.now(), interval: 14, reps: 3, ease: 2.5, lapses: 0 };
+  await sb2.win.SrsStore.set('dict_srs_v2_vi_en', srsNow);
+  // reload srs cache via grading flow or inspect fresh sandbox? trigger toggle -> target reload
+  sb2.els.target.value = 'fr';
+  await sb2.els.target.dispatch('change');
+  await sleep(60);
+  sb2.els.target.value = 'en';
+  await sb2.els.target.dispatch('change');
+  await sleep(60);
+  sb2.els.card.dataset.id = conjCid;
+  sb2.els.listen.dispatch('click');
+  await sleep(50);
+  assert.ok(!sb2.els.typed.classList.contains('hidden'), 'mastered concept (reps>=2, interval>=7) auto-escalates to typing in Listen');
+  sb2.els.fillbtn.dispatch('click');
+  await sleep(50);
+  assert.ok(!sb2.els['fill-input'].classList.contains('hidden'), 'mastered concept (reps>=2, interval>=7) auto-escalates to typing in Fill');
+  // clean up mastered override so subsequent session tests start cleanly
+  delete srsNow[conjCid];
+  await sb2.win.SrsStore.set('dict_srs_v2_vi_en', srsNow);
+  sb2.els.target.value = 'fr';
+  await sb2.els.target.dispatch('change');
+  await sleep(40);
 
   // 7) Unified 50-word Session Handoff (Study <-> Audio on 12k dataset)
   console.log('7) Unified 50-word Session Handoff (Study <-> Audio)');

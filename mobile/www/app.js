@@ -855,7 +855,12 @@
     if (p) {
       if (p.scrollIntoView) p.scrollIntoView({ behavior: "smooth", block: "nearest" });
       var inp = p.querySelector('input[type="text"]');
-      if (inp && inp.focus) setTimeout(function () { try { inp.focus(); } catch (e) {} }, 60);
+      if (inp && inp.focus) {
+        setTimeout(function () {
+          if (inp.classList && inp.classList.contains("hidden")) return;
+          try { inp.focus(); } catch (e) {}
+        }, 60);
+      }
     }
   }
 
@@ -892,12 +897,207 @@
     });
   }
 
-  // ---------------- M2.2a listen & write ----------------
+  // ---------------- M2.2a listen & write (Word Bank + Adaptive SRS Mode) ----------------
+  function clearNodeChildren(el) {
+    if (!el) return;
+    el.innerHTML = "";
+    if (Array.isArray(el.children)) el.children.length = 0;
+  }
+
+  function removeNodeSafe(el) {
+    if (!el || !el.parentNode) return;
+    if (el.parentNode.removeChild) {
+      el.parentNode.removeChild(el);
+    } else if (Array.isArray(el.parentNode.children)) {
+      var i = el.parentNode.children.indexOf(el);
+      if (i >= 0) el.parentNode.children.splice(i, 1);
+    }
+  }
+
+  function shuffleCopy(arr) {
+    var copy = arr.slice();
+    for (var i = copy.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = copy[i];
+      copy[i] = copy[j];
+      copy[j] = tmp;
+    }
+    return copy;
+  }
+
+  function readPracticePref(key) {
+    try { return localStorage.getItem(key) || "auto"; } catch (e) { return "auto"; }
+  }
+
+  function writePracticePref(key, val) {
+    try { localStorage.setItem(key, val); } catch (e) {}
+  }
+
+  function isMasteredForTyping(id) {
+    var rec = readSrs()[id];
+    return !!(rec && (rec.reps || 0) >= 2 && (rec.interval || 0) >= 7);
+  }
+
+  function stripTileEdgePunct(tok) {
+    return String(tok || "").replace(/^[.,!?;:"'“”‘’()\[\]¡¿。、！？…—–]+|[.,!?;:"'“”‘’()\[\]¡¿。、！？…—–]+$/g, "");
+  }
+
+  function tokenizeForTiles(sentence) {
+    var raw = String(sentence || "").trim().split(/\s+/).filter(Boolean);
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var clean = stripTileEdgePunct(raw[i]);
+      if (clean) out.push(clean);
+    }
+    return out;
+  }
+
+  function pickWordDistractors(id, sentenceTokens, learningData) {
+    var count = sentenceTokens.length > 11 ? 0 : (sentenceTokens.length > 7 ? 1 : 2);
+    if (count <= 0 || !concepts.length) return [];
+    var seen = {};
+    sentenceTokens.forEach(function (t) { seen[normalizeAnswer(t)] = 1; });
+    var out = [];
+    var rank = conceptRank[id] || 0;
+    var wMap = (learningData && learningData.w) || {};
+    var avgLen = sentenceTokens.reduce(function (a, b) { return a + b.length; }, 0) / sentenceTokens.length;
+
+    function tryAdd(rawWord) {
+      if (out.length >= count || !rawWord) return;
+      var parts = String(rawWord).trim().split(/\s+/);
+      for (var p = 0; p < parts.length && out.length < count; p++) {
+        var clean = stripTileEdgePunct(parts[p]).toLowerCase();
+        var norm = normalizeAnswer(clean);
+        if (!norm || seen[norm] || clean.length < 2) continue;
+        if (Math.abs(clean.length - avgLen) > 5) continue;
+        seen[norm] = 1;
+        out.push(clean);
+      }
+    }
+
+    for (var step = 5; step < concepts.length && out.length < count; step += 7) {
+      var cid = concepts[(rank + step) % concepts.length];
+      if (cid === id) continue;
+      if (wMap[cid]) tryAdd(wMap[cid]);
+      if (out.length < count && drills && drills[cid] && drills[cid][0] && drills[cid][0].sf) {
+        tryAdd(drills[cid][0].sf);
+      }
+    }
+    return out;
+  }
+
+  function renderDrillTiles(sentence, distractors) {
+    var bankBox = $("drill-bank");
+    var ansBox = $("drill-answer");
+    if (!bankBox || !ansBox) return;
+    clearNodeChildren(bankBox);
+    clearNodeChildren(ansBox);
+    if (ansBox.classList) {
+      ansBox.classList.add("is-empty");
+      ansBox.classList.remove("solved");
+    }
+
+    var allTokens = shuffleCopy(sentence.concat(distractors || []));
+    var chosen = [];
+
+    function syncTyped() {
+      if ($("typed")) $("typed").value = chosen.map(function (c) { return c.text; }).join(" ");
+      if (ansBox.classList) ansBox.classList.toggle("is-empty", chosen.length === 0);
+    }
+
+    var items = [];
+    allTokens.forEach(function (tok) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "tile";
+      btn.textContent = tok;
+      var item = { text: tok, bankBtn: btn, used: false, ansBtn: null };
+
+      btn.addEventListener("click", function () {
+        if (item.used || (drill && drill.scored && drill.mode === "tiles")) return;
+        item.used = true;
+        btn.disabled = true;
+        if (btn.classList) btn.classList.add("used");
+
+        var chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "tile";
+        chip.textContent = item.text;
+        item.ansBtn = chip;
+        chip.addEventListener("click", function () {
+          if (drill && drill.scored && drill.mode === "tiles") return;
+          item.used = false;
+          btn.disabled = false;
+          if (btn.classList) btn.classList.remove("used");
+          var ix = chosen.indexOf(item);
+          if (ix >= 0) chosen.splice(ix, 1);
+          removeNodeSafe(chip);
+          item.ansBtn = null;
+          syncTyped();
+        });
+        chosen.push(item);
+        ansBox.appendChild(chip);
+        syncTyped();
+      });
+
+      items.push(item);
+      bankBox.appendChild(btn);
+    });
+
+    if (drill) {
+      drill.resetTiles = function () {
+        chosen.forEach(function (item) {
+          item.used = false;
+          item.bankBtn.disabled = false;
+          if (item.bankBtn.classList) item.bankBtn.classList.remove("used");
+          removeNodeSafe(item.ansBtn);
+          item.ansBtn = null;
+        });
+        chosen.length = 0;
+        if (ansBox.classList) ansBox.classList.remove("solved");
+        var note = $("drill-note");
+        if (note && note.className.indexOf("bad") !== -1) {
+          note.textContent = "Nghe câu rồi chạm từ để ghép theo đúng thứ tự.";
+          note.className = "panel-note";
+        }
+        syncTyped();
+      };
+    }
+  }
+
+  function setDrillMode(mode, opts) {
+    opts = opts || {};
+    if (!drill) return;
+    var actual = (mode === "tiles" && drill.canTiles) ? "tiles" : "type";
+    drill.mode = actual;
+    if (opts.persist && drill.canTiles) writePracticePref("dictlearn_drill_mode", actual);
+
+    var tilesWrap = $("drill-tiles");
+    var typedEl = $("typed");
+    var modeBtn = $("drill-mode-btn");
+    if (tilesWrap && tilesWrap.classList) tilesWrap.classList.toggle("hidden", actual !== "tiles");
+    if (typedEl && typedEl.classList) typedEl.classList.toggle("hidden", actual === "tiles");
+    if (modeBtn) {
+      if (modeBtn.classList) modeBtn.classList.toggle("hidden", !drill.canTiles);
+      modeBtn.textContent = actual === "tiles" ? "⌨️ Gõ phím" : "🧩 Chọn từ";
+    }
+    var note = $("drill-note");
+    if (note && opts.updateNote) {
+      note.textContent = actual === "tiles"
+        ? "Nghe câu rồi chạm từ để ghép theo đúng thứ tự." + (drill.h ? " · Gợi ý: " + drill.h : "")
+        : "Nghe câu rồi gõ lại chính xác (không cần hoa/thấp)." + (drill.h ? " · Gợi ý: " + drill.h : "");
+      note.className = "panel-note";
+    }
+    if (actual === "type" && opts.focusInput && typedEl && typedEl.focus) {
+      setTimeout(function () { try { typedEl.focus(); } catch (e) {} }, 30);
+    }
+  }
+
   function showListen(mode) {
     var silent = !!(mode && typeof mode === "object" && mode.silent);
     var nextMode = mode === "next";
     var lang = practiceLang();
-    var ready = (lang === "en") ? withDrills("listen", function () {}) : Promise.resolve();
+    var ready = (lang === "en") ? Promise.all([withDrills("listen", function () {}), loadLang("en")]) : Promise.resolve();
     return ready.then(function () {
       var id = ensurePracticeConcept();
       ensureStudyVisible();
@@ -907,9 +1107,17 @@
       toggleNext("drillnext", rows.length > 1);
       if (rows.length) {
         var lrow = rows[pickCursor("l" + id, nextMode) % rows.length];
-        drill = { s: lrow.s, h: lrow.h, lang: "en", scored: false };
+        var tokens = tokenizeForTiles(lrow.s);
+        var canTiles = tokens.length >= 2 && !!($("drill-bank") && $("drill-answer"));
+        drill = { id: id, s: lrow.s, h: lrow.h, lang: "en", scored: false, canTiles: canTiles, mode: "type" };
         $("typed").value = "";
-        note.textContent = "Nghe câu rồi gõ lại chính xác (không cần hoa/thấp).";
+        if (canTiles) renderDrillTiles(tokens, pickWordDistractors(id, tokens, cache["en"]));
+        var pref = readPracticePref("dictlearn_drill_mode");
+        var wantMode = (pref === "tiles" || pref === "type") ? pref : (canTiles && !isMasteredForTyping(id) ? "tiles" : "type");
+        setDrillMode(wantMode, { updateNote: false });
+        note.textContent = drill.mode === "tiles"
+          ? "Nghe câu rồi chạm từ để ghép theo đúng thứ tự."
+          : "Nghe câu rồi gõ lại chính xác (không cần hoa/thấp).";
         note.className = "panel-note";
         if (!silent) speak(drill.s, "en");
         return;
@@ -920,9 +1128,15 @@
           note.className = "panel-note";
           return;
         }
-        drill = { s: d.sentence, h: d.hint, lang: d.lang, scored: false };
+        var tokens2 = tokenizeForTiles(d.sentence);
+        var canTiles2 = tokens2.length >= 2 && !!($("drill-bank") && $("drill-answer"));
+        drill = { id: id, s: d.sentence, h: d.hint, lang: d.lang, scored: false, canTiles: canTiles2, mode: "type" };
         $("typed").value = "";
-        note.textContent = "Nghe câu rồi gõ lại chính xác" + (d.hint ? " · Gợi ý: " + d.hint : "");
+        if (canTiles2) renderDrillTiles(tokens2, pickWordDistractors(id, tokens2, d.learning));
+        var pref2 = readPracticePref("dictlearn_drill_mode");
+        var wantMode2 = (pref2 === "tiles" || pref2 === "type") ? pref2 : (canTiles2 && !isMasteredForTyping(id) ? "tiles" : "type");
+        setDrillMode(wantMode2, { updateNote: false });
+        note.textContent = (drill.mode === "tiles" ? "Nghe câu rồi chạm từ để ghép" : "Nghe câu rồi gõ lại chính xác") + (d.hint ? " · Gợi ý: " + d.hint : "");
         note.className = "panel-note";
         if (!silent) speak(drill.s, d.lang);
       });
@@ -938,10 +1152,13 @@
     var note = $("drill-note");
     var extra = ok ? "" : answerMismatchHint(raw, drill.s);
     note.textContent = ok
-      ? ("✅ Đúng. Ghi nhớ tốt!" + (drill.h ? " (" + drill.h + ")" : ""))
-      : ("Đáp án: " + drill.s + extra + (drill.h ? " · " + drill.h : ""));
+      ? ("✅ Chuẩn rồi! Ghi nhớ tốt." + (drill.h ? " (" + drill.h + ")" : ""))
+      : ("💡 Đáp án: " + drill.s + extra + (drill.h ? " · " + drill.h : ""));
     note.className = "panel-note " + (ok ? "ok" : "bad");
-    if (ok && !drill.scored) { drill.scored = true; sessionStats.correct += 1; }
+    if (ok) {
+      if ($("drill-answer") && $("drill-answer").classList) $("drill-answer").classList.add("solved");
+      if (!drill.scored) { drill.scored = true; sessionStats.correct += 1; }
+    }
   }
 
   // ---------------- M2.1 mic ASR & standard permission UX ----------------
@@ -1019,6 +1236,7 @@
     if (drillEl && drillEl.classList && drillEl.classList.contains("hidden")) return;
     pauseOtherAudioBeforeMic();
     hideMicPermBox();
+    if (drill && drill.mode === "tiles") setDrillMode("type", { persist: false });
     setMicUiState(true);
     $("typed").value = "";
     var note = $("drill-note");
@@ -1163,15 +1381,145 @@
     return best.length >= 3 ? best : null;
   }
 
+  function pickFillDistractors(id, answer, learningData) {
+    var normAns = normalizeAnswer(answer);
+    var ansWords = answer.trim().split(/\s+/).length;
+    var rank = conceptRank[id] || 0;
+    var wMap = (learningData && learningData.w) || {};
+    var seen = {};
+    seen[normAns] = 1;
+    var closeMatches = [];
+    var fallback = [];
+
+    function inspect(cand) {
+      if (!cand) return;
+      var trimmed = String(cand).trim();
+      var norm = normalizeAnswer(trimmed);
+      if (!norm || seen[norm]) return;
+      seen[norm] = 1;
+      var words = trimmed.split(/\s+/).length;
+      if ((ansWords === 1 && words === 1 && Math.abs(trimmed.length - answer.length) <= 4)
+          || (ansWords > 1 && words > 1)) {
+        closeMatches.push(trimmed);
+      } else {
+        fallback.push(trimmed);
+      }
+    }
+
+    for (var step = 3; step < concepts.length && closeMatches.length < 3; step += 7) {
+      var cid = concepts[(rank + step) % concepts.length];
+      if (cid === id) continue;
+      if (drills && drills[cid] && drills[cid][0] && drills[cid][0].sf) inspect(drills[cid][0].sf);
+      if (wMap[cid]) inspect(wMap[cid]);
+    }
+    return closeMatches.concat(fallback).slice(0, 3);
+  }
+
+  function renderFillChoices(choices, answer, lang, fullSentence, hint) {
+    var box = $("fill-opts");
+    if (!box) return;
+    clearNodeChildren(box);
+    var buttons = [];
+    choices.forEach(function (opt) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "conj-opt";
+      btn.textContent = opt;
+      btn.addEventListener("click", function () {
+        if (!fill || fill.choiceDone) return;
+        var ok = normalizeAnswer(opt) === normalizeAnswer(answer);
+        var note = $("fill-note");
+        if (ok) {
+          fill.choiceDone = true;
+          btn.className = "conj-opt correct";
+          buttons.forEach(function (b) { b.disabled = true; });
+          if ($("fill-sent") && fill.blanked) {
+            $("fill-sent").textContent = fill.blanked.replace("____", "[" + answer + "]");
+          }
+          if (note) {
+            note.textContent = "✅ Đúng: " + answer + (hint ? " (" + hint + ")" : "");
+            note.className = "panel-note ok";
+          }
+          if (!fill.scored) { fill.scored = true; sessionStats.correct += 1; }
+          speak(fullSentence, lang);
+        } else {
+          btn.className = "conj-opt wrong";
+          btn.disabled = true;
+          if (note) {
+            note.textContent = "💡 Chưa khớp — bạn thử chọn đáp án khác nhé!";
+            note.className = "panel-note retry";
+          }
+        }
+      });
+      buttons.push(btn);
+      box.appendChild(btn);
+    });
+  }
+
+  function setFillMode(mode, opts) {
+    opts = opts || {};
+    if (!fill) return;
+    var hasChoices = !!(fill.choices && fill.choices.length >= 2 && $("fill-opts"));
+    var actual = (mode === "choice" && hasChoices) ? "choice" : "type";
+    fill.mode = actual;
+    if (opts.persist && hasChoices) writePracticePref("dictlearn_fill_mode", actual);
+
+    var optsEl = $("fill-opts");
+    var inpEl = $("fill-input");
+    var checkEl = $("fillcheck");
+    var modeBtn = $("fill-mode-btn");
+    if (optsEl && optsEl.classList) optsEl.classList.toggle("hidden", actual !== "choice");
+    if (inpEl && inpEl.classList) inpEl.classList.toggle("hidden", actual === "choice");
+    if (checkEl && checkEl.classList) checkEl.classList.toggle("hidden", actual === "choice");
+    if (modeBtn) {
+      if (modeBtn.classList) modeBtn.classList.toggle("hidden", !hasChoices);
+      modeBtn.textContent = actual === "choice" ? "⌨️ Gõ phím" : "🧩 Chọn 4 đáp án";
+    }
+    var note = $("fill-note");
+    if (note && opts.updateNote) {
+      var h = (fill.row && fill.row.h) ? (" · " + fill.row.h) : "";
+      note.textContent = actual === "choice"
+        ? ("Chạm từ đúng để điền vào chỗ trống" + h)
+        : ("Nghe câu rồi gõ từ còn thiếu (vị trí gạch ngang)" + h);
+      note.className = "panel-note";
+    }
+    if (actual === "type" && opts.focusInput && inpEl && inpEl.focus) {
+      setTimeout(function () { try { inpEl.focus(); } catch (e) {} }, 30);
+    }
+  }
+
+  function setupFillView(id, blanked, answer, lang, row, learningData) {
+    var distractors = pickFillDistractors(id, answer, learningData);
+    var choices = distractors.length ? shuffleCopy([answer].concat(distractors)) : [];
+    fill = {
+      id: id,
+      row: row,
+      blanked: blanked,
+      answer: answer,
+      lang: lang,
+      choices: choices,
+      scored: false,
+      choiceDone: false,
+      mode: "type"
+    };
+    $("fill-sent").textContent = blanked;
+    $("fill-input").value = "";
+    if (choices.length >= 2) renderFillChoices(choices, answer, lang, row.s, row.h);
+
+    var pref = readPracticePref("dictlearn_fill_mode");
+    var want = (pref === "choice" || pref === "type") ? pref : (choices.length >= 2 && !isMasteredForTyping(id) ? "choice" : "type");
+    setFillMode(want, { updateNote: true });
+    speak(row.s, lang);
+  }
+
   function showFill(mode) {
     var lang = practiceLang();
-    var ready = (lang === "en") ? withDrills("fill", function () {}) : Promise.resolve();
+    var ready = (lang === "en") ? Promise.all([withDrills("fill", function () {}), loadLang("en")]) : Promise.resolve();
     return ready.then(function () {
       var id = ensurePracticeConcept();
       ensureStudyVisible();
       openPanel("fillbox");
       var rows = (lang === "en") ? (drills[id] || []).filter(function (r) { return r.s && r.sf; }) : [];
-      var note = $("fill-note");
       toggleNext("fillnext", rows.length > 1);
       if (rows.length) {
         var row = rows[pickCursor("f" + id, mode === "next") % rows.length];
@@ -1179,12 +1527,7 @@
         var re = new RegExp(sf.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
         if (!re.test(row.s)) { showListen(); return; }
         var blanked = row.s.replace(re, "____");
-        fill = { row: row, answer: sf, lang: "en", scored: false };
-        $("fill-sent").textContent = blanked;
-        $("fill-input").value = "";
-        note.textContent = "Nghe câu rồi gõ từ còn thiếu (vị trí gạch ngang)." + (row.h ? " · " + row.h : "");
-        note.className = "panel-note";
-        speak(row.s, "en");
+        setupFillView(id, blanked, sf, "en", row, cache["en"]);
         return;
       }
       return loadPracticePairData(id).then(function (d) {
@@ -1193,12 +1536,7 @@
         var re2 = new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
         if (!re2.test(d.sentence)) { showListen(); return; }
         var blanked2 = d.sentence.replace(re2, "____");
-        fill = { row: { s: d.sentence, h: d.hint }, answer: token, lang: d.lang, scored: false };
-        $("fill-sent").textContent = blanked2;
-        $("fill-input").value = "";
-        note.textContent = "Nghe câu rồi điền từ còn thiếu" + (d.hint ? " · Nghĩa: " + d.hint : "");
-        note.className = "panel-note";
-        speak(d.sentence, d.lang);
+        setupFillView(id, blanked2, token, d.lang, { s: d.sentence, h: d.hint }, d.learning);
       });
     });
   }
@@ -1212,7 +1550,7 @@
     var note = $("fill-note");
     note.textContent = ok
       ? ("✅ Đúng: " + fill.answer + (fill.row && fill.row.h ? " (" + fill.row.h + ")" : ""))
-      : ("Đáp án: " + fill.answer + (fill.row && fill.row.h ? " · " + fill.row.h : ""));
+      : ("💡 Đáp án: " + fill.answer + (fill.row && fill.row.h ? " · " + fill.row.h : ""));
     note.className = "panel-note " + (ok ? "ok" : "bad");
     if (ok && !fill.scored) { fill.scored = true; sessionStats.correct += 1; }
   }
@@ -2456,6 +2794,21 @@
     if ($("drillnext")) $("drillnext").onclick = function () { showListen("next"); };
     if ($("fillnext")) $("fillnext").onclick = function () { showFill("next"); };
     if ($("conjnext")) $("conjnext").onclick = function () { showConjugate("next"); };
+    if ($("drill-mode-btn")) {
+      $("drill-mode-btn").onclick = function () {
+        if (!drill) return;
+        setDrillMode(drill.mode === "tiles" ? "type" : "tiles", { persist: true, updateNote: true, focusInput: true });
+      };
+    }
+    if ($("drill-reset")) {
+      $("drill-reset").onclick = function () { if (drill && drill.resetTiles) drill.resetTiles(); };
+    }
+    if ($("fill-mode-btn")) {
+      $("fill-mode-btn").onclick = function () {
+        if (!fill) return;
+        setFillMode(fill.mode === "choice" ? "type" : "choice", { persist: true, updateNote: true, focusInput: true });
+      };
+    }
     $("clearbtn").onclick = hidePanels;
     document.querySelectorAll(".close-panel").forEach(function (b) { b.onclick = hidePanels; });
     // inputs
