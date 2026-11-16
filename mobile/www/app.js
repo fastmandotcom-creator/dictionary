@@ -824,15 +824,28 @@
   }
 
   function hidePanels() {
-    if (micListening) { try { window.MicAsr && MicAsr.stop(); } catch (e) {} micListening = false; }
-    var micBtn = $("mic");
-    if (micBtn) micBtn.textContent = "🎤 Mic";
+    micOpSeq += 1;
+    if (micListening) { try { window.MicAsr && MicAsr.stop(); } catch (e) {} }
+    setMicUiState(false);
+    hideMicPermBox();
     if ($("drill")) $("drill").classList.add("hidden");
     if ($("fillbox")) $("fillbox").classList.add("hidden");
     if ($("conjbox")) $("conjbox").classList.add("hidden");
     if ($("study") && $("study").classList) $("study").classList.remove("has-open-panel");
     drill = null; fill = null; conj = null;
     sessionStats.practice = 0;
+  }
+  // Practice variety: each panel cycles through the concept's variants
+  // ("Câu khác") instead of always showing the same question.
+  var practiceCursor = {};
+  var conjCursor = 0;
+  function pickCursor(key, advance) {
+    if (advance) practiceCursor[key] = (practiceCursor[key] || 0) + 1;
+    return practiceCursor[key] || 0;
+  }
+  function toggleNext(btnId, show) {
+    var b = $(btnId);
+    if (b && b.classList) b.classList[show ? "remove" : "add"]("hidden");
   }
   function openPanel(id) {
     hidePanels();
@@ -880,7 +893,9 @@
   }
 
   // ---------------- M2.2a listen & write ----------------
-  function showListen() {
+  function showListen(mode) {
+    var silent = !!(mode && typeof mode === "object" && mode.silent);
+    var nextMode = mode === "next";
     var lang = practiceLang();
     var ready = (lang === "en") ? withDrills("listen", function () {}) : Promise.resolve();
     return ready.then(function () {
@@ -889,12 +904,14 @@
       openPanel("drill");
       var rows = (lang === "en") ? (drills[id] || []) : [];
       var note = $("drill-note");
+      toggleNext("drillnext", rows.length > 1);
       if (rows.length) {
-        drill = { s: rows[0].s, h: rows[0].h, lang: "en" };
+        var lrow = rows[pickCursor("l" + id, nextMode) % rows.length];
+        drill = { s: lrow.s, h: lrow.h, lang: "en", scored: false };
         $("typed").value = "";
         note.textContent = "Nghe câu rồi gõ lại chính xác (không cần hoa/thấp).";
         note.className = "panel-note";
-        speak(drill.s, "en");
+        if (!silent) speak(drill.s, "en");
         return;
       }
       return loadPracticePairData(id).then(function (d) {
@@ -903,11 +920,11 @@
           note.className = "panel-note";
           return;
         }
-        drill = { s: d.sentence, h: d.hint, lang: d.lang };
+        drill = { s: d.sentence, h: d.hint, lang: d.lang, scored: false };
         $("typed").value = "";
         note.textContent = "Nghe câu rồi gõ lại chính xác" + (d.hint ? " · Gợi ý: " + d.hint : "");
         note.className = "panel-note";
-        speak(drill.s, d.lang);
+        if (!silent) speak(drill.s, d.lang);
       });
     });
   }
@@ -924,13 +941,178 @@
       ? ("✅ Đúng. Ghi nhớ tốt!" + (drill.h ? " (" + drill.h + ")" : ""))
       : ("Đáp án: " + drill.s + extra + (drill.h ? " · " + drill.h : ""));
     note.className = "panel-note " + (ok ? "ok" : "bad");
-    sessionStats.correct += ok ? 1 : 0;
+    if (ok && !drill.scored) { drill.scored = true; sessionStats.correct += 1; }
   }
 
-  // ---------------- M2.1 mic ASR ----------------
+  // ---------------- M2.1 mic ASR & standard permission UX ----------------
   var micListening = false;
+  var micOpSeq = 0;
+
+  function setMicUiState(listening) {
+    micListening = !!listening;
+    var btn = $("mic");
+    if (!btn) return;
+    btn.textContent = micListening ? "⏹ Đang nghe… Dừng" : "🎤 Mic";
+    if (btn.classList) btn.classList.toggle("is-listening", micListening);
+    if (btn.setAttribute) btn.setAttribute("aria-pressed", micListening ? "true" : "false");
+  }
+
+  function hideMicPermBox() {
+    var box = $("mic-perm-box");
+    if (box && box.classList) box.classList.add("hidden");
+  }
+
+  function showMicPermBox(kind, customMsg) {
+    var box = $("mic-perm-box");
+    var msg = $("mic-perm-msg");
+    var grantBtn = $("mic-grant-btn");
+    var settingsBtn = $("mic-settings-btn");
+    if (!box || !msg) return;
+    var isNative = window.MicAsr && window.MicAsr.engine && window.MicAsr.engine() === "native";
+    if (kind === "denied") {
+      msg.textContent = customMsg || (isNative
+        ? "Quyền Micro đang bị tắt. Hãy mở Cài đặt → Quyền → Micro rồi chọn Cho phép."
+        : "Quyền Micro đang bị chặn trên trình duyệt. Hãy bấm biểu tượng khóa cạnh thanh địa chỉ để cho phép Micro rồi thử lại.");
+      if (grantBtn && grantBtn.classList) grantBtn.classList.add("hidden");
+      if (settingsBtn && settingsBtn.classList) settingsBtn.classList.toggle("hidden", !isNative);
+    } else {
+      msg.textContent = customMsg || "App cần quyền Micro để nghe bạn đọc và kiểm tra phát âm (xử lý miễn phí, không lưu âm thanh).";
+      if (grantBtn && grantBtn.classList) grantBtn.classList.remove("hidden");
+      if (settingsBtn && settingsBtn.classList) settingsBtn.classList.add("hidden");
+    }
+    if (box.classList) box.classList.remove("hidden");
+  }
+
+  function refreshMicPermissionOnResume() {
+    var box = $("mic-perm-box");
+    var drillEl = $("drill");
+    if (!box || !drillEl || (drillEl.classList && drillEl.classList.contains("hidden"))) return;
+    if (box.classList && box.classList.contains("hidden")) return;
+    if (!window.MicAsr || !window.MicAsr.getPermissionState) return;
+    window.MicAsr.getPermissionState().then(function (perm) {
+      if (perm && perm.granted) {
+        hideMicPermBox();
+        var note = $("drill-note");
+        if (note) {
+          note.textContent = "✅ Đã bật quyền Micro — chạm 🎤 Mic để nói.";
+          note.className = "panel-note ok";
+        }
+      }
+    });
+  }
+
+  function pauseOtherAudioBeforeMic() {
+    if (window.TTS && window.TTS.cancel) {
+      try { window.TTS.cancel(); } catch (e) {}
+    }
+    if (window.AudioPlayer && window.AudioPlayer.getState && window.AudioPlayer.pause) {
+      try {
+        var st = window.AudioPlayer.getState();
+        if (st && st.status === "playing") window.AudioPlayer.pause();
+      } catch (e) {}
+    }
+  }
+
+  function beginMicDictation(opSeq) {
+    if (opSeq !== micOpSeq) return;
+    var drillEl = $("drill");
+    if (drillEl && drillEl.classList && drillEl.classList.contains("hidden")) return;
+    pauseOtherAudioBeforeMic();
+    hideMicPermBox();
+    setMicUiState(true);
+    $("typed").value = "";
+    var note = $("drill-note");
+    note.textContent = "Đang nghe… hãy nói câu vừa nghe (chạm ⏹ để dừng).";
+    note.className = "panel-note";
+    var listenLang = (drill && drill.lang) || target();
+
+    MicAsr.start($("typed"), listenLang, function (ev) {
+      if (opSeq !== micOpSeq || !ev) return;
+      if (ev.error) {
+        setMicUiState(false);
+        note.textContent = ev.error;
+        note.className = "panel-note" + (ev.errorCode === "no-speech" ? "" : " bad");
+        if (ev.errorCode === "not-allowed" || ev.errorCode === "service-not-allowed") {
+          window.MicAsr.getPermissionState().then(function (p) {
+            if (opSeq !== micOpSeq) return;
+            showMicPermBox(p && p.state === "prompt-with-rationale" ? "rationale" : "denied", ev.error);
+          });
+        }
+        return;
+      }
+      if (ev.interim) {
+        note.textContent = "Đang nghe: \"" + ev.interim + "\"";
+        note.className = "panel-note";
+        return;
+      }
+      if (ev.done || ev.final !== undefined || ev.state === "stopped") {
+        if (ev.state === "listening" && !ev.done && !ev.final) return;
+        setMicUiState(false);
+        var val = ($("typed").value || "").trim();
+        if (val) {
+          checkTyped();
+        } else {
+          note.textContent = "Chưa nghe rõ giọng nói — bấm 🎤 Mic nói lại hoặc gõ tay.";
+          note.className = "panel-note";
+        }
+      }
+    });
+  }
+
+  function runMicPermissionAndStart(opSeq, forceRequest) {
+    var note = $("drill-note");
+    var readiness = drill ? Promise.resolve() : showListen({ silent: true });
+    return readiness.then(function () {
+      if (opSeq !== micOpSeq) return;
+      return window.MicAsr.checkSupport();
+    }).then(function (sup) {
+      if (opSeq !== micOpSeq || !sup) return;
+      if (!sup.supported) {
+        note.textContent = sup.reason || "Thiết bị này không hỗ trợ nhận giọng nói — gõ tay nhé.";
+        note.className = "panel-note";
+        return;
+      }
+      return window.MicAsr.getPermissionState().then(function (perm) {
+        if (opSeq !== micOpSeq) return;
+        var st = perm ? perm.state : "prompt";
+        if (st === "granted") {
+          beginMicDictation(opSeq);
+          return;
+        }
+        if (st === "denied") {
+          showMicPermBox("denied");
+          note.textContent = "Cần bật quyền Micro trong Cài đặt để dùng tính năng nói.";
+          note.className = "panel-note";
+          return;
+        }
+        if (st === "prompt-with-rationale" && !forceRequest) {
+          showMicPermBox("rationale");
+          note.textContent = "Chạm \"Cho phép Micro\" để tiếp tục nói câu luyện tập.";
+          note.className = "panel-note";
+          return;
+        }
+        // First-time in-context prompt (or user confirmed rationale button)
+        if (window.MicAsr.engine && window.MicAsr.engine() === "web") {
+          // On Web Chrome, recognition.start() must stay in user-gesture turn
+          beginMicDictation(opSeq);
+          return;
+        }
+        return window.MicAsr.requestPermission().then(function (after) {
+          if (opSeq !== micOpSeq) return;
+          if (after && after.granted) {
+            beginMicDictation(opSeq);
+          } else {
+            var nextSt = (after && after.state) || "denied";
+            showMicPermBox(nextSt === "denied" ? "denied" : "rationale");
+            note.textContent = "Bạn đã từ chối quyền Micro — vẫn có thể gõ tay bên dưới.";
+            note.className = "panel-note";
+          }
+        });
+      });
+    });
+  }
+
   function toggleMic() {
-    if (!drill) showListen();
     var note = $("drill-note");
     if (!window.MicAsr || !MicAsr.supported) {
       note.textContent = "Thiết bị này không hỗ trợ nhận giọng nói — gõ tay nhé.";
@@ -938,29 +1120,25 @@
       return;
     }
     if (micListening) {
-      MicAsr.stop();
-      micListening = false;
-      $("mic").textContent = "🎤 Mic";
-      checkTyped();
+      micOpSeq += 1;
+      setMicUiState(false);
+      try { MicAsr.stop(); } catch (e) {}
+      if (($("typed").value || "").trim()) checkTyped();
+      else {
+        note.textContent = "Đã dừng thu âm.";
+        note.className = "panel-note";
+      }
       return;
     }
-    micListening = true;
-    $("mic").textContent = "⏹ Dừng";
-    $("typed").value = "";
-    note.textContent = "Đang nghe… hãy nói câu vừa nghe được.";
-    note.className = "panel-note";
-    MicAsr.start($("typed"), target(), function (ev) {
-      if (ev.error) {
-        micListening = false;
-        $("mic").textContent = "🎤 Mic";
-        note.textContent = ev.error;
-        note.className = "panel-note";
-      } else if (ev.final) {
-        micListening = false;
-        $("mic").textContent = "🎤 Mic";
-        checkTyped();
-      }
-    });
+    micOpSeq += 1;
+    var mySeq = micOpSeq;
+    pauseOtherAudioBeforeMic();
+    // On Chrome Web, call recognition.start() synchronously when drill is ready so browser preserves user-gesture activation
+    if (drill && window.MicAsr.engine && window.MicAsr.engine() === "web") {
+      beginMicDictation(mySeq);
+      return;
+    }
+    runMicPermissionAndStart(mySeq, false);
   }
 
   // ---------------- M2.3a fill-blank ----------------
@@ -985,7 +1163,7 @@
     return best.length >= 3 ? best : null;
   }
 
-  function showFill() {
+  function showFill(mode) {
     var lang = practiceLang();
     var ready = (lang === "en") ? withDrills("fill", function () {}) : Promise.resolve();
     return ready.then(function () {
@@ -994,13 +1172,14 @@
       openPanel("fillbox");
       var rows = (lang === "en") ? (drills[id] || []).filter(function (r) { return r.s && r.sf; }) : [];
       var note = $("fill-note");
+      toggleNext("fillnext", rows.length > 1);
       if (rows.length) {
-        var row = rows[Math.floor(Math.random() * rows.length)];
+        var row = rows[pickCursor("f" + id, mode === "next") % rows.length];
         var sf = row.sf;
         var re = new RegExp(sf.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
         if (!re.test(row.s)) { showListen(); return; }
         var blanked = row.s.replace(re, "____");
-        fill = { row: row, answer: sf, lang: "en" };
+        fill = { row: row, answer: sf, lang: "en", scored: false };
         $("fill-sent").textContent = blanked;
         $("fill-input").value = "";
         note.textContent = "Nghe câu rồi gõ từ còn thiếu (vị trí gạch ngang)." + (row.h ? " · " + row.h : "");
@@ -1014,7 +1193,7 @@
         var re2 = new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
         if (!re2.test(d.sentence)) { showListen(); return; }
         var blanked2 = d.sentence.replace(re2, "____");
-        fill = { row: { s: d.sentence, h: d.hint }, answer: token, lang: d.lang };
+        fill = { row: { s: d.sentence, h: d.hint }, answer: token, lang: d.lang, scored: false };
         $("fill-sent").textContent = blanked2;
         $("fill-input").value = "";
         note.textContent = "Nghe câu rồi điền từ còn thiếu" + (d.hint ? " · Nghĩa: " + d.hint : "");
@@ -1035,35 +1214,42 @@
       ? ("✅ Đúng: " + fill.answer + (fill.row && fill.row.h ? " (" + fill.row.h + ")" : ""))
       : ("Đáp án: " + fill.answer + (fill.row && fill.row.h ? " · " + fill.row.h : ""));
     note.className = "panel-note " + (ok ? "ok" : "bad");
-    sessionStats.correct += ok ? 1 : 0;
+    if (ok && !fill.scored) { fill.scored = true; sessionStats.correct += 1; }
   }
 
   // ---------------- M2.3b conjugate + multilingual context quiz ----------------
   function renderConjChoices(choices, winner, lang) {
-    conj = { correct: winner, lang: lang };
+    conj = { correct: winner, lang: lang, done: false };
     var box = $("conj-opts");
     box.innerHTML = "";
     var note = $("conj-note");
-    note.textContent = "Chọn 1 đáp án đúng bên dưới:";
+    note.textContent = "Chạm 1 đáp án đúng:";
     note.className = "panel-note";
+    toggleNext("conjnext", false);
+    var buttons = [];
     choices.forEach(function (r) {
-      var label = document.createElement("label");
-      label.className = "conj-opt";
-      var inp = document.createElement("input");
-      inp.type = "radio";
-      inp.name = "conj";
-      inp.value = r.s;
-      inp.addEventListener("change", function () {
-        var ok = (inp.value === conj.correct.s);
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "conj-opt";
+      btn.textContent = r.s;
+      btn.addEventListener("click", function () {
+        if (!conj || conj.done) return;
+        conj.done = true;
+        var ok = (r.s === conj.correct.s);
         var nn = $("conj-note");
         nn.textContent = ok ? ("✅ Đúng: " + conj.correct.s) : ("Đáp án: " + conj.correct.s + (conj.correct.h ? " · " + conj.correct.h : ""));
         nn.className = "panel-note " + (ok ? "ok" : "bad");
-        sessionStats.correct += ok ? 1 : 0;
-        if (ok) speak(conj.correct.s, lang);
+        buttons.forEach(function (b) {
+          b.disabled = true;
+          if (b.textContent === conj.correct.s) b.className = "conj-opt correct";
+          else if (b === btn) b.className = "conj-opt wrong";
+        });
+        if (ok) sessionStats.correct += 1;
+        speak(conj.correct.s, lang);
+        toggleNext("conjnext", true);
       });
-      label.appendChild(inp);
-      label.appendChild(document.createTextNode(" " + r.s));
-      box.appendChild(label);
+      buttons.push(btn);
+      box.appendChild(btn);
     });
   }
 
@@ -1081,7 +1267,7 @@
       var distractors = [];
       var seenS = {};
       seenS[d.sentence] = 1;
-      for (var step = 3; step < concepts.length && distractors.length < 2; step += 7) {
+      for (var step = 3 + conjCursor; step < concepts.length && distractors.length < 2; step += 7) {
         var candId = concepts[(rank + step) % concepts.length];
         var candS = (d.learning.e && d.learning.e[candId]) || (d.learning.w && d.learning.w[candId]) || "";
         if (candS && !seenS[candS]) {
@@ -1099,13 +1285,14 @@
     });
   }
 
-  function showConjugate() {
+  function showConjugate(mode) {
     var lang = practiceLang();
     var ready = (lang === "en") ? withDrills("conj", function () {}) : Promise.resolve();
     return ready.then(function () {
       var id = ensurePracticeConcept();
       ensureStudyVisible();
       openPanel("conjbox");
+      conjCursor = pickCursor("c" + id, mode === "next");
       var rows = (lang === "en") ? (drills[id] || []) : [];
       var byPol = {};
       rows.forEach(function (r) { if (r.t && r.p) (byPol[r.p] = byPol[r.p] || []).push(r); });
@@ -1148,7 +1335,9 @@
     });
     if (!correct.length) { showListen(); return; }
     var winner = correct[0];
-    var distractors = opts.filter(function (r) { return r !== winner; }).slice(0, 2);
+    var others = opts.filter(function (r) { return r !== winner; });
+    var off = others.length ? conjCursor % others.length : 0;
+    var distractors = others.slice(off).concat(others.slice(0, off)).slice(0, 2);
     var choices = [winner].concat(distractors);
     choices.sort(function () { return Math.random() - 0.5; });
     renderConjChoices(choices, winner, "en");
@@ -2232,12 +2421,41 @@
     $("listen").onclick = showListen;
     if ($("study-listen")) $("study-listen").onclick = showListen;
     $("mic").onclick = toggleMic;
+    if ($("mic-grant-btn")) {
+      $("mic-grant-btn").onclick = function () {
+        micOpSeq += 1;
+        hideMicPermBox();
+        runMicPermissionAndStart(micOpSeq, true);
+      };
+    }
+    if ($("mic-settings-btn")) {
+      $("mic-settings-btn").onclick = function () {
+        if (window.MicAsr && window.MicAsr.openAppSettings) window.MicAsr.openAppSettings();
+      };
+    }
+    if ($("mic-perm-dismiss")) $("mic-perm-dismiss").onclick = hideMicPermBox;
+    if (document.addEventListener) {
+      document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) refreshMicPermissionOnResume();
+      });
+    }
+    var capAppRef = (window.CapBridge && window.CapBridge.getApp) ? window.CapBridge.getApp() : null;
+    if (capAppRef && typeof capAppRef.addListener === "function") {
+      try {
+        capAppRef.addListener("appStateChange", function (s) {
+          if (s && s.isActive) refreshMicPermissionOnResume();
+        });
+      } catch (e) {}
+    }
     $("playdrill").onclick = function () { if (drill) speak(drill.s, drill.lang || target(), true); };
     $("fillbtn").onclick = showFill;
     if ($("study-fill")) $("study-fill").onclick = showFill;
     if ($("playfill")) $("playfill").onclick = function () { if (fill && fill.row) speak(fill.row.s, fill.lang || target(), true); };
     $("conjbtn").onclick = showConjugate;
     if ($("study-conj")) $("study-conj").onclick = showConjugate;
+    if ($("drillnext")) $("drillnext").onclick = function () { showListen("next"); };
+    if ($("fillnext")) $("fillnext").onclick = function () { showFill("next"); };
+    if ($("conjnext")) $("conjnext").onclick = function () { showConjugate("next"); };
     $("clearbtn").onclick = hidePanels;
     document.querySelectorAll(".close-panel").forEach(function (b) { b.onclick = hidePanels; });
     // inputs

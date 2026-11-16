@@ -56,9 +56,9 @@
     <!-- Self-update: Android 11+ requires this to install the downloaded APK
          via PackageInstaller (v1.5, duosub-study's AppUpdater pattern). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-    <!-- M2.1: microphone for in-app ASR (dictate drill answers offline).
-         Audio is processed on-device and never leaves the app. -->
+    <!-- M2.1: microphone for in-app ASR (free OS/Google SpeechRecognizer). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -66,10 +66,13 @@
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- Android 11+ (API 30+) package visibility: required for TextToSpeech
-         engine discovery (queryIntentServices / new TextToSpeech) on targetSdk 36. -->
+         and SpeechRecognizer discovery on targetSdk 36. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
 </manifest>

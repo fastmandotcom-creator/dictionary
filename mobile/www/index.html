@@ -290,12 +290,40 @@
     .panel-note.ok  { color: var(--good-fg); font-weight: 700; }
     .panel-note.bad { color: var(--bad-fg); font-weight: 700; }
     .conj-opt {
-      display: block; border: 1px solid var(--line); background: var(--bg);
+      display: block; width: 100%; text-align: left; color: var(--text);
+      border: 1px solid var(--line); background: var(--bg);
       border-radius: 0.7rem; padding: 0.85rem; margin: 0.5rem 0;
-      font-size: 1rem; cursor: pointer;
+      font-size: 1rem; line-height: 1.35; min-height: 3rem; cursor: pointer;
     }
-    .conj-opt input { margin-right: 0.5rem; transform: scale(1.2); }
-    .conj-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+    .conj-opt:active { background: var(--accent-soft); }
+    .conj-opt.correct { border-color: var(--good-fg); background: var(--good); color: var(--good-fg); font-weight: 700; }
+    .conj-opt.wrong { border-color: var(--bad-fg); background: var(--bad); color: var(--bad-fg); }
+    .conj-opt:disabled { cursor: default; opacity: 1; }
+    .next-q { margin-top: 0.5rem; width: 100%; min-height: 2.75rem; font-weight: 700; }
+    #mic.is-listening {
+      border-color: var(--bad-fg); background: var(--bad); color: var(--bad-fg); font-weight: 700;
+      animation: mic-pulse 1.3s ease-in-out infinite;
+    }
+    @keyframes mic-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255, 154, 168, 0.25); }
+      50% { box-shadow: 0 0 0 5px rgba(255, 154, 168, 0.08); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #mic.is-listening { animation: none; }
+    }
+    .perm-box {
+      margin-top: 0.6rem; padding: 0.75rem 0.85rem; border-radius: 0.75rem;
+      background: var(--warn); color: var(--warn-fg); border: 1px solid var(--line);
+      font-size: 0.9rem; line-height: 1.4;
+    }
+    .perm-box p { margin: 0 0 0.5rem; font-weight: 600; }
+    .perm-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .perm-actions button {
+      min-height: 2.5rem; padding: 0.4rem 0.8rem; border-radius: 0.6rem;
+      font-size: 0.88rem; font-weight: 700; cursor: pointer;
+    }
+    .perm-actions .perm-primary { background: var(--accent); color: #fff; }
+    .perm-actions .perm-dismiss { background: transparent; color: var(--warn-fg); border: 1px solid var(--line); }
 
     /* ---------- settings + update (auto-update ON by default) ---------- */
     .settings-card {
@@ -717,7 +745,7 @@
           <div class="practice-row">
             <button id="listen">🎧<span>Nghe & ghi</span></button>
             <button id="fillbtn">✏️<span>Điền khuyết</span></button>
-            <button id="conjbtn">🧩<span>Chia dạng</span></button>
+            <button id="conjbtn">🧩<span>Trắc nghiệm</span></button>
           </div>
 
           <!-- settings: auto-update + about -->
@@ -791,14 +819,23 @@
       <!-- ============ practice panels (one open at a time) ============ -->
       <div id="drill" class="panel hidden">
         <div class="panel-head"><b>🎧 Nghe & ghi</b><button id="clearbtn" class="clear" aria-label="Đóng">✕</button></div>
-        <p class="muted">Nghe câu rồi gõ lại đúng · hoặc dùng mic.</p>
+        <p class="muted">Nghe câu rồi gõ lại đúng · hoặc chạm Mic để đọc (miễn phí).</p>
         <div class="row2">
           <button class="ghost" id="playdrill">🔊 Nghe câu</button>
-          <button class="ghost" id="mic">🎤 Mic</button>
+          <button class="ghost" id="mic" aria-pressed="false">🎤 Mic</button>
+        </div>
+        <div id="mic-perm-box" class="perm-box hidden" role="status">
+          <p id="mic-perm-msg"></p>
+          <div class="perm-actions">
+            <button id="mic-grant-btn" class="perm-primary hidden" type="button">🎤 Cho phép Micro</button>
+            <button id="mic-settings-btn" class="perm-primary hidden" type="button">⚙️ Mở Cài đặt quyền</button>
+            <button id="mic-perm-dismiss" class="perm-dismiss" type="button">Để sau</button>
+          </div>
         </div>
         <input id="typed" type="text" placeholder="Gõ lại câu vừa nghe…" autocomplete="off" autocapitalize="sentences">
         <button id="drillcheck" class="slim">Kiểm tra</button>
         <p class="panel-note" id="drill-note"></p>
+        <button id="drillnext" class="ghost next-q hidden" type="button">🔄 Câu khác</button>
       </div>
 
       <div id="fillbox" class="panel hidden">
@@ -810,13 +847,15 @@
         <input id="fill-input" type="text" placeholder="Gõ từ còn thiếu…" autocomplete="off" autocapitalize="off">
         <button id="fillcheck" class="slim">Kiểm tra</button>
         <p class="panel-note" id="fill-note"></p>
+        <button id="fillnext" class="ghost next-q hidden" type="button">🔄 Câu khác</button>
       </div>
 
       <div id="conjbox" class="panel hidden">
-        <div class="panel-head"><b>🧩 Trắc nghiệm &amp; Chia dạng</b><button class="clear close-panel" aria-label="Đóng">✕</button></div>
+        <div class="panel-head"><b>🧩 Trắc nghiệm</b><button class="clear close-panel" aria-label="Đóng">✕</button></div>
         <p id="conj-prompt" style="font-weight:700;margin-bottom:0.4rem"></p>
         <div id="conj-opts"></div>
         <p class="panel-note" id="conj-note"></p>
+        <button id="conjnext" class="ghost next-q hidden" type="button">🔄 Làm câu khác</button>
       </div>
     </section>
 

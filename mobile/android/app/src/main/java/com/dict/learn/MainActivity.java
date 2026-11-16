@@ -10,6 +10,7 @@ import com.getcapacitor.BridgeActivity;
  * assets; the JS layer feature-detects Capacitor.Plugins.* and falls back to
  * window.open on pure-web (PWA) installs. No manual registerPlugin needed.
  */
+import com.dict.learn.asr.DictASRPlugin;
 import com.dict.learn.tts.DictTTSPlugin;
 import com.dict.learn.update.DictUpdatePlugin;
 
@@ -18,9 +19,10 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(android.os.Bundle savedInstanceState) {
         // Local native plugins (not part of the @capacitor/* npm modules, so they are not in the
         // generated capacitor.plugins.json registry). registerPlugin() adds them to the same
-        // bridge that super.onCreate() builds, so JS reaches them as window.DictTTS / window.DictUpdate.
-        registerPlugin(com.dict.learn.tts.DictTTSPlugin.class);
-        registerPlugin(com.dict.learn.update.DictUpdatePlugin.class);
+        // bridge that super.onCreate() builds, so JS reaches them as DictTTS / DictUpdate / DictASR.
+        registerPlugin(DictTTSPlugin.class);
+        registerPlugin(DictUpdatePlugin.class);
+        registerPlugin(DictASRPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

@@ -70,6 +70,7 @@ class El {
 }
 
 const IDS = [
+  'drillnext', 'fillnext', 'conjnext',
   'boot', 'top', 'app', 'progress', 'card', 'base', 'target', 'b1', 'b2', 'b3',
   'b1-sub', 'b2-sub', 'b3-sub', 'undobtn', 'study-bar',
   'flip', 'speak', 'listen', 'fillbtn', 'conjbtn', 'clearbtn', 'mic',
@@ -384,11 +385,22 @@ async function main() {
   const fillOrListenOk = !sb2.els.fillbox.classList.contains('hidden') || !sb2.els.drill.classList.contains('hidden');
   assert.ok(fillOrListenOk, 'fr fill/listen works gracefully without drills.json');
   sb2.spoken.length = 0;
+  sb2.els['conj-opts'].children.length = 0; // stub innerHTML="" does not clear children
   sb2.els.conjbtn.dispatch('click');
   await sleep(80);
   assert.ok(!sb2.els.conjbox.classList.contains('hidden'), 'fr context quiz opens using 12k sentence corpus');
   assert.ok(sb2.els['conj-opts'].children.length >= 2, 'fr context quiz builds >= 2 choices dynamically');
   assert.ok(sb2.spoken.some((u) => u.lang === 'fr'), 'fr context quiz speaks in "fr"');
+  // choices are tappable buttons: locked after the first tap, correct one highlighted, "next" offered
+  assert.ok(sb2.els.conjnext.classList.contains('hidden'), 'conj next hidden before answering');
+  const opts = sb2.els['conj-opts'].children;
+  opts[0].dispatch('click');
+  assert.ok(opts.every((o) => o.disabled), 'conj options locked after first answer');
+  assert.ok(opts.some((o) => o.className === 'conj-opt correct'), 'conj correct option highlighted');
+  assert.ok(!sb2.els.conjnext.classList.contains('hidden'), 'conj next shown after answering');
+  const noteAfter = sb2.els['conj-note'].textContent;
+  opts[1].dispatch('click');
+  assert.strictEqual(sb2.els['conj-note'].textContent, noteAfter, 'conj second tap ignored (no double scoring)');
 
   // 7) Unified 50-word Session Handoff (Study <-> Audio on 12k dataset)
   console.log('7) Unified 50-word Session Handoff (Study <-> Audio)');

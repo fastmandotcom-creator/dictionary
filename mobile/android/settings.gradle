@@ -11,4 +11,8 @@ project(':dictlearn-tts').projectDir = new File('./dictlearn-tts/')
 include ':dictlearn-update'
 project(':dictlearn-update').projectDir = new File('./dictlearn-update/')
 
+// Local native ASR plugin (free Android SpeechRecognizer + RECORD_AUDIO permission UX).
+include ':dictlearn-asr'
+project(':dictlearn-asr').projectDir = new File('./dictlearn-asr/')
+
 apply from: 'capacitor.settings.gradle'

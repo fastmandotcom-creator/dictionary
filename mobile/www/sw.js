@@ -9,7 +9,7 @@
  * Registered in index.html:
  *   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
  */
-const CACHE = 'dict-learn-v14'; // v14: v2.2.2 Sub-screen Polish (Session Done, Practice Panels & Audio Empty/Source States)
+const CACHE = 'dict-learn-v15'; // v15: Native DictASR SpeechRecognizer + Standard Mic Permissions
 
 // Core app shell (always cached; revalidated on each navigate)
 const SHELL = [
