@@ -50,6 +50,10 @@
     return Math.max(0.65, Math.min(1.5, Math.round(n * 100) / 100));
   }
 
+  // Lần đọc thứ 2+ của tiếng đang học được phát chậm hơn (nhân 0.75x)
+  // để học viên nghe kỹ phát âm; lần đọc đầu vẫn giữ tốc độ thường.
+  var SLOW_REPEAT_FACTOR = 0.75;
+
   function scalePause(baseMs, speed) {
     var div = Math.max(0.85, Math.min(1.25, clampSpeed(speed)));
     return Math.max(300, Math.min(2500, Math.round(baseMs / div)));
@@ -225,6 +229,7 @@
     var recallBeforePrimary = scalePause(p.isWordBlock ? 1050 : 600, p.speed);
     var pairTarget = p.pairTarget || "";
     var pairBase = p.pairBase || "";
+    var slowRepeatSpeed = clampSpeed(p.speed * SLOW_REPEAT_FACTOR);
 
     if (!hasPrimary) {
       for (var i = 0; i < p.repeatCount; i++) {
@@ -234,7 +239,8 @@
           lang: p.targetLang,
           pauseAfterMs: i < p.repeatCount - 1 ? repeatGap : blockEnd,
           pairTarget: pairTarget,
-          pairBase: pairBase
+          pairBase: pairBase,
+          speed: i === 0 ? p.speed : slowRepeatSpeed
         });
       }
       return;
@@ -249,7 +255,8 @@
           lang: p.targetLang,
           pauseAfterMs: j < p.repeatCount - 1 ? repeatGap : blockEnd,
           pairTarget: pairTarget,
-          pairBase: pairBase
+          pairBase: pairBase,
+          speed: j === 0 ? p.speed : slowRepeatSpeed
         });
       }
       return;
@@ -257,7 +264,7 @@
 
     // target_first: expose target first, hold recall gap before primary, then anchor on final repeat
     if (p.repeatCount <= 1) {
-      out.push({ role: p.targetFirstRole, text: p.targetText, lang: p.targetLang, pauseAfterMs: recallBeforePrimary, pairTarget: pairTarget, pairBase: pairBase });
+      out.push({ role: p.targetFirstRole, text: p.targetText, lang: p.targetLang, pauseAfterMs: recallBeforePrimary, pairTarget: pairTarget, pairBase: pairBase, speed: p.speed });
       out.push({ role: p.primaryRole, text: p.primaryText, lang: p.primaryLang, pauseAfterMs: blockEnd, pairTarget: pairTarget, pairBase: pairBase });
       return;
     }
@@ -270,11 +277,12 @@
         lang: p.targetLang,
         pauseAfterMs: k < preCount - 1 ? repeatGap : recallBeforePrimary,
         pairTarget: pairTarget,
-        pairBase: pairBase
+        pairBase: pairBase,
+        speed: k === 0 ? p.speed : slowRepeatSpeed
       });
     }
     out.push({ role: p.primaryRole, text: p.primaryText, lang: p.primaryLang, pauseAfterMs: scalePause(550, p.speed), pairTarget: pairTarget, pairBase: pairBase });
-    out.push({ role: p.targetRepeatRole, text: p.targetText, lang: p.targetLang, pauseAfterMs: blockEnd, pairTarget: pairTarget, pairBase: pairBase });
+    out.push({ role: p.targetRepeatRole, text: p.targetText, lang: p.targetLang, pauseAfterMs: blockEnd, pairTarget: pairTarget, pairBase: pairBase, speed: slowRepeatSpeed });
   }
 
   /** Pure web step builder matching AudioQueueModels.buildSteps in Java. */
@@ -635,7 +643,7 @@
       updateWebMediaSession(webState);
 
       var p = (window.TTS && window.TTS.speak)
-        ? window.TTS.speak(step.text, step.lang, { awaitEnd: true, speed: cfg.speed })
+        ? window.TTS.speak(step.text, step.lang, { awaitEnd: true, speed: step.speed != null ? step.speed : cfg.speed })
         : Promise.resolve({ ok: false, result: "unavailable" });
 
       p.then(function (out) {

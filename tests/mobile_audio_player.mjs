@@ -377,6 +377,20 @@ async function testPurePlaylistAndSteps() {
     ['word', 'meaning', 'repeat'],
     'setting override: target_first + targetRepeat=2'
   );
+
+  // Repeat passes of the target language are spoken slower so the learner
+  // can absorb pronunciation: 1st read at config speed, 2nd+ reads at 0.75x.
+  const slow100 = AP.buildSteps(list[0], { preset: 'quick', order: 'base_first', targetRepeat: 2, speed: 1.0 });
+  assert.strictEqual(slow100[1].speed, 1.0, 'first target read keeps config speed');
+  assert.strictEqual(slow100[2].speed, 0.75, 'repeat read is spoken slower (0.75x)');
+  const slow115 = AP.buildSteps(list[0], { preset: 'quick', order: 'base_first', targetRepeat: 2, speed: 1.15 });
+  assert.strictEqual(slow115[2].speed, 0.86, 'slow repeat factor applies on top of 1.15x config speed');
+  const slowThree = AP.buildSteps(list[0], { preset: 'quick', order: 'target_first', targetRepeat: 3, speed: 1.0 });
+  assert.deepStrictEqual(
+    Array.from(slowThree.map((s) => s.speed)),
+    [1.0, 0.75, undefined, 0.75],
+    'target_first x3: first read normal, repeats slower, primary meaning unchanged'
+  );
   const targetOnly = AP.buildSteps(list[0], { preset: 'target_only', speed: 1.0 });
   assert(targetOnly.every((s) => s.lang === 'en'), 'target_only never emits base-language audio');
   assert.deepStrictEqual(

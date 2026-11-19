@@ -123,6 +123,15 @@ public class DictTTSPluginUnitTest {
         assertEquals("ex_target", deepDefault.get(5).role);
         assertEquals("en", deepDefault.get(5).lang);
 
+        // Repeat passes of the target language are spoken slower (0.75x) so the
+        // learner can absorb pronunciation; the first read keeps the config speed.
+        assertEquals(0f, deepDefault.get(0).speed, 0f);
+        assertEquals(0f, deepDefault.get(1).speed, 0f, "first target read keeps config speed");
+        assertEquals(AudioQueueModels.slowRepeatSpeed(1.0f), deepDefault.get(2).speed, 0f);
+        assertEquals(0f, deepDefault.get(3).speed, 0f);
+        assertEquals(AudioQueueModels.slowRepeatSpeed(1.0f), deepDefault.get(4).speed, 0f);
+        assertEquals(AudioQueueModels.slowRepeatSpeed(1.0f), deepDefault.get(5).speed, 0f);
+
         // Deep preset with drills (2 bilingual drills * 3 steps = +6 -> 12 steps total)
         List<UtteranceStep> deepDrills = AudioQueueModels.buildSteps(track, new AudioConfig("deep", 1.0f, "none", true, false));
         assertEquals(12, deepDrills.size());

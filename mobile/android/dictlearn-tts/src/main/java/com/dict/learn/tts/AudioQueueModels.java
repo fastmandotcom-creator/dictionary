@@ -25,6 +25,16 @@ public final class AudioQueueModels {
 
     public static final int MAX_DRILLS_PER_TRACK = 2;
 
+    /**
+     * Repeat passes of the target-language word/example are spoken slower than
+     * the first pass so the learner can absorb pronunciation. 0.75x keeps it
+     * natural: 1st read at the configured speed, 2nd+ reads at 75% of it.
+     */
+    public static final float SLOW_REPEAT_FACTOR = 0.75f;
+    public static float slowRepeatSpeed(float speed) {
+        return clampSpeed(speed * SLOW_REPEAT_FACTOR);
+    }
+
     private AudioQueueModels() {}
 
     public static final class AudioDrill {
@@ -83,9 +93,11 @@ public final class AudioQueueModels {
         public final long pauseAfterMs;
         public final String pairTarget;
         public final String pairBase;
+        /** Per-step playback speed multiplier; 0 means use the track-level config speed. */
+        public final float speed;
 
         public UtteranceStep(String role, String text, String lang, long pauseAfterMs) {
-            this(role, text, lang, pauseAfterMs, "", "");
+            this(role, text, lang, pauseAfterMs, "", "", 0f);
         }
 
         public UtteranceStep(
@@ -96,12 +108,25 @@ public final class AudioQueueModels {
             String pairTarget,
             String pairBase
         ) {
+            this(role, text, lang, pauseAfterMs, pairTarget, pairBase, 0f);
+        }
+
+        public UtteranceStep(
+            String role,
+            String text,
+            String lang,
+            long pauseAfterMs,
+            String pairTarget,
+            String pairBase,
+            float speed
+        ) {
             this.role = role;
             this.text = text;
             this.lang = lang;
             this.pauseAfterMs = Math.max(0L, Math.min(10_000L, pauseAfterMs));
             this.pairTarget = safeTrim(pairTarget);
             this.pairBase = safeTrim(pairBase);
+            this.speed = speed;
         }
     }
 
@@ -295,12 +320,15 @@ public final class AudioQueueModels {
         long blockEnd = scalePause(isWordBlock ? 1250L : 1100L, speed);
         long afterPrimaryCue = scalePause(isWordBlock ? 650L : 550L, speed);
         long recallBeforePrimary = scalePause(isWordBlock ? 1050L : 600L, speed);
+        // Lần lặp (từ lần thứ 2) của tiếng đang học phát chậm hơn để nghe kỹ
+        float slowRepeat = slowRepeatSpeed(speed);
 
         if (!hasPrimary) {
             for (int i = 0; i < repeatCount; i++) {
                 String role = i == 0 ? targetFirstRole : targetRepeatRole;
                 long pause = (i < repeatCount - 1) ? repeatGap : blockEnd;
-                out.add(new UtteranceStep(role, targetText, targetLang, pause, pairTarget, pairBase));
+                float stepSpeed = (i == 0) ? 0f : slowRepeat;
+                out.add(new UtteranceStep(role, targetText, targetLang, pause, pairTarget, pairBase, stepSpeed));
             }
             return;
         }
@@ -310,7 +338,8 @@ public final class AudioQueueModels {
             for (int i = 0; i < repeatCount; i++) {
                 String role = i == 0 ? targetFirstRole : targetRepeatRole;
                 long pause = (i < repeatCount - 1) ? repeatGap : blockEnd;
-                out.add(new UtteranceStep(role, targetText, targetLang, pause, pairTarget, pairBase));
+                float stepSpeed = (i == 0) ? 0f : slowRepeat;
+                out.add(new UtteranceStep(role, targetText, targetLang, pause, pairTarget, pairBase, stepSpeed));
             }
             return;
         }
@@ -326,10 +355,12 @@ public final class AudioQueueModels {
         for (int i = 0; i < preCount; i++) {
             String role = i == 0 ? targetFirstRole : targetRepeatRole;
             long pause = (i < preCount - 1) ? repeatGap : recallBeforePrimary;
-            out.add(new UtteranceStep(role, targetText, targetLang, pause, pairTarget, pairBase));
+            // lần 1 đọc thường; các lần sau (nếu repeat > 2) đọc chậm
+            float stepSpeed = (i == 0) ? 0f : slowRepeat;
+            out.add(new UtteranceStep(role, targetText, targetLang, pause, pairTarget, pairBase, stepSpeed));
         }
         out.add(new UtteranceStep(primaryRole, primaryText, primaryLang, scalePause(550L, speed), pairTarget, pairBase));
-        out.add(new UtteranceStep(targetRepeatRole, targetText, targetLang, blockEnd, pairTarget, pairBase));
+        out.add(new UtteranceStep(targetRepeatRole, targetText, targetLang, blockEnd, pairTarget, pairBase, slowRepeat));
     }
 
     private static String safeTrim(String s) {

@@ -592,7 +592,9 @@ public final class AudioLearningService extends Service {
             publishSnapshot();
 
             SpeakOutcome outcome = synthesizer.speakNow(
-                step.text, step.lang, curConfig.speed, curConfig.preferOffline, stepToken
+                step.text, step.lang,
+                step.speed > 0f ? step.speed : curConfig.speed,
+                curConfig.preferOffline, stepToken
             );
 
             synchronized (stateLock) {
